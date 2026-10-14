@@ -39,7 +39,8 @@
     let wb;
     try { wb = XLSX.read(await file.arrayBuffer(), { type: 'array' }); }
     catch (e) { $('#sample-note').textContent = `「${file.name}」無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次。`; return; }
-    const { got, from } = DQ.workbook.slots(XLSX, wb);
+    const { got, from, blank } = DQ.workbook.slots(XLSX, wb);
+    if (!got.L && !got.D && blank.length) { $('#sample-note').textContent = `「${file.name}」的工作表只有標題列、還沒有資料。請從第二列開始填入保單資料或理賠資料，再放進來。`; return; }
     if (!Object.keys(got).length) { $('#sample-note').textContent = `「${file.name}」裡找不到可以辨識的工作表。工作表名稱需包含：保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數或資產負債表`; return; }
     const fs = DQ.workbook.files(got);
     for (const [slot, f] of Object.entries(fs)) { state.files[slot] = f; $('#name-' + slot).textContent = `工作表「${from[slot]}」`; }
@@ -86,21 +87,24 @@
   document.addEventListener('dragover', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
   document.addEventListener('drop', e => { if (!e.dataTransfer || !e.dataTransfer.files.length) return; e.preventDefault(); if (!e.target.closest('.drop')) readMany([...e.dataTransfer.files]); });
 
-  function loadSample(inject) {
-    const g = DQ.mock.generate({ inject });
-    setFile('L', g.names.L, g.L); setFile('D', g.names.D, g.D);
-    setFile('prior', g.names.prior, g.prior); setFile('control', g.names.control, g.control); setFile('statement', g.names.statement, g.statement);
-    setFile('products', g.names.products, g.products); setFile('customers', g.names.customers, g.customers);
-    for (const slot of SLOTS) $('#name-' + slot).textContent = inject ? '範例資料（有錯誤）' : '範例資料（全部正確）';
-    $('#sample-note').textContent = inject ? `目前顯示的是範例資料（刻意放了 ${g.key.length + g.reconKey.length + g.masterKey.length + g.ruleKey.length} 個錯誤）。換成你的資料：把 Excel 拖進上方大框。` : '目前顯示的是全部正確的範例資料。';
-    state.anomalyKey = inject ? g.anomalyKey : null;
-    state.key = inject ? g.key : null; state.reconKey = inject ? g.reconKey : null; state.masterKey = inject ? g.masterKey : null;
-    run();
-  }
-  // 範例：載入後直接選第一個問題，右側就有說明可看
-  const firstIssue = () => { const i = state.res.issues.find(x => x.line && x.fields.length); if (i) select(i.id, true); };
-  $('#btn-dirty').onclick = () => { loadSample(true); firstIssue(); };
-  $('#btn-clean').onclick = () => loadSample(false);
+  // 空白範本：7 張工作表只有標題列，外部使用者照著填入自己的資料
+  $('#btn-template').onclick = () => {
+    if (!window.XLSX) { $('#sample-note').textContent = '讀取 Excel 的元件沒有載入成功，請確認網路後重新整理頁面。'; return; }
+    const sh = DQ.workbook.sheets(DQ.mock.generate({ inject: false })), wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['填寫說明'], ['1. 每張工作表的第一列是欄位名稱，請不要修改；從第二列開始每列填一筆資料。'],
+      ['2. 至少要有「保單資料」或「理賠資料」其中一張，其他工作表沒有可以留空或刪除。'],
+      ['3. 代號、日期、保單號碼等欄位請設為「文字」格式，以免開頭的 0 被 Excel 去掉。'],
+      ['4. 日期格式為西元年月日 8 碼，例如 20250131。'],
+      ['5. 填好後把整個檔案拖進檢核工具即可，資料只在你的電腦上處理。'],
+    ]), '說明');
+    for (const [name, t] of Object.entries(sh)) {
+      const ws = XLSX.utils.aoa_to_sheet([t.header]);
+      ws['!cols'] = t.header.map(h => ({ wch: Math.max(8, String(h).length * 2 + 2) }));
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    }
+    download('blank_template.xlsx', new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  };
 
   // ---------- 執行 ----------
   const SLOT_NAME = { L: '保單資料', D: '理賠資料', prior: '去年保單資料', control: '系統總數', statement: '資產負債表', products: '商品資料', customers: '客戶資料' };
@@ -500,8 +504,8 @@
 
   // 手機上清單預設收起 (主要用逐筆確認)，按「看全部清單」展開
   $('#btn-list').onclick = () => { const on = document.body.classList.toggle('show-list'); $('#btn-list').setAttribute('aria-expanded', on); $('#btn-list').textContent = on ? '收起清單' : '看全部清單'; };
-  // 打開時不載入任何資料：只顯示拖放框與範例按鈕
+  // 打開時不載入任何資料：只顯示拖放框
   document.body.classList.add('no-data');
-  $('#sample-note').textContent = '還沒有資料。把 Excel 拖到上方的框，或先按範例看看效果。';
+  $('#sample-note').textContent = '還沒有資料。把 Excel 拖到上方的框；不確定格式的話，先下載空白範本照著填。';
   if (['check', 'recon', 'decode', 'report', 'rules'].includes(hash)) showTab(hash);
 })();

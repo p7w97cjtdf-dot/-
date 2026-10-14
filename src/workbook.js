@@ -45,24 +45,27 @@
   }
   // 依工作表名稱分配，名稱不符時依標題列判斷：回傳 { slot: csv文字 } 與 { slot: 工作表名稱 }
   // 兩張工作表都像保單資料、又沒有名稱可判斷時，日期較早的那張當作去年保單資料
+  // 只有標題列 (例如還沒填的空白範本) 的工作表視為沒有資料，列在 blank
   function slots(XLSX, wb) {
-    const got = {}, from = {}, unknown = [];
+    const got = {}, from = {}, unknown = [], blank = [];
+    const toCsv = name => XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false, rawNumbers: true });
+    const hasRows = csv => csv.split(/\r?\n/).filter(l => l.replace(/,/g, '').trim()).length > 1;
     for (const name of wb.SheetNames) {
       const hit = SHEET_SLOT.find(([k]) => name.includes(k));
-      if (hit && !got[hit[1]]) { got[hit[1]] = XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false, rawNumbers: true }); from[hit[1]] = name; }
+      if (hit && !got[hit[1]]) { const c = toCsv(name); if (hasRows(c)) { got[hit[1]] = c; from[hit[1]] = name; } else blank.push(name); }
       else if (!hit) unknown.push(name);
     }
     for (const name of unknown) {
       const head = (XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false })[0]) || [];
       let slot = bySignature(head);
       if (slot === 'L' && got.L) slot = got.prior ? null : 'prior';
-      if (slot && !got[slot]) { got[slot] = XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false, rawNumbers: true }); from[slot] = name; }
+      if (slot && !got[slot]) { const c = toCsv(name); if (hasRows(c)) { got[slot] = c; from[slot] = name; } else blank.push(name); }
     }
     if (got.L && got.prior && !SHEET_SLOT.some(([k, v]) => v === 'prior' && from.prior.includes(k))) {
       const lastYear = csvText => { const r = C.parseFixedWidth(C.csvToFixedWidth(csvText, L), L).records; return r.map(x => x.startDate).filter(d => C.isValidDate(d)).sort().pop() || ''; };
       if (lastYear(got.prior) > lastYear(got.L)) { [got.L, got.prior] = [got.prior, got.L]; [from.L, from.prior] = [from.prior, from.L]; }
     }
-    return { got, from };
+    return { got, from, blank };
   }
 
   // 由承保資料推得公司代號與填報年度，產生符合命名原則的檔名 (對帳依填報年度彙總)
