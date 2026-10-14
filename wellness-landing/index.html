@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ebb · Breathe, Move, Rest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: soft single surface — every card is pressed out of (or into) the same mist-green ground; one breathing orb anchors the hero */
+:root {
+  --ground: #e3eae7;       /* the one surface everything is molded from */
+  --hi: #ffffff;           /* light-side shadow */
+  --lo: #c3cfca;           /* dark-side shadow */
+  --ink: #26332f;
+  --ink-soft: #5b6b66;
+  --sage: #3e7468;         /* primary accent */
+  --dusk: #7d7bb3;         /* sleep / evening accent */
+  --dawn: #c98f6b;         /* movement accent */
+  --display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --body: "Figtree", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --r-lg: 28px;
+  --r-md: 18px;
+  --raise: 9px 9px 20px var(--lo), -9px -9px 20px var(--hi);
+  --raise-sm: 5px 5px 12px var(--lo), -5px -5px 12px var(--hi);
+  --press: inset 5px 5px 11px var(--lo), inset -5px -5px 11px var(--hi);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #1f2725; --hi: #29332f; --lo: #151b19;
+    --ink: #e2eae6; --ink-soft: #9fb0aa; --sage: #7fc0b0; --dusk: #aaa8de; --dawn: #e2ad8b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #1f2725; --hi: #29332f; --lo: #151b19;
+  --ink: #e2eae6; --ink-soft: #9fb0aa; --sage: #7fc0b0; --dusk: #aaa8de; --dawn: #e2ad8b;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--ground); color: var(--ink); font: 17px/1.6 var(--body); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1140px; margin: 0 auto; padding-inline: 20px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; line-height: 1.08; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(44px, 7vw, 78px); letter-spacing: -0.01em; }
+h2 { font-size: clamp(34px, 4.6vw, 52px); }
+h3 { font-size: 26px; }
+h1 em, h2 em { color: var(--sage); }
+p { margin: 0; }
+.lede { font-size: 19px; color: var(--ink-soft); max-width: 46ch; }
+.eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--sage); }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--sage); outline-offset: 4px; border-radius: 12px; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* soft primitives */
+.soft { background: var(--ground); border-radius: var(--r-lg); box-shadow: var(--raise); }
+.well { background: var(--ground); border-radius: var(--r-md); box-shadow: var(--press); }
+.btn { display: inline-flex; align-items: center; gap: 10px; border: 0; cursor: pointer; text-decoration: none;
+  font: 600 15px/1 var(--body); color: var(--ink); background: var(--ground); padding: 14px 22px; border-radius: 16px;
+  box-shadow: var(--raise-sm); transition: box-shadow .25s ease, transform .25s ease; }
+.btn:hover { transform: translateY(-1px); }
+.btn:active { box-shadow: var(--press); transform: none; }
+.btn.primary { color: #fff; background: var(--sage); box-shadow: 6px 6px 14px var(--lo), -6px -6px 14px var(--hi); }
+:root[data-theme="dark"] .btn.primary { color: #10201c; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { color: #10201c; } }
+.store { padding: 12px 20px 12px 16px; }
+.store svg { width: 26px; height: 26px; flex: none; }
+.store span { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.store small { font-weight: 500; font-size: 11px; color: var(--ink-soft); letter-spacing: .02em; }
+.store b { font-size: 16px; font-weight: 600; }
+
+/* nav */
+header { padding-block: 22px; }
+nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.logo { display: flex; align-items: center; gap: 10px; font: 400 30px/1 var(--display); text-decoration: none; }
+.logo i { width: 34px; height: 34px; border-radius: 50%; box-shadow: var(--raise-sm); display: grid; place-items: center; }
+.logo i::after { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--sage); opacity: .85; }
+.links { display: flex; gap: 28px; font-size: 15px; color: var(--ink-soft); }
+.links a { text-decoration: none; }
+.links a:hover { color: var(--ink); }
+@media (max-width: 760px) { .links { display: none; } }
+
+/* hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 48px; align-items: center; padding-block: 40px 90px; }
+.hero-copy { display: flex; flex-direction: column; gap: 26px; }
+.ctas { display: flex; flex-wrap: wrap; gap: 16px; }
+.proof { display: flex; align-items: center; gap: 14px; font-size: 14px; color: var(--ink-soft); }
+.faces { display: flex; }
+.faces span { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--ground); margin-left: -10px; display: grid; place-items: center; font-size: 12px; font-weight: 600; color: #fff; }
+.faces span:first-child { margin-left: 0; }
+@media (max-width: 880px) { .hero { grid-template-columns: minmax(0, 1fr); padding-block: 20px 60px; } }
+
+/* phone + breathing orb */
+.stage { position: relative; display: grid; place-items: center; }
+.phone { width: min(330px, 100%); padding: 18px; border-radius: 46px; }
+.screen { border-radius: 32px; padding: 22px 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+.screen-top { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-soft); }
+.orb-ring { width: 210px; height: 210px; margin: 6px auto 0; border-radius: 50%; box-shadow: var(--press); display: grid; place-items: center; }
+.orb { width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--sage) 55%, var(--hi)), var(--sage));
+  box-shadow: 8px 8px 18px var(--lo), -6px -6px 16px var(--hi); transform: scale(.78); }
+.cue { text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.cue strong { font: 400 30px/1.1 var(--display); }
+.cue span { font-size: 13px; color: var(--ink-soft); }
+.mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mini div { padding: 10px 8px; text-align: center; border-radius: 14px; }
+.mini b { display: block; font-size: 18px; font-weight: 600; }
+.mini small { font-size: 11px; color: var(--ink-soft); }
+.float { position: absolute; padding: 12px 16px; border-radius: 18px; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+.float b { font-size: 15px; }
+.float .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.f1 { left: 0; top: 18%; }
+.f2 { right: 0; bottom: -22px; }
+@media (max-width: 1000px) { .float { display: none; } }
+
+/* sections */
+section { padding-block: 80px; }
+.head { display: flex; flex-direction: column; gap: 14px; max-width: 640px; margin-bottom: 44px; }
+
+/* feature showcase */
+.tabs { display: inline-flex; flex-wrap: wrap; gap: 6px; padding: 7px; border-radius: 22px; margin-bottom: 30px; }
+.tab { border: 0; background: transparent; color: var(--ink-soft); font: 600 15px/1 var(--body); padding: 12px 20px; border-radius: 16px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.tab i { width: 9px; height: 9px; border-radius: 50%; background: currentColor; opacity: .7; }
+.tab[aria-selected="true"] { background: var(--ground); color: var(--ink); box-shadow: var(--raise-sm); }
+.panel { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 32px; padding: 36px; align-items: center; }
+.panel-copy { display: flex; flex-direction: column; gap: 16px; }
+.panel-copy p { color: var(--ink-soft); }
+.checks { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 16px; }
+.checks li { display: flex; gap: 12px; align-items: baseline; }
+.checks li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent, var(--sage)); flex: none; transform: translateY(-2px); }
+.viz { padding: 24px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.viz-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.viz-head b { font-size: 28px; font-weight: 600; }
+.viz-head small { color: var(--ink-soft); font-size: 13px; }
+@media (max-width: 820px) { .panel { grid-template-columns: minmax(0, 1fr); padding: 24px; } }
+
+.sessions { display: flex; flex-direction: column; gap: 12px; }
+.session { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 16px; box-shadow: var(--raise-sm); }
+.session .play { width: 38px; height: 38px; border-radius: 50%; box-shadow: var(--press); display: grid; place-items: center; flex: none; color: var(--accent); }
+.session div { display: flex; flex-direction: column; min-width: 0; }
+.session small { color: var(--ink-soft); font-size: 13px; }
+.session time { margin-left: auto; font-size: 13px; color: var(--ink-soft); }
+
+.bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; align-items: end; height: 150px; }
+.bars div { display: flex; flex-direction: column; align-items: center; gap: 8px; height: 100%; justify-content: flex-end; }
+.bars span { width: 100%; max-width: 30px; border-radius: 10px; background: var(--accent); opacity: .85; }
+.bars span.goal { opacity: 1; }
+.bars small { font-size: 12px; color: var(--ink-soft); }
+
+.stages { display: flex; height: 46px; border-radius: 12px; overflow: hidden; gap: 3px; }
+.stages span { display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--ink-soft); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+.spark { width: 100%; height: 130px; display: block; }
+.vitals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.vitals div { padding: 12px; border-radius: 14px; }
+.vitals b { display: block; font-size: 20px; font-weight: 600; }
+.vitals small { font-size: 12px; color: var(--ink-soft); }
+
+/* rhythm (time of day is a real order) */
+.rhythm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; }
+.moment { padding: 30px; display: flex; flex-direction: column; gap: 14px; }
+.moment time { font-size: 13px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.moment p { color: var(--ink-soft); }
+.moment .chip { align-self: flex-start; font-size: 13px; padding: 8px 14px; border-radius: 12px; }
+@media (max-width: 820px) { .rhythm { grid-template-columns: minmax(0, 1fr); } }
+
+/* testimonials */
+.quotes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px; }
+.quote { padding: 30px; display: flex; flex-direction: column; gap: 20px; }
+.quote blockquote { margin: 0; font: 400 23px/1.3 var(--display); }
+.who { display: flex; align-items: center; gap: 12px; margin-top: auto; }
+.avatar { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; color: #fff; flex: none; box-shadow: var(--raise-sm); }
+.who div { display: flex; flex-direction: column; font-size: 14px; }
+.who small { color: var(--ink-soft); }
+.streak { font-size: 13px; padding: 8px 12px; border-radius: 12px; align-self: flex-start; color: var(--ink-soft); }
+.streak b { color: var(--ink); }
+@media (max-width: 900px) { .quotes { grid-template-columns: minmax(0, 1fr); } }
+
+/* final cta */
+.cta { padding: 56px; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: 40px; align-items: center; }
+.cta .ctas { margin-top: 26px; }
+.fine { font-size: 14px; color: var(--ink-soft); margin-top: 16px; }
+.cta-orb { width: min(240px, 100%); aspect-ratio: 1; margin: 0 auto; border-radius: 50%; box-shadow: var(--press); display: grid; place-items: center; }
+.cta-orb span { width: 52%; aspect-ratio: 1; border-radius: 50%; box-shadow: var(--raise); display: grid; place-items: center; font: 400 22px/1.1 var(--display); text-align: center; color: var(--sage); }
+@media (max-width: 820px) { .cta { grid-template-columns: minmax(0, 1fr); padding: 32px 24px; } }
+
+footer { padding-block: 40px 56px; color: var(--ink-soft); font-size: 14px; }
+footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
+
+/* breathing: 4s in, 4s hold, 6s out */
+@media (prefers-reduced-motion: no-preference) {
+  .orb { animation: breathe 14s ease-in-out infinite; }
+  @keyframes breathe { 0% { transform: scale(.78); } 28.6% { transform: scale(1.12); } 57.1% { transform: scale(1.12); } 100% { transform: scale(.78); } }
+  .btn, .tab { transition: box-shadow .25s ease, color .25s ease, transform .25s ease; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="wrap" aria-label="Main">
+    <a class="logo" href="#top" aria-label="Ebb home"><i></i>Ebb</a>
+    <div class="links"><a href="#features">Features</a><a href="#rhythm">Your day</a><a href="#stories">Stories</a></div>
+    <a class="btn" href="#download">Get the app</a>
+  </nav>
+</header>
+
+<main id="top">
+  <div class="wrap hero">
+    <div class="hero-copy">
+      <span class="eyebrow">Meditation · Movement · Sleep</span>
+      <h1>Slow down, <em>one breath</em> at a time.</h1>
+      <p class="lede">Ebb pairs guided breathing and short meditations with gentle movement and sleep tracking, so you can see how a calmer mind shows up in your body.</p>
+      <div class="ctas">
+        <a class="btn store" href="#download">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.4 2-3.5 2-3.6-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.8-3.5.8-.7 0-1.9-.8-3.1-.8-1.6 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3.1.7c1.3 0 2.1-1.1 2.8-2.3.9-1.3 1.3-2.6 1.3-2.6s-2.5-1-2.5-3.6zM14.1 5.6c.6-.8 1.1-1.9 1-3-1 0-2.1.6-2.8 1.4-.6.7-1.1 1.8-1 2.9 1 .1 2.1-.5 2.8-1.3z"/></svg>
+          <span><small>Download on the</small><b>App Store</b></span>
+        </a>
+        <a class="btn store" href="#download">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3.2v17.6c0 .3.3.5.6.3L14 12 4.6 2.9c-.3-.2-.6 0-.6.3z" fill="#3e7468"/><path d="M14 12l3-3-11.4-6.5L14 12z" fill="#7d7bb3"/><path d="M14 12l-8.4 9.5L17 15l-3-3z" fill="#c98f6b"/><path d="M17 9l-3 3 3 3 3.2-1.8c.9-.5.9-1.9 0-2.4L17 9z" fill="#9cbcb3"/></svg>
+          <span><small>Get it on</small><b>Google Play</b></span>
+        </a>
+      </div>
+      <div class="proof">
+        <div class="faces" aria-hidden="true"><span style="background:#3e7468">MK</span><span style="background:#7d7bb3">JR</span><span style="background:#c98f6b">AL</span></div>
+        <span>Free for 14 days · No ads · Works offline</span>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="phone soft" aria-label="Ebb app preview: a breathing session">
+        <div class="screen well">
+          <div class="screen-top"><span>Box breathing</span><span class="tnum">03:12 left</span></div>
+          <div class="orb-ring"><div class="orb" aria-hidden="true"></div></div>
+          <div class="cue" aria-live="off"><strong id="cue">Breathe in</strong><span id="count" class="tnum">4 · 4 · 6 pattern</span></div>
+          <div class="mini">
+            <div class="soft"><b class="tnum">62</b><small>bpm now</small></div>
+            <div class="soft"><b class="tnum">48<span style="font-size:12px;font-weight:500"> ms</span></b><small>HRV</small></div>
+            <div class="soft"><b class="tnum">12</b><small>day streak</small></div>
+          </div>
+        </div>
+      </div>
+      <div class="float soft f1"><span class="dot" style="background:var(--dusk)"></span><span>Slept <b class="tnum">7h 42m</b></span></div>
+      <div class="float soft f2"><span class="dot" style="background:var(--dawn)"></span><span><b class="tnum">6,840</b> steps, gently</span></div>
+    </div>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">What Ebb does</span>
+        <h2>Four quiet habits, <em>one calm place</em>.</h2>
+        <p class="lede">Practice, move, rest, and notice the difference. Every session feeds the same picture of how you are doing.</p>
+      </div>
+
+      <div class="tabs well" role="tablist" aria-label="Features">
+        <button class="tab" role="tab" id="t-meditate" aria-controls="p-meditate" aria-selected="true" style="--c:var(--sage)"><i style="color:var(--sage)"></i>Meditate</button>
+        <button class="tab" role="tab" id="t-move" aria-controls="p-move" aria-selected="false"><i style="color:var(--dawn)"></i>Move</button>
+        <button class="tab" role="tab" id="t-sleep" aria-controls="p-sleep" aria-selected="false"><i style="color:var(--dusk)"></i>Sleep</button>
+        <button class="tab" role="tab" id="t-track" aria-controls="p-track" aria-selected="false"><i style="color:var(--sage)"></i>Track</button>
+      </div>
+
+      <div class="panel soft" role="tabpanel" id="p-meditate" aria-labelledby="t-meditate" style="--accent:var(--sage)">
+        <div class="panel-copy">
+          <h3>Guided sessions from 3 to 30 minutes</h3>
+          <p>Choose a breathing pattern or a voice-guided meditation. The orb paces each inhale and exhale, so you can close your eyes and follow along.</p>
+          <ul class="checks"><li>Box, 4-7-8 and coherent breathing</li><li>Body scans and sleep stories</li><li>Haptic cues for eyes-closed practice</li></ul>
+        </div>
+        <div class="viz well">
+          <div class="viz-head"><span>Today's sessions</span><small>3 of 3 done</small></div>
+          <div class="sessions">
+            <div class="session"><span class="play" aria-hidden="true">▶</span><div><b>Morning arrival</b><small>Breathing · 4-4-6</small></div><time class="tnum">5 min</time></div>
+            <div class="session"><span class="play" aria-hidden="true">▶</span><div><b>Desk reset</b><small>Body scan</small></div><time class="tnum">8 min</time></div>
+            <div class="session"><span class="play" aria-hidden="true">▶</span><div><b>Unwind</b><small>Sleep story · Rain on cedar</small></div><time class="tnum">22 min</time></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel soft" role="tabpanel" id="p-move" aria-labelledby="t-move" style="--accent:var(--dawn)" hidden>
+        <div class="panel-copy">
+          <h3>Gentle movement that counts</h3>
+          <p>Stretch flows, mobility routines and walking goals sized for real days. Ebb tracks active minutes and nudges you to stand, never to hustle.</p>
+          <ul class="checks"><li>10-minute yoga and mobility flows</li><li>Steps and active minutes from your watch</li><li>Rest days built into every plan</li></ul>
+        </div>
+        <div class="viz well">
+          <div class="viz-head"><span>Active minutes this week</span><b class="tnum">186</b></div>
+          <div class="bars" aria-label="Active minutes per day: Mon 24, Tue 31, Wed 18, Thu 35, Fri 30, Sat 42, Sun 6">
+            <div><span style="height:57%"></span><small>Mon</small></div>
+            <div><span class="goal" style="height:74%"></span><small>Tue</small></div>
+            <div><span style="height:43%"></span><small>Wed</small></div>
+            <div><span class="goal" style="height:83%"></span><small>Thu</small></div>
+            <div><span class="goal" style="height:71%"></span><small>Fri</small></div>
+            <div><span class="goal" style="height:100%"></span><small>Sat</small></div>
+            <div><span style="height:14%"></span><small>Sun</small></div>
+          </div>
+          <small style="color:var(--ink-soft)">Daily goal: 30 minutes · Sunday is a rest day</small>
+        </div>
+      </div>
+
+      <div class="panel soft" role="tabpanel" id="p-sleep" aria-labelledby="t-sleep" style="--accent:var(--dusk)" hidden>
+        <div class="panel-copy">
+          <h3>Sleep you can understand</h3>
+          <p>See how evening practice changes the night. Ebb reads sleep stages from your watch and shows them in plain language, with one suggestion for tonight.</p>
+          <ul class="checks"><li>Wind-down reminders at your chosen bedtime</li><li>Light, deep and REM stages</li><li>Soundscapes that fade as you fall asleep</li></ul>
+        </div>
+        <div class="viz well">
+          <div class="viz-head"><span>Last night · 11:08 pm to 6:50 am</span><b class="tnum">7h 42m</b></div>
+          <div class="stages" aria-label="Sleep stages: awake 6%, light 49%, deep 22%, REM 23%">
+            <span style="flex:3;background:var(--dawn);opacity:.6"></span>
+            <span style="flex:14;background:var(--dusk);opacity:.45"></span>
+            <span style="flex:10;background:var(--dusk)"></span>
+            <span style="flex:12;background:var(--dusk);opacity:.45"></span>
+            <span style="flex:12;background:var(--sage);opacity:.75"></span>
+            <span style="flex:9;background:var(--dusk);opacity:.45"></span>
+            <span style="flex:11;background:var(--sage);opacity:.75"></span>
+            <span style="flex:3;background:var(--dawn);opacity:.6"></span>
+          </div>
+          <div class="legend"><span><i style="background:var(--dawn);opacity:.6"></i>Awake 6%</span><span><i style="background:var(--dusk);opacity:.45"></i>Light 49%</span><span><i style="background:var(--dusk)"></i>Deep 22%</span><span><i style="background:var(--sage);opacity:.75"></i>REM 23%</span></div>
+        </div>
+      </div>
+
+      <div class="panel soft" role="tabpanel" id="p-track" aria-labelledby="t-track" style="--accent:var(--sage)" hidden>
+        <div class="panel-copy">
+          <h3>Calm, measured</h3>
+          <p>Heart rate variability tends to rise as stress eases. Ebb charts your HRV and resting heart rate next to your practice, so progress is something you can see.</p>
+          <ul class="checks"><li>Syncs with Apple Health and Health Connect</li><li>Weekly reflection, not daily scores</li><li>Your data stays on your phone by default</li></ul>
+        </div>
+        <div class="viz well">
+          <div class="viz-head"><span>HRV, last 30 days</span><small>+9 ms since you started</small></div>
+          <svg class="spark" viewBox="0 0 300 120" preserveAspectRatio="none" role="img" aria-label="HRV rose from about 39 to 48 milliseconds over 30 days">
+            <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--sage)" stop-opacity=".35"/><stop offset="1" stop-color="var(--sage)" stop-opacity="0"/></linearGradient></defs>
+            <line x1="0" x2="300" y1="30" y2="30" stroke="var(--lo)" stroke-dasharray="3 5"/>
+            <line x1="0" x2="300" y1="70" y2="70" stroke="var(--lo)" stroke-dasharray="3 5"/>
+            <path d="M0,88 L20,84 L40,90 L60,80 L80,82 L100,74 L120,77 L140,68 L160,71 L180,60 L200,63 L220,52 L240,55 L260,44 L280,46 L300,38 L300,120 L0,120 Z" fill="url(#g)"/>
+            <path d="M0,88 L20,84 L40,90 L60,80 L80,82 L100,74 L120,77 L140,68 L160,71 L180,60 L200,63 L220,52 L240,55 L260,44 L280,46 L300,38" fill="none" stroke="var(--sage)" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+          </svg>
+          <div class="vitals">
+            <div class="soft"><b class="tnum">48 ms</b><small>HRV today</small></div>
+            <div class="soft"><b class="tnum">58 bpm</b><small>Resting HR</small></div>
+            <div class="soft"><b class="tnum">94 min</b><small>Mindful this week</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="rhythm">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Fits your day</span>
+        <h2>A rhythm, <em>not a regimen</em>.</h2>
+        <p class="lede">Ebb suggests one small practice at each turn of the day. Skip any of them; the plan adjusts.</p>
+      </div>
+      <div class="rhythm">
+        <article class="moment soft" style="--accent:var(--dawn)">
+          <time>Morning</time><h3>Arrive in your body</h3>
+          <p>Five minutes of breathing before the phone fills up, then a short stretch while the kettle boils.</p>
+          <span class="chip well tnum">5 min breath · 8 min stretch</span>
+        </article>
+        <article class="moment soft" style="--accent:var(--sage)">
+          <time>Midday</time><h3>Reset between meetings</h3>
+          <p>When your watch notices a stress spike, Ebb offers a 90-second reset you can do at your desk.</p>
+          <span class="chip well tnum">90 sec reset · 2,000 steps</span>
+        </article>
+        <article class="moment soft" style="--accent:var(--dusk)">
+          <time>Evening</time><h3>Let the day go</h3>
+          <p>A wind-down reminder at your bedtime, a body scan, and a soundscape that fades as you drift off.</p>
+          <span class="chip well tnum">12 min body scan · lights out</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="stories">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Stories</span>
+        <h2>Small practice, <em>noticeable change</em>.</h2>
+      </div>
+      <div class="quotes">
+        <figure class="quote soft" style="margin:0">
+          <span class="streak well">Meditated <b class="tnum">41 days</b> in a row</span>
+          <blockquote>“The breathing orb is the first thing that has actually made me slow down. I do it in the car before I walk into work.”</blockquote>
+          <figcaption class="who"><span class="avatar" style="background:var(--sage)">MK</span><div><b>Maya K.</b><small>ICU nurse, night shifts</small></div></figcaption>
+        </figure>
+        <figure class="quote soft" style="margin:0">
+          <span class="streak well">Deep sleep up <b class="tnum">18%</b> in a month</span>
+          <blockquote>“Seeing my sleep stages next to my evening sessions convinced me the body scan was doing something. Now I don’t skip it.”</blockquote>
+          <figcaption class="who"><span class="avatar" style="background:var(--dusk)">JR</span><div><b>Jonah R.</b><small>Software engineer</small></div></figcaption>
+        </figure>
+        <figure class="quote soft" style="margin:0">
+          <span class="streak well"><b class="tnum">10,000</b> steps, three days a week</span>
+          <blockquote>“I wanted something that didn’t shout at me. Ebb counts my walks and gives me rest days without making me feel guilty.”</blockquote>
+          <figcaption class="who"><span class="avatar" style="background:var(--dawn)">AL</span><div><b>Ana L.</b><small>Teacher and new mother</small></div></figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="download">
+    <div class="wrap">
+      <div class="cta soft">
+        <div>
+          <span class="eyebrow">Start tonight</span>
+          <h2 style="margin-top:12px">Your first breath is <em>free</em>.</h2>
+          <p class="lede" style="margin-top:16px">Download Ebb and try every meditation, movement plan and sleep tool for 14 days.</p>
+          <div class="ctas">
+            <a class="btn primary store" href="#download" aria-label="Download on the App Store">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.4 2-3.5 2-3.6-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.2-2.8.8-3.5.8-.7 0-1.9-.8-3.1-.8-1.6 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3.1.7c1.3 0 2.1-1.1 2.8-2.3.9-1.3 1.3-2.6 1.3-2.6s-2.5-1-2.5-3.6zM14.1 5.6c.6-.8 1.1-1.9 1-3-1 0-2.1.6-2.8 1.4-.6.7-1.1 1.8-1 2.9 1 .1 2.1-.5 2.8-1.3z"/></svg>
+              <span><small style="color:inherit;opacity:.8">Download on the</small><b>App Store</b></span>
+            </a>
+            <a class="btn store" href="#download" aria-label="Get it on Google Play">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3.2v17.6c0 .3.3.5.6.3L14 12 4.6 2.9c-.3-.2-.6 0-.6.3z" fill="#3e7468"/><path d="M14 12l3-3-11.4-6.5L14 12z" fill="#7d7bb3"/><path d="M14 12l-8.4 9.5L17 15l-3-3z" fill="#c98f6b"/><path d="M17 9l-3 3 3 3 3.2-1.8c.9-.5.9-1.9 0-2.4L17 9z" fill="#9cbcb3"/></svg>
+              <span><small>Get it on</small><b>Google Play</b></span>
+            </a>
+          </div>
+          <p class="fine">Then $5.99 a month or $49 a year. Cancel anytime from your phone’s settings.</p>
+        </div>
+        <div class="cta-orb" aria-hidden="true"><span>breathe<br>in</span></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Ebb Wellness. Ebb is not a medical device.</span>
+    <span>Privacy · Terms · Support</span>
+  </div>
+</footer>
+
+<script>
+  // Feature tabs
+  const tabs = [...document.querySelectorAll('.tab')];
+  tabs.forEach(t => t.addEventListener('click', () => select(t)));
+  tabs.forEach((t, i) => t.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    select(n); n.focus();
+  }));
+  function select(t) {
+    tabs.forEach(x => { const on = x === t; x.setAttribute('aria-selected', on); x.tabIndex = on ? 0 : -1; document.getElementById(x.getAttribute('aria-controls')).hidden = !on; });
+  }
+  select(tabs[0]);
+
+  // Breathing cue text, in step with the 4-4-6 orb animation
+  const cue = document.getElementById('cue');
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const phases = [['Breathe in', 4000], ['Hold', 4000], ['Breathe out', 6000]];
+    let i = 0;
+    (function next() { cue.textContent = phases[i][0]; setTimeout(next, phases[i][1]); i = (i + 1) % phases.length; })();
+  }
+</script>
+</body>
+</html>
