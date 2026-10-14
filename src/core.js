@@ -344,5 +344,5 @@
   }
 
   return { isValidDate, toDate, fmtDate, addYearsMinusDay, monthsBetween, ageAt, fmtAmount, num, big, isZero,
-    pad, buildLine, parseFixedWidth, parseCSV, csvToFixedWidth, recordsToCSV, validate, applyFixes };
+    pad, buildLine, parseFixedWidth, parseCSV, csvToFixedWidth, recordsToCSV, validate, applyFixes, summarize };
 });

@@ -9,9 +9,11 @@
   const life = isNode ? require('./rulesets/life.js') : root.DQ.rulesets.life;
   const fin = isNode ? require('./rulesets/finance.js') : root.DQ.rulesets.finance;
   const recon = isNode ? require('./recon.js') : root.DQ.recon;
-  const m = factory(core, life, fin, recon);
+  const sample = isNode ? require('./sample-data.js') : root.DQ.sampleData;
+  const master = isNode ? require('./master.js') : root.DQ.master;
+  const m = factory(core, life, fin, recon, sample, master);
   if (isNode) module.exports = m; else root.DQ.mock = m;
-})(typeof self !== 'undefined' ? self : this, function (C, life, fin, recon) {
+})(typeof self !== 'undefined' ? self : this, function (C, life, fin, recon, sample, master) {
   'use strict';
   const { buildLine, addYearsMinusDay, fmtDate, toDate, monthsBetween } = C;
   const L = life.layouts.L, D = life.layouts.D, ZIP = life.tables.zip;
@@ -46,7 +48,10 @@
       const cur = scen === 'usd' ? 'USD' : 'NTD';
       const fx = cur === 'USD' ? 31 : 1;
       const p45 = { whole: '14', term: '13', endow: '12' }[prodKind];
-      const pc = `2${CO}1${p45[1]}1M11A${String.fromCharCode(65 + (i % 26))}${String(i % 100).padStart(2, '0')}`;
+      // 商品代號取自商品資料：2014 年底前起保者使用當時的舊版代號 (已於 20141231 停售)
+      const suffix = { whole: 'W99', term: `T${tTerm / 10}0`, endow: `E${tTerm / 10}0` }[prodKind];
+      const code = `2${CO}1${p45[1]}1M11A${suffix}${start <= '20141231' ? '90' : '00'}`;
+      const pc = code.slice(0, 13);
       let termType, term, end;
       if (prodKind === 'whole') { termType = 'Y'; term = '999'; end = addYearsMinusDay(start, 9999 - +start.slice(0, 4)); }
       else { termType = 'T'; term = String(tTerm).padStart(3, '0'); end = addYearsMinusDay(start, tTerm); }
@@ -63,7 +68,7 @@
         survivalType: survival ? '1' : '0', benefitType: survival ? '3' : '2', longevityAge: '000', screening: '0', smoker: '0',
         disabilityCat: '000', disabilityLevel: '0', econStatus: '0', groupLink: '0', channel: pick(['1', '1', '2', '4']), salesMethod: '1',
         insuredRelation: pick(['1', '1', '3']), currency: cur, illnessDeathOrig: amt(sum), occClass: start >= '20150301' ? pick(['1', '2', '3']) : '1',
-        productCode: pc + '00', companyPlanCode: `PLAN${p45}${String(i % 7)}`, productCodeVer: v2 ? '2' : '1', productCode2: v2 ? 'A11Z10000000' : '000000000000',
+        productCode: code, companyPlanCode: `PLAN${p45}${String(i % 7)}`, productCodeVer: v2 ? '2' : '1', productCode2: v2 ? 'A11Z10000000' : '000000000000',
         payFreq: '1', payTerm, paidMonths: '000', lapseReason: 'N', occCode: start >= '20150301' ? pick(['0805001', '0101001', '1201002']) : '00000000',
         ownerZip: pick(ZIP), insuredZip: pick(ZIP), totalPremOrig: amt(annualPrem * +payTerm), totalPremTwd: amt(annualPrem * +payTerm * fx),
         survivalAmtOrig: survival ? amt(sum * 0.05) : '0', survivalAmtTwd: survival ? amt(sum * 0.05 * fx) : '0',
@@ -214,6 +219,16 @@
       if (slow) { slow.payDate = plus(slow.eventDate, 120); ruleKey.push({ ruleId: 'U007', policy: slow.policyNo.trim() + '/' + slow.policySeq.trim(), desc: '死亡給付在事故後 120 天才給付' }); reserved.add(slow.policyNo); }
     }
 
+    // 主檔情境：停售後仍用舊版商品代號、商品代號誤植
+    const masterKey = [];
+    if (opts.inject) {
+      const busy = r => reserved.has(r.policyNo) || key.some(k => k.policy.startsWith(r.policyNo.trim())) || ruleKey.some(k => k.policy.startsWith(r.policyNo.trim()));
+      const cands = Ls.filter(r => r.txnSeq === '00000' && ['EOY', 'XED'].includes(r.exitType) && r.startDate >= '20150101' && r.currency === 'NTD' && !busy(r));
+      const a = cands[0], b = cands[1];
+      if (a) { a.productCode = a.productCode.slice(0, 13) + '90'; reserved.add(a.policyNo); masterKey.push({ ruleId: 'PM02', policy: a.policyNo.trim() + '/' + a.policySeq.trim(), desc: `${a.startDate} 起保仍使用 2014 年底停售的舊版代號` }); }
+      if (b) { const c = b.productCode; b.productCode = c.slice(0, 9) + c[10] + c[9] + c.slice(11); reserved.add(b.policyNo); masterKey.push({ ruleId: 'PM01', policy: b.policyNo.trim() + '/' + b.policySeq.trim(), suggest: c, desc: `商品代號第 10、11 碼對調（${b.productCode}）` }); }
+    }
+
     // 結轉情境：復效時保額被改動但未以 INN/DNN 申報
     const reconKey = [];
     if (opts.inject) {
@@ -231,10 +246,57 @@
     });
     if (opts.inject) lines.splice(Math.floor(lines.length / 2), 0, '');
     const dLines = Ds.map(r => buildLine(D, r));
-    const out = { L: lines.join('\n') + '\n', D: dLines.join('\n') + '\n', key, reconKey, ruleKey,
-      names: { L: `LFL${CO}_${Y}.txt`, D: `LFD${CO}_${Y}.txt`, prior: `LFL${CO}_${Y - 1}.txt`, control: `控制總數_${Y}.csv`, statement: `資產負債表_${Y}.csv` } };
+    const out = { L: lines.join('\n') + '\n', D: dLines.join('\n') + '\n', key, reconKey, ruleKey, masterKey,
+      names: { L: `LFL${CO}_${Y}.txt`, D: `LFD${CO}_${Y}.txt`, prior: `LFL${CO}_${Y - 1}.txt`, control: `控制總數_${Y}.csv`, statement: `資產負債表_${Y}.csv`, products: `商品資料_${Y}.csv`, customers: `客戶資料_${Y}.csv` } };
+    out.products = sample.PRODUCT_CSV;
+    // 含錯誤的預設情境使用試用的客戶資料 (假設資料，內含刻意的錯誤)；其他情境產生與保單一致的客戶資料
+    if (opts.inject && opts.seed === 20251014 && opts.policies === 120 && CO === '01' && Y === 2025) {
+      out.customers = sample.CUSTOMER_CSV;
+      masterKey.push(...CUSTOMER_KEY);
+    } else out.customers = customersFor(Ls, opts.seed);
     Object.assign(out, reconInputs(out, truthL, { Y, CO, inject: opts.inject, rand, ri, juneClaim, yearEndClaim, reconKey }));
     return out;
+  }
+
+  // 試用客戶資料中刻意放入的錯誤
+  const CUSTOMER_KEY = [
+    { ruleId: 'C001', policy: 'P250000901/A01', desc: '被保險人證號檢查碼錯誤 (J195366528)' },
+    { ruleId: 'C004', policy: 'P250002801/A01', desc: '要保人郵遞區號 813 與臺北市中正區地址不符' },
+    { ruleId: 'C005', policy: 'P250001901/A01', desc: '同一證號 S272264127 姓名不同' },
+    { ruleId: 'C005', policy: 'P250004001/A01', desc: '同一證號 R281813824 出生日期不同' },
+    { ruleId: 'C005', policy: 'P250001601/A01', desc: '同一保單內同一證號出生日期不同' },
+    { ruleId: 'C006', policy: 'P250003201/A01', desc: '承保保單沒有客戶資料' },
+    { ruleId: 'C007', policy: 'Z88888888888888/A01', desc: '客戶資料的保單不在承保檔' },
+    { ruleId: 'C008', policy: 'P250000001/A01', fix: '19910623', desc: '承保檔出生日期不合法，客戶資料有正確值' },
+    { ruleId: 'C008', policy: 'P250000101/A01', fix: '20051021', desc: '承保檔出生日期為民國年，客戶資料有正確值' },
+    { ruleId: 'C008', policy: 'P250001101/A01', fix: '1', desc: '承保檔性別代碼錯誤，客戶資料有正確值' },
+    { ruleId: 'C009', policy: 'P250001701/A01', desc: '身份為本人，但要保人與被保險人證號不同' },
+  ];
+
+  // 產生與保單一致的客戶資料 (角色 1 要保人、2 被保險人)
+  function customersFor(Ls, seed) {
+    const rand = rng((seed || 1) + 7), ri = (a, b) => a + Math.floor(rand() * (b - a + 1)), pick = a => a[Math.floor(rand() * a.length)];
+    const SUR = '陳林黃張李王吳劉蔡楊許鄭謝郭洪曾邱廖賴周徐蘇葉莊呂江何蕭羅高', GIVEN = { 1: ['建宏', '志明', '俊傑', '家豪', '承恩', '冠宇', '柏翰', '宗翰'], 2: ['淑芬', '怡君', '雅婷', '欣怡', '佳穎', '詩涵', '美玲', '宜庭'] };
+    const ROAD = ['中正路', '中山路', '民權路', '信義路', '和平路', '文心路', '民生路'];
+    const zips = Object.keys(sample.ZIP).filter(z => sample.ZIP[z][0] && !['釣魚臺', '南海諸島'].includes(sample.ZIP[z][0]));
+    const used = new Set();
+    const person = (sex, birth) => {
+      let id; do { id = master.makeId('ABCDEFGHJKLMNPQRSTUVXYWZIO'[ri(0, 25)], sex, String(ri(0, 9999999)).padStart(7, '0')); } while (!id || used.has(id));
+      used.add(id);
+      const z = pick(zips), [city, dist] = sample.ZIP[z];
+      return { id, name: SUR[ri(0, SUR.length - 1)] + pick(GIVEN[sex]), birth, sex, zip: z, addr: `${city}${dist === city ? '' : dist}${pick(ROAD)}${ri(1, 300)}號${ri(1, 12)}樓` };
+    };
+    const shift = (d, y) => String(+d.slice(0, 4) + y) + d.slice(4, 6) + (d.slice(6) > '28' ? '28' : d.slice(6));
+    const seen = new Set(), rows = [];
+    for (const r of Ls) {
+      const k = r.policyNo.trim() + '/' + r.policySeq.trim();
+      if (seen.has(k) || r._truncate || r.policyNo.trim() !== r.policyNo.trimEnd()) continue;
+      seen.add(k);
+      const ins = person(r.sex, r.birthDate);
+      const own = r.insuredRelation === '1' ? ins : person(pick(['1', '2']), shift(r.birthDate, { 3: -ri(22, 35), 4: ri(22, 35), 2: ri(-3, 3) }[r.insuredRelation] || -ri(10, 30)));
+      for (const [role, p] of [['1', own], ['2', ins]]) rows.push([r.policyNo.trim(), r.policySeq.trim(), role, p.id, p.name, p.birth, p.sex, p.zip, p.addr].join(','));
+    }
+    return '保單編號,保單序號,角色,證件編號,姓名,出生日期,性別,郵遞區號,地址\n' + rows.join('\n') + '\n';
   }
 
   // ---------- 對帳用輸入：上年度申報檔、上游控制總數、資產負債表 ----------

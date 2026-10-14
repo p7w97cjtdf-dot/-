@@ -19,17 +19,20 @@
 <main>
   <section class="imports" aria-label="匯入資料">
     <div class="upload">
-      <label class="drop" id="drop-L" for="file-L"><span class="drop-k">承保資料檔</span><span class="drop-n" id="name-L">LFLxx_yyyy.txt</span><span class="drop-h">申報明細・425 字元・61 欄</span><input type="file" id="file-L" accept=".txt,.csv"></label>
-      <label class="drop" id="drop-D" for="file-D"><span class="drop-k">給付資料檔</span><span class="drop-n" id="name-D">LFDxx_yyyy.txt</span><span class="drop-h">申報明細・225 字元・31 欄</span><input type="file" id="file-D" accept=".txt,.csv"></label>
-      <label class="drop opt" id="drop-prior" for="file-prior"><span class="drop-k">上年度承保檔</span><span class="drop-n" id="name-prior">LFLxx_yyyy-1.txt</span><span class="drop-h">期初/期末結轉用</span><input type="file" id="file-prior" accept=".txt"></label>
-      <label class="drop opt" id="drop-control" for="file-control"><span class="drop-k">上游控制總數</span><span class="drop-n" id="name-control">控制總數.csv</span><span class="drop-h">新契約/理賠/保單系統</span><input type="file" id="file-control" accept=".csv"></label>
-      <label class="drop opt" id="drop-statement" for="file-statement"><span class="drop-k">資產負債表</span><span class="drop-n" id="name-statement">資產負債表.csv</span><span class="drop-h">科目餘額・含準備金</span><input type="file" id="file-statement" accept=".csv"></label>
+      <label class="drop" id="drop-L" for="file-L"><span class="drop-k">承保資料檔</span><span class="drop-n" id="name-L">LFLxx_yyyy.txt</span><span class="drop-h">申報明細・425 字元・61 欄</span><input type="file" id="file-L" accept=".txt,.csv,.xlsx"></label>
+      <label class="drop" id="drop-D" for="file-D"><span class="drop-k">給付資料檔</span><span class="drop-n" id="name-D">LFDxx_yyyy.txt</span><span class="drop-h">申報明細・225 字元・31 欄</span><input type="file" id="file-D" accept=".txt,.csv,.xlsx"></label>
+      <label class="drop opt" id="drop-prior" for="file-prior"><span class="drop-k">上年度承保檔</span><span class="drop-n" id="name-prior">LFLxx_yyyy-1.txt</span><span class="drop-h">期初/期末結轉用</span><input type="file" id="file-prior" accept=".txt,.xlsx"></label>
+      <label class="drop opt" id="drop-control" for="file-control"><span class="drop-k">上游控制總數</span><span class="drop-n" id="name-control">控制總數.csv</span><span class="drop-h">新契約/理賠/保單系統</span><input type="file" id="file-control" accept=".csv,.xlsx"></label>
+      <label class="drop opt" id="drop-statement" for="file-statement"><span class="drop-k">資產負債表</span><span class="drop-n" id="name-statement">資產負債表.csv</span><span class="drop-h">科目餘額・含準備金</span><input type="file" id="file-statement" accept=".csv,.xlsx"></label>
+      <label class="drop opt" id="drop-products" for="file-products"><span class="drop-k">商品資料</span><span class="drop-n" id="name-products">商品資料.csv</span><span class="drop-h">起售/停售日・替代代號</span><input type="file" id="file-products" accept=".csv,.xlsx"></label>
+      <label class="drop opt" id="drop-customers" for="file-customers"><span class="drop-k">客戶資料</span><span class="drop-n" id="name-customers">客戶資料.csv</span><span class="drop-h">要保人・被保險人</span><input type="file" id="file-customers" accept=".csv,.xlsx"></label>
     </div>
     <div class="samples">
       <span class="label">範例資料</span>
       <button id="btn-dirty" class="btn">模擬資料（含錯誤與差異）</button>
       <button id="btn-clean" class="btn ghost">模擬資料（正確）</button>
       <span class="hint" id="sample-note"></span>
+      <span class="hint">也可以把整本 Excel 活頁簿拖進任一格，依工作表名稱自動分配。</span>
     </div>
   </section>
 
@@ -103,6 +106,12 @@
         <div class="table-wrap"><table id="roll-table"><thead><tr><th>項目</th><th class="num">件數</th><th class="num">保額（元）</th></tr></thead><tbody></tbody></table></div>
         <div class="table-wrap"><table id="roll-issues"><thead><tr><th>檢核</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody></tbody></table></div>
       </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><div><h2>客戶資料與商品資料</h2><p class="hint">客戶資料檢查身分證檢查碼、性別、郵遞區號與地址、同一人資料是否一致，並和承保檔比對被保險人生日、性別與身份；承保檔欄位不合法時，以客戶資料作為修正值。商品資料檢查商品代號是否存在、停售後是否仍使用舊代號。</p></div></div>
+      <div class="chips" id="mst-chips"></div>
+      <div class="table-wrap"><table id="mst-table"><thead><tr><th>檢核</th><th>位置</th><th>保單號碼</th><th>問題</th><th>修正建議</th></tr></thead><tbody></tbody></table></div>
     </div>
 
     <div class="block">
@@ -217,11 +226,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="src/core.js"></script>
 <script src="src/rulesets/life.js"></script>
 <script src="src/rulesets/finance.js"></script>
 <script src="src/report.js"></script>
 <script src="src/recon.js"></script>
+<script src="src/sample-data.js"></script>
+<script src="src/master.js"></script>
 <script src="src/mock.js"></script>
 <script src="src/rules-dsl.js"></script>
 <script src="src/rule-import.js"></script>

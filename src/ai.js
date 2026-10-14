@@ -71,6 +71,8 @@
     const o = {};
     if (r.ctl) o.上游控制總數對帳 = { 摘要: r.ctl.summary, 差異: r.ctl.rows.filter(x => x.status && x.status !== '一致').map(x => ({ 系統: x.source, 項目: x.name, 期間: x.period, 差異筆數: x.diff && x.diff.cnt, 差異金額: x.diff && x.diff.amt / 100, 判定: x.status, 說明: x.explain })) };
     if (r.roll) o.期初期末結轉 = { 期初: r.roll.movement.open, 上年度期末: r.roll.movement.priorClose, 問題: r.roll.issues.map(i => ({ 編號: i.ruleId, 保單: i.policy, 問題: i.message })) };
+    const mst = [].concat(r.cust ? r.cust.issues : [], r.prod ? r.prod.issues : []);
+    if (mst.length) o.客戶與商品資料 = mst.slice(0, 40).map(i => ({ 編號: i.ruleId, 保單: (i.policy || '').trim(), 問題: i.message, 可自動修正: !!i.fix }));
     if (r.stmt) o.資產負債表勾稽 = { 平衡: r.stmt.summary.balanced, 問題: r.stmt.issues.map(i => ({ 編號: i.ruleId, 科目: i.code, 根因: i.chainRole || '', 問題: i.message, 說明: i.explain || '' })) };
     return o;
   }

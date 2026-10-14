@@ -6,7 +6,7 @@
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const SEV = { error: '錯誤', warning: '警告' };
-  const FILE = { L: '承保', D: '給付', S: '財報', R: '對帳' };
+  const FILE = { L: '承保', D: '給付', S: '財報', R: '對帳', C: '客戶', P: '商品' };
   const yuan = R.yuan;
   let INTRO = '規則引擎已完成逐欄檢核與對帳。按「產生 AI 分析摘要」，由 Claude 歸納錯誤的根本原因、修正優先順序與退件風險。';
 
@@ -16,7 +16,7 @@
   try { const saved = JSON.parse(localStorage.getItem('dq-custom-rules') || '[]'); if (Array.isArray(saved)) state.customRules = saved.filter(r => !DQ.dsl.validateRule(r, rs.layouts).length); } catch (e) { /* 無法讀取時忽略 */ }
 
   // ---------- 檔案 ----------
-  const SLOTS = ['L', 'D', 'prior', 'control', 'statement'];
+  const SLOTS = ['L', 'D', 'prior', 'control', 'statement', 'products', 'customers'];
   function setFile(fid, name, text) {
     if ((fid === 'L' || fid === 'D') && /\.csv$/i.test(name)) { text = DQ.csvToFixedWidth(text, rs.layouts[fid]); name = name.replace(/\.csv$/i, '.txt'); }
     state.files[fid] = { name, text };
@@ -26,10 +26,38 @@
     if (/^LFD/i.test(name)) return 'D';
     if (/^LFL/i.test(name)) { const y = name.match(/_(\d{4})/), cur = state.files.L && state.files.L.name.match(/_(\d{4})/); return y && cur && +y[1] < +cur[1] ? 'prior' : 'L'; }
     if (/控制|control/i.test(name)) return 'control';
+    if (/商品|product/i.test(name)) return 'products';
+    if (/客戶|customer/i.test(name)) return 'customers';
     if (/資產負債|財報|statement|balance/i.test(name)) return 'statement';
     return fallback;
   }
+  // Excel 活頁簿：依工作表名稱分配到各檔案
+  const SHEET_SLOT = [['上年度', 'prior'], ['承保', 'L'], ['給付', 'D'], ['理賠', 'D'], ['控制總數', 'control'], ['資產負債', 'statement'], ['商品', 'products'], ['客戶', 'customers']];
+  async function readWorkbook(file) {
+    if (!window.XLSX) { $('#sample-note').textContent = 'Excel 解析元件未載入，請確認網路連線，或改用 CSV。'; return; }
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const got = {};
+    for (const name of wb.SheetNames) {
+      const hit = SHEET_SLOT.find(([k]) => name.includes(k));
+      if (hit && !got[hit[1]]) got[hit[1]] = XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false });
+    }
+    if (!Object.keys(got).length) { $('#sample-note').textContent = `「${file.name}」沒有可辨識的工作表（承保資料、給付資料、客戶資料、商品資料…）`; return; }
+    // 由承保資料推得公司代號與填報年度，作為檔名 (對帳依填報年度彙總)
+    let co = '01', year = String(new Date().getFullYear() - 1);
+    if (got.L) {
+      const fixed = DQ.csvToFixedWidth(got.L, rs.layouts.L), recs = DQ.parseFixedWidth(fixed, rs.layouts.L).records;
+      if (recs[0]) co = recs[0].company;
+      const ys = recs.flatMap(r => [r.addDate, r.exitDate]).filter(d => DQ.isValidDate(d)).map(d => d.slice(0, 4));
+      if (ys.length) year = ys.sort().pop();
+    }
+    const names = { L: `LFL${co}_${year}.csv`, D: `LFD${co}_${year}.csv`, prior: `LFL${co}_${year - 1}.csv`, control: `控制總數_${year}.csv`, statement: `資產負債表_${year}.csv`, products: `商品資料_${year}.csv`, customers: `客戶資料_${year}.csv` };
+    for (const [slot, csv] of Object.entries(got)) setFile(slot, names[slot], slot === 'prior' ? DQ.csvToFixedWidth(csv, rs.layouts.L) : csv);
+    state.key = state.reconKey = state.masterKey = null;
+    $('#sample-note').textContent = `已從「${file.name}」匯入 ${Object.keys(got).length} 個工作表：${Object.keys(got).map(k => names[k].replace(/\.csv$/, '')).join('、')}`;
+    run();
+  }
   function readFile(fid, file) {
+    if (/\.xlsx$/i.test(file.name)) { readWorkbook(file); return; }
     const fr = new FileReader();
     fr.onload = () => { setFile(fid, file.name, String(fr.result)); run(); };
     fr.readAsText(file, 'utf-8');
@@ -45,8 +73,9 @@
     const g = DQ.mock.generate({ inject });
     setFile('L', g.names.L, g.L); setFile('D', g.names.D, g.D);
     setFile('prior', g.names.prior, g.prior); setFile('control', g.names.control, g.control); setFile('statement', g.names.statement, g.statement);
+    setFile('products', g.names.products, g.products); setFile('customers', g.names.customers, g.customers);
     $('#sample-note').textContent = inject ? `已載入模擬資料：明細 ${g.key.length} 項錯誤、對帳與財報 ${g.reconKey.length} 項差異` : '已載入正確的模擬資料';
-    state.key = inject ? g.key : null; state.reconKey = inject ? g.reconKey : null;
+    state.key = inject ? g.key : null; state.reconKey = inject ? g.reconKey : null; state.masterKey = inject ? g.masterKey : null;
     run();
   }
   $('#btn-dirty').onclick = () => loadSample(true);
@@ -56,10 +85,20 @@
   function run() {
     const f = state.files;
     state.res = DQ.validate(activeRules(), { L: f.L, D: f.D });
+    // 客戶資料、商品資料：指向承保檔某一列的問題併入明細檢核 (可用欄位尺規與自動修正)
+    state.cust = f.customers && f.L ? DQ.master.customers(state.res, f.customers.text) : null;
+    state.prod = f.products && f.L ? DQ.master.products(state.res, f.products.text) : null;
+    const mst = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
+    let nextId = state.res.issues.length;
+    for (const i of mst) if (i.file === 'L') {
+      const d = DQ.master.catalog.find(c => c.id === i.ruleId);
+      state.res.issues.push(Object.assign(i, { id: ++nextId, ruleName: d ? d.name : '', ref: d ? d.ref : '' }));
+    }
+    state.res.summary = DQ.summarize(rs, state.res.issues, state.res.meta);
     state.roll = f.L ? R.rollForward(state.res, f.prior && f.prior.text) : null;
     state.ctl = f.control ? R.controlRecon(state.res, f.control.text, state.roll ? state.roll.issues : []) : null;
     state.stmt = f.statement ? R.statement(f.statement.text, state.res) : null;
-    state.extra = [].concat(state.roll ? state.roll.issues : [], state.ctl ? state.ctl.issues : [], state.stmt ? state.stmt.issues : []);
+    state.extra = [].concat(state.roll ? state.roll.issues : [], state.ctl ? state.ctl.issues : [], state.stmt ? state.stmt.issues : [], mst.filter(i => i.file !== 'L'));
     state.sel = null; state.aiSummary = null;
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
     if (DQ.app && DQ.app.onRun) DQ.app.onRun();
@@ -80,10 +119,12 @@
         <span class="s">${b.records} 筆${b.policies ? `・${b.policies} 張保單` : ''}・${b.badRecords} 筆有錯</span>
         <span class="meter"><i style="width:${b.passRate * 100}%"></i></span></div>`).join('');
     const det = state.key ? `<div class="tile ok"><span class="k">注入錯誤偵測</span><span class="v">${hitCount(state.key)}/${state.key.length}</span><span class="s">模擬資料的解答比對</span></div>` : '';
+    const allMst = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
+    const mdet = state.masterKey ? `<div class="tile ok"><span class="k">客戶／商品錯誤偵測</span><span class="v">${state.masterKey.filter(k => allMst.some(i => i.ruleId === k.ruleId && i.policy === k.policy)).length}/${state.masterKey.length}</span><span class="s">試用資料的解答比對</span></div>` : '';
     $('#summary').innerHTML = tiles +
       `<div class="tile ${s.errors ? 'err' : 'ok'}"><span class="k">錯誤</span><span class="v">${s.errors}</span><span class="s">${s.errors ? '修正後才能申報' : '可申報'}</span></div>
        <div class="tile ${s.warnings ? 'warn' : 'ok'}"><span class="k">警告</span><span class="v">${s.warnings}</span><span class="s">建議確認的合理性問題</span></div>
-       <div class="tile"><span class="k">可自動修正</span><span class="v">${s.fixable}</span><span class="s">有明確修正值</span></div>${det}
+       <div class="tile"><span class="k">可自動修正</span><span class="v">${s.fixable}</span><span class="s">有明確修正值</span></div>${det}${mdet}
        <div class="cats" id="cats"></div>`;
   }
   function renderCats() {
@@ -222,6 +263,18 @@
         <td class="explain">${esc(r.explain || '')}${r.suggestion ? `<div class="hint">${esc(r.suggestion)}</div>` : ''}${(r.related || []).length ? `<div>${[...new Set(r.related.map(i => i.id).filter(Boolean))].slice(0, 6).map(id => `<button class="chip jump" data-id="${id}">明細 #${id}</button>`).join(' ')}</div>` : ''}</td></tr>`
         : `<tr><td colspan="8">${esc(r.explain)}</td></tr>`).join('') : '<tr><td colspan="8" class="empty">上游控制總數與申報明細完全一致。</td></tr>';
     }
+    // 客戶與商品資料
+    const mstAll = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
+    if (!state.cust && !state.prod) { $('#mst-chips').innerHTML = '<span class="hint">尚未匯入客戶資料或商品資料 CSV。</span>'; $('#mst-table tbody').innerHTML = ''; }
+    else {
+      $('#mst-chips').innerHTML = (state.cust ? `<span class="st ${state.cust.issues.length ? 'bad' : 'ok'}">客戶資料 ${state.cust.summary.rows} 列・${state.cust.summary.people} 人・問題 <b>${state.cust.issues.length}</b></span>` : '') +
+        (state.prod ? ` <span class="st ${state.prod.issues.length ? 'bad' : 'ok'}">商品資料 ${state.prod.summary.products} 項（停售 ${state.prod.summary.stopped}）・問題 <b>${state.prod.issues.length}</b></span>` : '') +
+        (mstAll.some(i => i.fix) ? ` <span class="st ok">可用主檔自動修正 <b>${mstAll.filter(i => i.fix).length}</b></span>` : '');
+      $('#mst-table tbody').innerHTML = mstAll.length ? mstAll.map(i => `<tr><td><span class="badge ${i.severity}">${i.ruleId}</span></td>
+        <td class="num">${i.file === 'L' && i.id ? `<button class="chip jump" data-id="${i.id}">承保第 ${i.line} 行</button>` : `${FILE[i.file]}資料第 ${i.line} 列`}</td>
+        <td class="mono">${esc((i.policy || '').trim())}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}${i.fix ? ` <span class="pill">→ ${esc(i.fix.value)}</span>` : ''}</td></tr>`).join('')
+        : '<tr><td colspan="5" class="empty">客戶資料、商品資料與承保檔一致。</td></tr>';
+    }
     // 結轉
     if (state.roll) {
       const m = state.roll.movement, row = (k, c, a, cls) => `<tr class="${cls || ''}"><td>${k}</td><td class="num">${c == null ? '' : c.toLocaleString()}</td><td class="num">${a == null ? '' : yuan(a)}</td></tr>`;
@@ -310,20 +363,20 @@
     if (!key && !DQ.ai.usesPlatform()) { out.textContent = '請輸入 Anthropic API key。金鑰只保存在你的瀏覽器，用來直接呼叫 Claude API。'; return; }
     $('#btn-ai').disabled = true; out.className = 'ai-out'; out.textContent = 'Claude 正在分析檢核與對帳結果…';
     try {
-      state.aiSummary = await DQ.ai.summarize(key, rs, state.res, { ctl: state.ctl, roll: state.roll, stmt: state.stmt });
+      state.aiSummary = await DQ.ai.summarize(key, rs, state.res, { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod });
       out.className = 'ai-out done'; out.textContent = state.aiSummary; renderReport();
     } catch (e) { out.textContent = 'AI 呼叫失敗：' + e.message; }
     $('#btn-ai').disabled = false;
   };
 
   // ---------- 報告 / 規則 ----------
-  function reportHTML() { return DQ.report.toHTML(rs, state.res, { aiSummary: state.aiSummary, recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt } }); }
+  function reportHTML() { return DQ.report.toHTML(rs, state.res, { aiSummary: state.aiSummary, recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
   function renderReport() { $('#report-frame').srcdoc = reportHTML(); }
   function renderRules() {
     const q = $('#r-q').value.trim().toLowerCase();
     const by = {};
     for (const i of state.res.issues.concat(state.extra || [])) by[i.ruleId] = (by[i.ruleId] || 0) + 1;
-    const cat = activeRules().catalog.concat(fin.catalog);
+    const cat = activeRules().catalog.concat(fin.catalog, DQ.master.catalog);
     const list = cat.filter(r => !q || [r.id, r.name, r.level, r.ref].join(' ').toLowerCase().includes(q));
     $('#rules-meta').textContent = `共 ${cat.length} 條檢核規則（資料類型、代碼、單筆、多筆、跨檔、邏輯合理性、跨系統對帳、期初期末結轉、財報勾稽）`;
     $('#rule-table tbody').innerHTML = list.map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.level)}</td><td>${esc(r.name)}</td><td>${esc(r.ref)}</td><td><span class="badge ${r.severity}">${SEV[r.severity]}</span></td><td class="num">${by[r.id] || ''}</td></tr>`).join('');

@@ -42,7 +42,7 @@
     return out.join('\n');
   }
 
-  const TITLE = { S: '資產負債表', R: '控制總數對帳' };
+  const TITLE = { S: '資產負債表', R: '控制總數對帳', C: '客戶資料', P: '商品資料' };
   const titleOf = (rs, f) => rs.layouts[f] ? rs.layouts[f].title : TITLE[f] || f;
   function toCSV(rs, res, extra) {
     const head = ['序號', '嚴重度', '檔案', '行號', '保單號碼', '檢核編號', '檢核項目', '類別', '欄位', '欄位值', '問題說明', '修正建議', '可自動修正'];
@@ -111,6 +111,11 @@ ${tops.map(t => `<tr><td class="mono">${esc(t.ruleId)}</td><td>${esc(t.name)}</t
       const m = r.roll.movement;
       h += `<h2>期初 / 期末結轉</h2><p>期初有效 ${m.open[0]} 件 / ${y(m.open[1])} 元${r.roll.hasPrior ? `（上年度期末 ${m.priorClose[0]} 件 / ${y(m.priorClose[1])} 元）` : ''}；期末有效 ${m.closeActual[0]} 件 / ${y(m.closeActual[1])} 元；結轉問題 ${r.roll.issues.length} 項。</p>` +
         (r.roll.issues.length ? `<div class="scroll"><table><thead><tr><th>檢核</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody>${r.roll.issues.map(i => `<tr><td class="mono">${i.ruleId}</td><td class="mono">${esc(i.policy)}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
+    }
+    const mst = [].concat(r.cust ? r.cust.issues : [], r.prod ? r.prod.issues : []);
+    if (r.cust || r.prod) {
+      h += `<h2>客戶資料與商品資料</h2><p>${r.cust ? `客戶資料 ${r.cust.summary.rows} 列（${r.cust.summary.people} 人）` : ''}${r.cust && r.prod ? '；' : ''}${r.prod ? `商品資料 ${r.prod.summary.products} 項` : ''}；問題 ${mst.length} 項，其中 ${mst.filter(i => i.fix).length} 項可依主檔自動修正。</p>` +
+        (mst.length ? `<div class="scroll"><table><thead><tr><th>檢核</th><th>位置</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody>${mst.map(i => `<tr><td class="mono">${i.ruleId}</td><td>${i.file === 'L' ? '承保第 ' + i.line + ' 行' : (i.file === 'C' ? '客戶' : '商品') + '資料第 ' + i.line + ' 列'}</td><td class="mono">${esc((i.policy || '').trim())}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
     }
     if (r.stmt) {
       h += `<h2>財報勾稽：資產負債表</h2><p>${r.stmt.summary.balanced ? '資產 = 負債 + 權益，報表平衡。' : '資產負債表不平衡。'}錯誤 ${r.stmt.summary.errors} 項、提醒 ${r.stmt.summary.warnings} 項。</p>` +
