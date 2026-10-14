@@ -19,7 +19,7 @@
 <main>
   <section class="imports" aria-label="放入資料">
     <label class="drop big" id="drop-book" for="file-book">
-      <span class="drop-k">把 Excel 檔拖到這裡，或點這裡選擇檔案</span>
+      <span class="drop-k"><span class="on-desk">把 Excel 檔拖到這裡，或點這裡選擇檔案</span><span class="on-phone">點這裡選擇 Excel 檔</span></span>
       <span class="drop-h">工作表名稱含「保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數、資產負債表」就會自動分好；也可以一次放入多個文字檔或 CSV。</span>
       <input type="file" id="file-book" accept=".xlsx,.xls,.xlsm,.ods,.txt,.csv" multiple>
     </label>
@@ -48,6 +48,11 @@
   <section id="view-check" class="view">
     <div class="summary" id="summary"></div>
     <p class="summary-note hint" id="summary-note"></p>
+    <div class="review-start">
+      <button id="btn-review" class="btn cta">逐筆確認問題</button>
+      <span class="hint">一次看一個問題，決定要不要改；手機上最好用。</span>
+      <button id="btn-list" class="btn ghost list-toggle" aria-expanded="false">看全部清單</button>
+    </div>
 
     <div class="ai" id="ai-box" hidden>
       <div id="ai-out" class="ai-out"></div>
@@ -224,6 +229,7 @@
     <button id="tab-report" aria-selected="false" data-view="report">預覽報告</button>
     <button id="tab-rules" aria-selected="false" data-view="rules">檢查項目一覽</button>
   </nav>
+  <section id="review" class="review" hidden aria-label="逐筆確認"></section>
 </main>
 
 <footer class="foot">檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 年）；會計科目為示範用的簡化版。所有檢查都在你的電腦上進行，資料不會上傳。AI 說明只在線上版提供。</footer>
@@ -253,6 +259,7 @@
 <script src="src/ai.js"></script>
 <script src="src/app.js"></script>
 <script src="src/app-import.js"></script>
+<script src="src/review.js"></script>
 <script>
 // 找不到程式檔時 (例如直接在壓縮檔裡開啟 index.html，或只複製了這一個檔案)，畫面會出現但按鈕沒有反應：在頁首說明原因
 if (!window.DQ || !window.DQ.app) {

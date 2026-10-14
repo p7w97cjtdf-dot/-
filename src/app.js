@@ -149,6 +149,8 @@
     state.all = state.res.issues.concat(state.extra.filter(i => !state.res.issues.includes(i)));
     state.sel = null; state.aiSummary = null;
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
+    // 手機上資料一放進來就捲到結果區 (上傳區在畫面上方會佔掉整個螢幕)
+    if (window.matchMedia('(max-width: 720px)').matches) requestAnimationFrame(() => $('#summary').scrollIntoView({ block: 'start', behavior: 'smooth' }));
     if (DQ.app && DQ.app.onRun) DQ.app.onRun();
     $('#dec-out').innerHTML = ''; $('#dec-ai').textContent = '';
     $('#ai-box').hidden = true; $('#ai-out').className = 'ai-out'; $('#ai-out').textContent = '';
@@ -297,12 +299,13 @@
     for (const fid of ['L', 'D']) {
       if (!state.files[fid]) continue;
       const out = DQ.applyFixes(rs, state.res, fid, ids);
-      if (out.applied) { state.files[fid] = { name: state.files[fid].name, text: out.text }; total += out.applied; }
+      if (out.applied) { state.files[fid] = Object.assign({}, state.files[fid], { text: out.text }); total += out.applied; }
     }
     const before = state.res.summary.errors + state.res.summary.warnings;
     run();
     const after = state.res.summary.errors + state.res.summary.warnings;
     $('#action-note').textContent = total ? `已修改 ${total} 個地方，問題從 ${before} 個減為 ${after} 個。可以下載改好的資料。` : '沒有工具可以自動修改的地方。';
+    return { total, before, after };
   }
   $('#btn-fix').onclick = () => applyFix(null);
   // 使用者自己的檔名若含中文，去掉中文字，避免存成「download」
@@ -491,10 +494,12 @@
 
   // 提供給規則匯入分頁使用
   DQ.app = {
-    state, run, showTab, select, download,
+    state, run, showTab, select, download, applyFix, rowLabel,
     setCustomRules(rules) { state.customRules = rules; try { localStorage.setItem('dq-custom-rules', JSON.stringify(rules)); } catch (e) { /* ignore */ } run(); },
   };
 
+  // 手機上清單預設收起 (主要用逐筆確認)，按「看全部清單」展開
+  $('#btn-list').onclick = () => { const on = document.body.classList.toggle('show-list'); $('#btn-list').setAttribute('aria-expanded', on); $('#btn-list').textContent = on ? '收起清單' : '看全部清單'; };
   // 打開時不載入任何資料：只顯示拖放框與範例按鈕
   document.body.classList.add('no-data');
   $('#sample-note').textContent = '還沒有資料。把 Excel 拖到上方的框，或先按範例看看效果。';
