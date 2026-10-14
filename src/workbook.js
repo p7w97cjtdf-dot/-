@@ -13,9 +13,9 @@
 })(typeof self !== 'undefined' ? self : this, function (C, life) {
   'use strict';
   const L = life.layouts.L, D = life.layouts.D;
-  // 工作表名稱包含這些字就分配到對應的上傳格 (「上年度承保資料」要先於「承保」比對)
-  const SHEET_SLOT = [['上年度', 'prior'], ['承保', 'L'], ['給付', 'D'], ['理賠', 'D'], ['控制總數', 'control'], ['資產負債', 'statement'], ['商品', 'products'], ['客戶', 'customers']];
-  const NAMES = { L: '承保資料', D: '給付資料', customers: '客戶資料', products: '商品資料', prior: '上年度承保資料', control: '控制總數', statement: '資產負債表' };
+  // 工作表名稱包含這些字就分配到對應的上傳格 (「去年保單資料」要先於「保單」比對)；舊名稱 (承保、給付、上年度、控制總數) 也接受
+  const SHEET_SLOT = [['上年度', 'prior'], ['去年', 'prior'], ['承保', 'L'], ['保單', 'L'], ['給付', 'D'], ['理賠', 'D'], ['控制總數', 'control'], ['系統總數', 'control'], ['資產負債', 'statement'], ['商品', 'products'], ['客戶', 'customers']];
+  const NAMES = { L: '保單資料', D: '理賠資料', customers: '客戶資料', products: '商品資料', prior: '去年保單資料', control: '系統總數', statement: '資產負債表' };
 
   const recs = (text, lay) => C.parseFixedWidth(text, lay).records.filter(r => r._raw.length === lay.recordLength);
   const fixed = (text, lay) => ({ header: lay.fields.map(f => f.name), rows: recs(text, lay).map(r => lay.fields.map(f => r[f.key])) });
@@ -25,8 +25,8 @@
   function sheets(g) {
     const st = csv(g.statement);
     return {
-      承保資料: fixed(g.L, L), 給付資料: fixed(g.D, D), 客戶資料: csv(g.customers), 商品資料: csv(g.products),
-      上年度承保資料: fixed(g.prior, L), 控制總數: csv(g.control),
+      保單資料: fixed(g.L, L), 理賠資料: fixed(g.D, D), 客戶資料: csv(g.customers), 商品資料: csv(g.products),
+      去年保單資料: fixed(g.prior, L), 系統總數: csv(g.control),
       資產負債表: { header: st.header, rows: st.rows.map(r => [r[0], r[1], ...r.slice(2).map(Number)]) },
     };
   }

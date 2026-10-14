@@ -268,3 +268,13 @@ td.sev i.suspect { background: repeating-linear-gradient(#0e7490 0 4px, transpar
 #issue-table td.where { white-space: nowrap; font-size: 13px; }
 #issue-table td.val { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
 #issue-table td:nth-child(7) { min-width: 18ch; }
+
+/* 上方的大拖放框與「進階」區 */
+.drop.big { align-items: center; text-align: center; padding: 26px 18px; border-width: 2px; gap: 6px; }
+.drop.big .drop-k { font-size: 18px; }
+.drop.big .drop-h { font-size: 13px; max-width: 72ch; }
+details.more { margin-top: 4px; }
+details.more > summary { cursor: pointer; color: var(--mut); font-size: 14px; padding: 6px 0; min-height: 44px; display: flex; align-items: center; }
+details.more[open] > summary { margin-bottom: 8px; }
+/* 在電腦上直接開啟時沒有 AI：按鈕變淡，按下會說明原因 */
+body.no-ai .ai-btn { opacity: .55; }

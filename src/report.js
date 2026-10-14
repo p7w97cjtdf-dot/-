@@ -4,13 +4,14 @@
 (function (root, factory) {
   const isNode = typeof module === 'object' && module.exports;
   const core = isNode ? require('./core.js') : root.DQ;
-  const m = factory(core);
+  const labels = isNode ? require('./labels.js') : root.DQ.labels;
+  const m = factory(core, labels);
   if (isNode) module.exports = m; else root.DQ.report = m;
-})(typeof self !== 'undefined' ? self : this, function (C) {
+})(typeof self !== 'undefined' ? self : this, function (C, LB) {
   'use strict';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const pct = x => (x * 100).toFixed(1) + '%';
-  const SEV = { error: '錯誤', warning: '警告', suspect: '疑似異常（需人工判斷）' };
+  const SEV = LB.SEV, SHEET = LB.SHEET;
 
   function fieldLabel(rs, i) {
     const lay = rs.layouts[i.file];
@@ -32,24 +33,27 @@
     const s = res.summary, out = [];
     out.push(`== 資料檢核結果：${rs.name} ==`);
     for (const [fid, b] of Object.entries(s.byFile)) out.push(`${rs.layouts[fid].title}：${b.records} 筆，有錯誤 ${b.badRecords} 筆，通過率 ${pct(b.passRate)}`);
-    out.push(`錯誤 ${s.errors} 項、警告 ${s.warnings} 項、疑似異常（需人工判斷）${s.suspects || 0} 項、可自動修正 ${s.fixable} 項`);
+    out.push(`${SEV.error} ${s.errors} 項、${SEV.warning} ${s.warnings} 項、${SEV.suspect} ${s.suspects || 0} 項、可一鍵修改 ${s.fixable} 項`);
     out.push('');
     for (const i of res.issues) {
-      out.push(`[${SEV[i.severity]}] ${i.file === 'L' ? '承保' : '給付'}第 ${i.line} 行 ${i.policy ? '保單 ' + i.policy.trim() + ' ' : ''}(${i.ruleId}) ${fieldLabel(rs, i)}`);
+      out.push(`[${SEV[i.severity]}] ${SHEET[i.file] || i.file} 第 ${i.line} 行 ${i.policy ? '保單 ' + i.policy.trim() + ' ' : ''}(${i.ruleId}) ${fieldLabel(rs, i)}`);
       out.push(`   問題：${i.message}${i.value !== '' ? `  [值：${String(i.value).trim() || '(空白)'}]` : ''}`);
       if (i.suggestion) out.push(`   建議：${i.suggestion}`);
     }
     return out.join('\n');
   }
 
-  const TITLE = { S: '資產負債表', R: '控制總數對帳', C: '客戶資料', P: '商品資料' };
-  const titleOf = (rs, f) => rs.layouts[f] ? rs.layouts[f].title : TITLE[f] || f;
+  // 問題清單 (下載用)：第一列為標題；Excel 與 CSV 共用
+  function toRows(rs, res, extra) {
+    const head = ['序號', '狀況', '資料', '行號', '保單號碼／科目', '問題類型', '檢查項目', '欄位', '目前的值', '問題說明', '建議怎麼改', '建議的值', '規則編號'];
+    const all = res.issues.concat((extra || []).filter(i => !res.issues.includes(i)).map((i, n) => Object.assign({ id: res.issues.length + n + 1 }, i)));
+    return [head].concat(all.map(i => [i.id, SEV[i.severity] || i.severity, i.sheet || SHEET[i.file] || i.file, i.line || '', (i.policy || i.code || '').trim(), LB.cat(i.category), i.ruleName || '',
+      fieldLabel(rs, i).replace(/欄\d+ /g, ''), String(i.value == null ? '' : i.value).trim(), i.message + (i.explain ? '；' + i.explain : ''), i.suggestion || '', i.fix ? i.fix.value : '', i.ruleId]));
+  }
+  // CSV：加上 BOM 與 Windows 換行，Excel 直接開啟中文不會變亂碼
   function toCSV(rs, res, extra) {
-    const head = ['序號', '嚴重度', '檔案', '行號', '保單號碼', '檢核編號', '檢核項目', '類別', '欄位', '欄位值', '問題說明', '修正建議', '可自動修正'];
-    const q = v => { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    const all = res.issues.concat((extra || []).map((i, n) => Object.assign({ id: res.issues.length + n + 1 }, i)));
-    const rows = all.map(i => [i.id, SEV[i.severity], titleOf(rs, i.file), i.line, (i.policy || i.code || '').trim(), i.ruleId, i.ruleName || '', i.category, fieldLabel(rs, i), i.value, i.message + (i.explain ? '；' + i.explain : ''), i.suggestion, i.fix ? '是' : '']);
-    return '﻿' + [head].concat(rows).map(r => r.map(q).join(',')).join('\n') + '\n';
+    const q = v => { v = String(v == null ? '' : v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    return '\uFEFF' + toRows(rs, res, extra).map(r => r.map(q).join(',')).join('\r\n') + '\r\n';
   }
 
   // 保發中心風格的「不符資料檔」：原始資料列 + 錯誤代碼
@@ -67,12 +71,12 @@
     opts = opts || {};
     const s = res.summary;
     const tops = topRules(rs, res, 15);
-    const cats = Object.entries(s.byCategory).sort((a, b) => b[1] - a[1]);
+    const cats = Object.entries(s.byCategory).sort((a, b) => b[1] - a[1]).map(([c, n]) => [LB.cat(c), n]);
     const maxCat = Math.max(1, ...cats.map(c => c[1]));
-    const rows = res.issues.map(i => `<tr class="${i.severity}"><td>${i.id}</td><td><span class="sev ${i.severity}">${SEV[i.severity]}</span></td><td>${i.file === 'L' ? '承保' : '給付'}</td><td class="num">${i.line || '-'}</td><td class="mono">${esc((i.policy || '').trim())}</td><td class="mono">${esc(i.ruleId)}</td><td>${esc(fieldLabel(rs, i))}</td><td class="mono">${esc(String(i.value).trim())}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('');
-    const fileCards = Object.entries(s.byFile).map(([fid, b]) => `<div class="card"><div class="k">${esc(rs.layouts[fid].title)}</div><div class="v">${pct(b.passRate)}</div><div class="s">${b.records} 筆，錯誤 ${b.badRecords} 筆${b.policies ? `，${b.policies} 張保單` : ''}</div></div>`).join('');
+    const rows = res.issues.map(i => `<tr class="${i.severity}"><td>${i.id}</td><td><span class="sev ${i.severity}">${SEV[i.severity]}</span></td><td>${SHEET[i.file] || i.file}</td><td class="num">${i.line || '-'}</td><td class="mono">${esc((i.policy || '').trim())}</td><td>${esc(fieldLabel(rs, i).replace(/欄\d+ /g, ''))}</td><td class="mono">${esc(String(i.value).trim())}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('');
+    const fileCards = Object.entries(s.byFile).map(([fid, b]) => `<div class="card"><div class="k">${SHEET[fid]}正確的比例</div><div class="v">${pct(b.passRate)}</div><div class="s">共 ${b.records} 筆${b.policies ? `（${b.policies} 張保單）` : ''}，${b.badRecords} 筆要修改</div></div>`).join('');
     return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>資料檢核報告</title><style>
+<title>資料檢查報告</title><style>
 :root{--bg:#fff;--fg:#1d2433;--mut:#5d6779;--line:#e3e7ee;--err:#c62828;--errbg:#fdecea;--warn:#a15c00;--warnbg:#fff4e0;--acc:#1f6f5c}
 @media (prefers-color-scheme:dark){:root{--bg:#14171c;--fg:#e6e9ef;--mut:#9aa3b2;--line:#2a2f38;--err:#ff8a80;--errbg:#3a1f1f;--warn:#ffcc80;--warnbg:#3a2e1a;--acc:#6fd3b8}}
 body{font-family:system-ui,-apple-system,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:24px 16px;line-height:1.5}
@@ -85,16 +89,16 @@ th{position:sticky;top:0;background:var(--bg);font-weight:600}.num{text-align:ri
 .bar{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:13px}.bar span:first-child{width:90px}.bar i{display:block;height:10px;background:var(--acc);border-radius:3px}
 .ai{border-left:3px solid var(--acc);padding:4px 14px;white-space:pre-wrap}.ai-tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border:1px solid #7c3aed;color:#6d28d9;border-radius:4px;vertical-align:middle}.scroll{overflow-x:auto}
 @media print{th{position:static}}</style></head><body><main>
-<h1>資料品質檢核報告｜${esc(rs.name)}</h1>
-<div class="meta">產生時間：${esc(new Date(res.generatedAt).toLocaleString('zh-TW'))}　檔案：${Object.entries(res.meta).map(([k, m]) => esc(m.name || rs.layouts[k].title)).join('、')}${opts.elapsed != null ? `　檢核耗時：${(opts.elapsed / 1000).toFixed(2)} 秒` : ''}</div>
-<div class="cards">${fileCards}<div class="card"><div class="k">錯誤</div><div class="v err">${s.errors}</div><div class="s">需修正後才能申報</div></div><div class="card"><div class="k">警告</div><div class="v warn">${s.warnings}</div><div class="s">建議確認之合理性問題</div></div><div class="card"><div class="k">疑似異常</div><div class="v" style="color:#0e7490">${s.suspects || 0}</div><div class="s">需人工判斷，不計入錯誤</div></div><div class="card"><div class="k">可自動修正</div><div class="v">${s.fixable}</div><div class="s">有明確修正值</div></div></div>
-${opts.aiSummary ? `<h2>AI 分析摘要 <span class="ai-tag">AI 產出</span></h2><p class="meta">以下內容由 Claude 依檢核結果產生（送出前已遮罩姓名、證號、地址），僅供參考；錯誤判定以規則引擎結果為準。</p><div class="ai">${esc(opts.aiSummary)}</div>` : ''}
+<h1>資料檢查報告｜${esc(rs.name)}</h1>
+<div class="meta">產生時間：${esc(new Date(res.generatedAt).toLocaleString('zh-TW'))}　資料：${Object.entries(res.meta).map(([k, m]) => esc(m.name || rs.layouts[k].title)).join('、')}${opts.elapsed != null ? `　檢查花了 ${(opts.elapsed / 1000).toFixed(2)} 秒` : ''}</div>
+<div class="cards">${fileCards}<div class="card"><div class="k">${SEV.error}</div><div class="v err">${s.errors}</div><div class="s">${LB.SEV_HINT.error}</div></div><div class="card"><div class="k">${SEV.warning}</div><div class="v warn">${s.warnings}</div><div class="s">${LB.SEV_HINT.warning}</div></div><div class="card"><div class="k">${SEV.suspect}</div><div class="v" style="color:#0e7490">${s.suspects || 0}</div><div class="s">${LB.SEV_HINT.suspect}</div></div><div class="card"><div class="k">可以一鍵修改</div><div class="v">${s.fixable}</div><div class="s">工具知道正確的值</div></div></div>
+${opts.aiSummary ? `<h2>AI 整理的重點 <span class="ai-tag">AI 產生</span></h2><p class="meta">以下由 AI（Claude）依檢查結果產生，送出前已遮住姓名、身分證號和地址；僅供參考，哪些要改以檢查結果為準。</p><div class="ai">${esc(opts.aiSummary)}</div>` : ''}
 ${reconHTML(opts.recon)}
-<h2>明細檢核：問題類別分布</h2>${cats.map(([c, n]) => `<div class="bar"><span>${esc(c)}</span><i style="width:${Math.max(2, n / maxCat * 60)}%"></i><span>${n}</span></div>`).join('')}
-<h2>最常見的檢核錯誤</h2><div class="scroll"><table><thead><tr><th>檢核編號</th><th>檢核項目</th><th>嚴重度</th><th class="num">次數</th><th>範例說明</th><th>修正建議</th></tr></thead><tbody>
-${tops.map(t => `<tr><td class="mono">${esc(t.ruleId)}</td><td>${esc(t.name)}</td><td><span class="sev ${t.severity}">${SEV[t.severity]}</span></td><td class="num">${t.count}</td><td>${esc(t.sample.message)}</td><td>${esc(t.sample.suggestion)}</td></tr>`).join('')}</tbody></table></div>
-<h2>問題明細（${res.issues.length} 項）</h2><div class="scroll"><table><thead><tr><th>#</th><th>嚴重度</th><th>檔案</th><th class="num">行號</th><th>保單號碼</th><th>檢核編號</th><th>欄位</th><th>欄位值</th><th>問題說明</th><th>修正建議</th></tr></thead><tbody>${rows}</tbody></table></div>
-<p class="meta">檢核依據：${esc(rs.name)} 填報手冊與檢核規則；檢核編號沿用手冊「(新)檢核編號」，X 開頭為本工具補充之邏輯合理性檢核。</p>
+<h2>保單與理賠資料：各類問題的數量</h2>${cats.map(([c, n]) => `<div class="bar"><span>${esc(c)}</span><i style="width:${Math.max(2, n / maxCat * 60)}%"></i><span>${n}</span></div>`).join('')}
+<h2>最常出現的問題</h2><div class="scroll"><table><thead><tr><th>檢查項目</th><th>狀況</th><th class="num">次數</th><th>例子</th><th>建議怎麼改</th></tr></thead><tbody>
+${tops.map(t => `<tr><td>${esc(t.name)}</td><td><span class="sev ${t.severity}">${SEV[t.severity]}</span></td><td class="num">${t.count}</td><td>${esc(t.sample.message)}</td><td>${esc(t.sample.suggestion)}</td></tr>`).join('')}</tbody></table></div>
+<h2>全部問題（${res.issues.length} 項）</h2><div class="scroll"><table><thead><tr><th>#</th><th>狀況</th><th>資料</th><th class="num">行號</th><th>保單號碼</th><th>欄位</th><th>目前的值</th><th>問題說明</th><th>建議怎麼改</th></tr></thead><tbody>${rows}</tbody></table></div>
+<p class="meta">檢查依據：個人壽險填報手冊與檢核規則（2025 填報年度），以及本工具另外加的合理性檢查。</p>
 </main></body></html>`;
   }
 
@@ -104,25 +108,25 @@ ${tops.map(t => `<tr><td class="mono">${esc(t.ruleId)}</td><td>${esc(t.name)}</t
     let h = '';
     if (r.ctl) {
       const s = r.ctl.summary, rows = r.ctl.rows.filter(x => x.status !== '一致' && x.up);
-      h += `<h2>跨系統對帳：上游控制總數</h2><p>共 ${s.total} 項：一致 ${s.ok}、時間差 ${s.timing}、定義差 ${s.definition}、待查 ${s.open}。</p>` +
-        (rows.length ? `<div class="scroll"><table><thead><tr><th>來源系統</th><th>項目</th><th>期間</th><th class="num">差異</th><th>判定</th><th>說明</th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(x.source)}</td><td>${esc(x.name)}</td><td class="mono">${esc(x.period)}</td><td class="num">${x.diff.cnt} 筆 / ${y(x.diff.amt)}</td><td>${esc(x.status)}</td><td>${esc(x.explain)}</td></tr>`).join('')}</tbody></table></div>` : '');
+      h += `<h2>和各系統的總數比對</h2><p>共 ${s.total} 項：${LB.status('一致')} ${s.ok}、${LB.status('時間差')} ${s.timing}、${LB.status('定義差')} ${s.definition}、${LB.status('待查')} ${s.open}。</p>` +
+        (rows.length ? `<div class="scroll"><table><thead><tr><th>系統</th><th>項目</th><th>期間</th><th class="num">差多少</th><th>原因</th><th>說明</th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(x.source)}</td><td>${esc(x.name)}</td><td class="mono">${esc(x.period)}</td><td class="num">${x.diff.cnt} 筆 / ${y(x.diff.amt)} 元</td><td>${esc(LB.status(x.status))}</td><td>${esc(x.explain)}</td></tr>`).join('')}</tbody></table></div>` : '');
     }
     if (r.roll) {
       const m = r.roll.movement;
-      h += `<h2>期初 / 期末結轉</h2><p>期初有效 ${m.open[0]} 件 / ${y(m.open[1])} 元${r.roll.hasPrior ? `（上年度期末 ${m.priorClose[0]} 件 / ${y(m.priorClose[1])} 元）` : ''}；期末有效 ${m.closeActual[0]} 件 / ${y(m.closeActual[1])} 元；結轉問題 ${r.roll.issues.length} 項。</p>` +
-        (r.roll.issues.length ? `<div class="scroll"><table><thead><tr><th>檢核</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody>${r.roll.issues.map(i => `<tr><td class="mono">${i.ruleId}</td><td class="mono">${esc(i.policy)}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
+      h += `<h2>去年底和今年初是否接得上</h2><p>今年初有效 ${m.open[0]} 件／保額 ${y(m.open[1])} 元${r.roll.hasPrior ? `（去年底 ${m.priorClose[0]} 件／${y(m.priorClose[1])} 元）` : ''}；今年底有效 ${m.closeActual[0]} 件／${y(m.closeActual[1])} 元；接不上的地方 ${r.roll.issues.length} 項。</p>` +
+        (r.roll.issues.length ? `<div class="scroll"><table><thead><tr><th>狀況</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody>${r.roll.issues.map(i => `<tr><td>${SEV[i.severity]}</td><td class="mono">${esc(i.policy)}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
     }
     const mst = [].concat(r.cust ? r.cust.issues : [], r.prod ? r.prod.issues : []);
     if (r.cust || r.prod) {
-      h += `<h2>客戶資料與商品資料</h2><p>${r.cust ? `客戶資料 ${r.cust.summary.rows} 列（${r.cust.summary.people} 人）` : ''}${r.cust && r.prod ? '；' : ''}${r.prod ? `商品資料 ${r.prod.summary.products} 項` : ''}；問題 ${mst.length} 項，其中 ${mst.filter(i => i.fix).length} 項可依主檔自動修正。</p>` +
-        (mst.length ? `<div class="scroll"><table><thead><tr><th>檢核</th><th>位置</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody>${mst.map(i => `<tr><td class="mono">${i.ruleId}</td><td>${i.file === 'L' ? '承保第 ' + i.line + ' 行' : (i.file === 'C' ? '客戶' : '商品') + '資料第 ' + i.line + ' 列'}</td><td class="mono">${esc((i.policy || '').trim())}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
+      h += `<h2>客戶資料與商品資料</h2><p>${r.cust ? `客戶資料 ${r.cust.summary.rows} 列（${r.cust.summary.people} 人）` : ''}${r.cust && r.prod ? '；' : ''}${r.prod ? `商品資料 ${r.prod.summary.products} 項` : ''}；問題 ${mst.length} 項，其中 ${mst.filter(i => i.fix).length} 項可用客戶資料自動修改。</p>` +
+        (mst.length ? `<div class="scroll"><table><thead><tr><th>狀況</th><th>位置</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody>${mst.map(i => `<tr><td>${SEV[i.severity]}</td><td>${(SHEET[i.file] || i.file) + ' 第 ' + i.line + (i.file === 'L' ? ' 行' : ' 列')}</td><td class="mono">${esc((i.policy || '').trim())}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
     }
     if (r.stmt) {
-      h += `<h2>財報勾稽：資產負債表</h2><p>${r.stmt.summary.balanced ? '資產 = 負債 + 權益，報表平衡。' : '資產負債表不平衡。'}錯誤 ${r.stmt.summary.errors} 項、提醒 ${r.stmt.summary.warnings} 項。</p>` +
-        (r.stmt.issues.length ? `<div class="scroll"><table><thead><tr><th>檢核</th><th>科目</th><th>根因</th><th>問題</th><th>建議</th></tr></thead><tbody>${r.stmt.issues.map(i => `<tr><td class="mono">${i.ruleId}</td><td class="mono">${esc(i.code)}</td><td>${esc(i.chainRole || '')}</td><td>${esc(i.message)}</td><td>${esc((i.explain ? i.explain + ' ' : '') + i.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
+      h += `<h2>資產負債表加總檢查</h2><p>${r.stmt.summary.balanced ? '資產 = 負債 + 權益，報表是平的。' : '資產不等於負債加權益，報表不平。'}${SEV.error} ${r.stmt.summary.errors} 項、${SEV.warning} ${r.stmt.summary.warnings} 項。</p>` +
+        (r.stmt.issues.length ? `<div class="scroll"><table><thead><tr><th>狀況</th><th>科目</th><th>源頭／受影響</th><th>問題</th><th>建議</th></tr></thead><tbody>${r.stmt.issues.map(i => `<tr><td>${SEV[i.severity]}</td><td class="mono">${esc(i.code)}</td><td>${i.chainRole ? (i.chainRole === '根因' ? '源頭' : '受影響') : ''}</td><td>${esc(i.message)}</td><td>${esc((i.explain ? i.explain + ' ' : '') + i.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
     }
     return h;
   }
 
-  return { toText, toCSV, toHTML, toRejectFile, topRules, fieldLabel };
+  return { toText, toRows, toCSV, toHTML, toRejectFile, topRules, fieldLabel };
 });

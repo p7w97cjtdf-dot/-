@@ -112,7 +112,9 @@ test('CSV 匯入 → 固定長度 → 檢核結果一致', () => {
 test('報告產出', () => {
   const res = run(generate({ inject: true }));
   const html = report.toHTML(life, res);
-  assert.match(html, /資料品質檢核報告/);
-  assert.match(report.toCSV(life, res), /檢核編號/);
+  assert.match(html, /資料檢查報告/);
+  const csv = report.toCSV(life, res);
+  assert.ok(csv.startsWith('\uFEFF序號,狀況,資料'), 'CSV 開頭要有 BOM，Excel 才不會顯示亂碼');
+  assert.ok(csv.includes('\r\n') && /必須修改/.test(csv));
   assert.ok(report.toRejectFile(life, res, 'L').split('\n').length > 10);
 });
