@@ -292,6 +292,8 @@
     return v;
   }
   try { $('#api-key').value = localStorage.getItem('dq-api-key') || ''; } catch (e) { /* ignore */ }
+  // 本機設定檔 config.local.js (不進版控) 可預先帶入 key
+  if (!$('#api-key').value && window.DQ_CONFIG && window.DQ_CONFIG.apiKey) $('#api-key').value = window.DQ_CONFIG.apiKey;
   $('#btn-ai').onclick = async () => {
     const key = apiKey(), out = $('#ai-out');
     if (!key) { out.textContent = '請輸入 Anthropic API key。金鑰只保存在你的瀏覽器，用來直接呼叫 Claude API。'; return; }

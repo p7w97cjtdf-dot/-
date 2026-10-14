@@ -21,7 +21,10 @@ THEME 6 | Finance, Actuarial & Data Management — **6-2 資料品質與檢核�
 
 ### 規則引擎與 AI 的分工
 
-判定對錯一律由規則引擎執行：結果可重現、可稽核，每一項都能對回手冊條文或科目表。AI 負責**解讀**：歸納根因、排定優先順序、把籠統的退件訊息翻成具體行動。送給 AI 的只有檢核摘要與問題清單，不含證件號碼等個資。AI 功能需在頁面輸入 Anthropic API key（只存在使用者的瀏覽器），使用 `claude-opus-5-5`；沒有 key 時其他功能都能使用。
+判定對錯一律由規則引擎執行：結果可重現、可稽核，每一項都能對回手冊條文或科目表。AI 負責**解讀**：歸納根因、排定優先順序、把籠統的退件訊息翻成具體行動。送給 AI 的只有檢核摘要與問題清單，不含證件號碼等個資。AI 功能使用 `claude-opus-5-5`，需要 Anthropic API key（到 https://console.anthropic.com/settings/keys 建立）。沒有 key 時其他功能都能使用。設定方式二選一：
+
+- 在頁面「AI 分析」欄位貼上 key，只會存在自己的瀏覽器。
+- 本機展示用：把 `config.example.js` 複製成 `config.local.js` 並填入 key，頁面開啟時自動帶入。`config.local.js` 已列入 `.gitignore`，**不要把 key commit 到 GitHub 或放進公開網頁**，任何能開啟頁面的人都看得到瀏覽器端的 key。
 
 ## 快速開始
 
