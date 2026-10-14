@@ -73,7 +73,14 @@ AI 功能使用 `claude-opus-5-5`，需要 Anthropic API key（到 https://conso
 
 ## 快速開始
 
-直接用瀏覽器開啟 `index.html`，頁面已載入一組含錯誤與差異的模擬資料（5 個檔案）。
+直接雙擊 `index.html` 用瀏覽器開啟（不需要伺服器或安裝），頁面會自動載入含錯誤的試用資料（7 張工作表）並顯示檢核結果。所有檢核都在瀏覽器內執行，資料不會上傳；試用資料與規則都內嵌在 JS 檔裡。讀 Excel 用的 SheetJS 從 cdnjs 載入，所以拖入 Excel 時需要連網。
+
+- 結果表列出工作表、行號（由 Excel 匯入時為 Excel 列號）、欄位、原始值、錯誤說明與建議修正值，可依嚴重度（錯誤／警告／疑似異常）、工作表、類別篩選；能推得正確值的可單筆或一鍵修正。
+- 自動測試：雙擊 `tests/run.html`，確認含錯誤版的刻意錯誤全部找到、正確版 0 誤報（含 Excel 寫出再讀回的往返測試；也可選擇 `samples/excel/` 的實際檔案再測一次）。Node 版：`npm test`。
+
+### 規則來源：rules/rules.js
+
+`rules/rules.js` 由 `npm run rules`（`tools/build-rules.js`，需要 pdftotext）從 `rules/source/` 的填報手冊整理：承保資料 61 欄、給付資料 31 欄的欄位定義（名稱、起迄位置、格式、代碼表與手冊頁碼），以及每條檢核規則的編號、說明、類別、嚴重度與出處（PDF 頁碼與頁面上印的頁碼，如「檢核規則 p.47（伍-15）」）。工具「檢核規則」分頁的「手冊頁碼」欄即取自此檔；`tests/rules-source.test.js` 確認規則引擎與此檔的編號、嚴重度、欄位位置一致。
 
 ```bash
 # 命令列 (Node 18+)：有錯誤時 exit code = 1，可接在轉檔/匯入排程之後
@@ -130,6 +137,10 @@ src/ai.js                  Claude 分析摘要、問題解釋、退件解讀
 src/ai-payload.js          送給 Claude 的內容組成與個資遮罩
 src/anomaly.js             資料邏輯合理性 (疑似異常)
 src/rule-stats.js          規則數量統計 (工具、landing 共用)
+src/workbook.js            Excel 工作表 ↔ 上傳格分配、試用活頁簿的 7 張工作表
+src/selftest.js            試用資料驗收 (tests/run.html 與 Node 測試共用)
+rules/rules.js             由手冊整理的欄位定義與檢核規則 (含頁碼)
+tests/run.html             瀏覽器自動測試
 tools/validate.js          命令列檢核 (stderr 輸出檢核耗時)
 tools/bench.js             計時
 docs/index.html            介紹頁 (landing page)

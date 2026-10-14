@@ -2,18 +2,15 @@
 // 匯出試用活頁簿的資料 (JSON)，供 tools/build_workbook.py 產生 Excel
 // 用法：node tools/export-workbook.js [--clean] > data.json
 const C = require('../src/core.js');
-const life = require('../src/rulesets/life.js');
 const fin = require('../src/rulesets/finance.js');
-const R = require('../src/recon.js');
 const { generate } = require('../src/mock.js');
 
 const inject = !process.argv.includes('--clean');
 const g = generate({ inject });
-const recs = (text, lay) => C.parseFixedWidth(text, lay).records.filter(r => r._raw.length === lay.recordLength);
-const fixed = (text, lay) => ({ header: lay.fields.map(f => f.name), rows: recs(text, lay).map(r => lay.fields.map(f => r[f.key])), keys: lay.fields.map(f => f.key) });
-const csv = text => { const rows = C.parseCSV(text.replace(/^﻿/, '')); return { header: rows[0], rows: rows.slice(1) }; };
-
-const L = fixed(g.L, life.layouts.L), D = fixed(g.D, life.layouts.D), P = fixed(g.prior, life.layouts.L);
+const W = require('../src/workbook.js');
+const csv = text => { const rows = C.parseCSV(text.replace(/^\uFEFF/, '')); return { header: rows[0], rows: rows.slice(1) }; };
+const SH = W.sheets(g);
+const L = SH.承保資料, D = SH.給付資料;
 // 錯誤解答：對應到工作表與 Excel 列號
 const rowOf = (sheet, policy) => {
   if (!policy) return '';
@@ -36,9 +33,7 @@ const children = codes.map(c => codes.map((x, j) => (fin.byCode.has(x) ? fin.byC
 console.log(JSON.stringify({
   inject, names: g.names,
   sheets: {
-    承保資料: L, 給付資料: { header: D.header, rows: D.rows }, 上年度承保資料: { header: P.header, rows: P.rows },
-    客戶資料: csv(g.customers), 商品資料: csv(g.products), 控制總數: csv(g.control),
-    資產負債表: { header: st.header, rows: st.rows.map(r => [r[0], r[1], ...r.slice(2).map(Number)]), children },
+    ...SH, 資產負債表: Object.assign({}, SH.資產負債表, { children }),
   },
   key: keyRows,
   skipped: inject ? ['承保資料檔中「長度不足」的一筆與「空白行」無法以 Excel 儲存格表示，請使用 samples/dirty/LFL01_2025.txt 測試這兩項。' +

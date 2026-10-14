@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自動測試｜申報資料檢核助手</title>
+<style>
+  :root { --bg: #fff; --fg: #111827; --mut: #4b5563; --line: #e5e7eb; --ok: #15803d; --okbg: #f0fdf4; --bad: #b91c1c; --badbg: #fef2f2; --skip: #6b7280; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111318; --fg: #e5e7eb; --mut: #9ca3af; --line: #2a2f38; --ok: #4ade80; --okbg: #12261a; --bad: #f87171; --badbg: #2c1414; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 system-ui, -apple-system, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 28px 0 8px; }
+  .hint { color: var(--mut); font-size: 13px; }
+  .banner { margin: 16px 0; padding: 14px 16px; border-radius: 8px; font-weight: 600; }
+  .banner.ok { background: var(--okbg); color: var(--ok); } .banner.bad { background: var(--badbg); color: var(--bad); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: top; }
+  th { font-weight: 600; } td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .st { font-weight: 700; white-space: nowrap; } .st.ok { color: var(--ok); } .st.bad { color: var(--bad); } .st.skip { color: var(--skip); }
+  details { margin-top: 4px; } summary { cursor: pointer; color: var(--mut); font-size: 13px; }
+  pre { white-space: pre-wrap; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; margin: 4px 0 0; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+  label.file { display: inline-block; margin-top: 6px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  label.file input { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>自動測試</h1>
+  <p class="hint">在瀏覽器內執行與工具相同的檢核程式，確認含錯誤版的刻意錯誤全部找到、正確版 0 誤報。雙擊開啟即可，不需要伺服器；Excel 往返測試需要從 cdnjs 載入 SheetJS（需連網）。</p>
+  <div id="banner" class="banner">執行中…</div>
+  <table>
+    <thead><tr><th>測試</th><th class="num">結果</th><th>狀態</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <h2>用實際的 Excel 檔再測一次（選用）</h2>
+  <p class="hint">選擇 <span class="mono">samples/excel/試用資料_含錯誤.xlsx</span> 與 <span class="mono">試用資料_正確.xlsx</span>（可一次選兩個）。有「錯誤解答」工作表的視為含錯誤版。</p>
+  <label class="file">選擇 Excel 檔…<input type="file" id="xlsx" accept=".xlsx" multiple></label>
+  <table><tbody id="rows-file"></tbody></table>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="../rules/rules.js"></script>
+<script src="../src/core.js"></script>
+<script src="../src/rulesets/life.js"></script>
+<script src="../src/rulesets/finance.js"></script>
+<script src="../src/recon.js"></script>
+<script src="../src/sample-data.js"></script>
+<script src="../src/master.js"></script>
+<script src="../src/workbook.js"></script>
+<script src="../src/anomaly.js"></script>
+<script src="../src/rule-stats.js"></script>
+<script src="../src/mock.js"></script>
+<script src="../src/rules-dsl.js"></script>
+<script src="../src/rule-samples.js"></script>
+<script src="../src/selftest.js"></script>
+<script>
+(function () {
+  'use strict';
+  const T = DQ.selftest, W = DQ.workbook, life = DQ.rulesets.life;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const results = [];
+  const list = (title, xs) => xs.length ? `<details><summary>${esc(title)}（${xs.length}）</summary><pre>${esc(xs.join('\n'))}</pre></details>` : '';
+
+  function row(target, name, value, status, extra) {
+    results.push({ name, value, status });
+    document.getElementById(target).insertAdjacentHTML('beforeend',
+      `<tr><td>${esc(name)}${extra || ''}</td><td class="num">${esc(value)}</td><td><span class="st ${status === 'PASS' ? 'ok' : status === 'SKIP' ? 'skip' : 'bad'}">${status}</span></td></tr>`);
+  }
+  function safe(target, name, fn) {
+    try { fn(); } catch (e) { row(target, name, '執行錯誤', 'FAIL', `<pre>${esc(e.stack || e.message)}</pre>`); }
+  }
+  const missedList = c => c.missed.map(x => `${x.group} ${x.ruleId} ${x.where}：${x.desc}`);
+
+  function dirtyRows(target, label, c, excel) {
+    const skipped = c.items.filter(x => x.skipped);
+    row(target, `${label}：刻意錯誤全部找到`, `${c.found} / ${c.expected}`, c.found === c.expected && c.expected > 0 ? 'PASS' : 'FAIL',
+      list('未找到', missedList(c)) + (excel && skipped.length ? `<div class="hint">另有 ${skipped.length} 項無法以 Excel 儲存格表示，請用文字檔測試：${esc(skipped.map(x => `${x.ruleId} ${x.desc}`).join('；'))}</div>` : '')
+      + list('逐項結果', c.items.map(x => `${x.skipped ? '略過' : x.found ? '找到' : '未找到'}｜${x.group}｜${x.ruleId}｜${x.where}｜${x.desc}`)));
+    row(target, `${label}：疑似異常（需人工判斷）剛好是埋入的案例`, `${c.suspects.length} / ${c.suspectKey.length}`, c.suspectOk ? 'PASS' : 'FAIL', list('實際', c.suspects));
+    row(target, `${label}：沒有落在解答以外的問題`, `${c.stray.length} 項`, c.stray.length ? 'FAIL' : 'PASS', list('解答以外的問題', c.stray));
+  }
+  function cleanRow(target, label, issues) {
+    row(target, `${label}：0 誤報`, `${issues.length} 項`, issues.length ? 'FAIL' : 'PASS', list('誤報', issues));
+  }
+  // 由模擬資料組出與 samples/excel 相同的 7 張工作表，寫成 .xlsx 再讀回來 (走與網頁拖入 Excel 相同的分配程式)
+  function viaExcel(g) {
+    const wb = XLSX.utils.book_new();
+    for (const [name, s] of Object.entries(W.sheets(g))) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([s.header].concat(s.rows)), name);
+    const back = XLSX.read(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }), { type: 'array' });
+    const { got } = W.slots(XLSX, back);
+    return { files: W.files(got), slots: Object.keys(got) };
+  }
+
+  const t0 = performance.now();
+  safe('rows', '規則：rules/rules.js 與規則引擎一致', () => {
+    const src = DQ.ruleSource, stats = DQ.ruleStats.count();
+    const by = new Map(src.rules.concat(src.toolRules).map(r => [r.id, r]));
+    const bad = life.catalog.filter(c => !by.has(c.id) || by.get(c.id).severity !== c.severity).map(c => c.id);
+    const pos = ['L', 'D'].flatMap(f => src.fields[f].fields.filter((x, i) => { const y = life.layouts[f].fields[i]; return !y || x.start !== y.start || x.len !== y.len; }).map(x => `${f} ${x.name}`));
+    const paged = src.rules.filter(r => r.source.page).length;
+    row('rows', '規則：rules/rules.js 與規則引擎一致（編號、嚴重度、欄位位置）', `${stats.total} 條（手冊 ${src.rules.length}，有頁碼 ${paged}）`, bad.length || pos.length || src.rules.length + src.toolRules.length !== stats.total ? 'FAIL' : 'PASS', list('不一致', bad.concat(pos)));
+  });
+  const dirty = DQ.mock.generate({ inject: true });
+  safe('rows', '含錯誤版（文字檔）', () => dirtyRows('rows', '含錯誤版（文字檔）', T.checkDirty(dirty, T.full(T.filesOf(dirty))), false));
+  safe('rows', '正確版（文字檔）', () => {
+    const seeds = [20251014, 3, 11, 2026];
+    const issues = seeds.flatMap(seed => T.checkClean(T.full(T.filesOf(DQ.mock.generate({ seed, policies: seed === 20251014 ? 120 : 200 })))).map(x => `種子 ${seed}：${x}`));
+    cleanRow('rows', `正確版（文字檔，${seeds.length} 組亂數種子）`, issues);
+  });
+  if (window.XLSX) {
+    safe('rows', '含錯誤版（Excel 往返）', () => {
+      const x = viaExcel(dirty);
+      row('rows', 'Excel：7 張工作表依名稱分配到上傳格', `${x.slots.length} / 7`, x.slots.length === 7 ? 'PASS' : 'FAIL');
+      dirtyRows('rows', '含錯誤版（Excel 往返）', T.checkDirty(dirty, T.full(x.files), { excel: true }), true);
+    });
+    safe('rows', '正確版（Excel 往返）', () => cleanRow('rows', '正確版（Excel 往返）', T.checkClean(T.full(viaExcel(DQ.mock.generate({})).files))));
+  } else row('rows', 'Excel 往返測試（SheetJS 未載入，請確認網路連線）', '-', 'SKIP');
+  const ms = performance.now() - t0;
+
+  function finish() {
+    const fail = results.filter(r => r.status === 'FAIL').length, pass = results.filter(r => r.status === 'PASS').length;
+    const b = document.getElementById('banner');
+    b.className = 'banner ' + (fail ? 'bad' : 'ok');
+    b.textContent = fail ? `${fail} 項失敗，${pass} 項通過` : `全部通過：${pass} 項（耗時 ${(ms / 1000).toFixed(2)} 秒）`;
+    document.title = (fail ? 'FAIL' : 'PASS') + '｜自動測試｜申報資料檢核助手';
+    window.TEST_RESULT = { pass: !fail, results };
+  }
+  finish();
+
+  // 選用：實際的 Excel 檔
+  document.getElementById('xlsx').addEventListener('change', async e => {
+    if (!window.XLSX) return row('rows-file', 'SheetJS 未載入', '-', 'SKIP');
+    for (const f of e.target.files) safeAsync(f);
+    async function safeAsync(f) {
+      try {
+        const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+        const { got } = W.slots(XLSX, wb), r = T.full(W.files(got));
+        if (wb.SheetNames.includes('錯誤解答')) dirtyRows('rows-file', f.name, T.checkDirty(dirty, r, { excel: true }), true);
+        else cleanRow('rows-file', f.name, T.checkClean(r));
+      } catch (err) { row('rows-file', f.name, '執行錯誤', 'FAIL', `<pre>${esc(err.stack || err.message)}</pre>`); }
+      finish();
+    }
+  });
+})();
+</script>
+</body>
+</html>

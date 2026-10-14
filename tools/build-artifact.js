@@ -8,7 +8,7 @@ const out = process.argv[2] || path.join(root, 'dist', 'index.html');
 let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 html = html.replace('<script src="config.local.js"></script>\n', '');
 html = html.replace(/<link rel="stylesheet" href="(src\/[^"]+)">/g, (_, f) => `<style>\n${fs.readFileSync(path.join(root, f), 'utf8')}</style>`);
-html = html.replace(/<script src="(src\/[^"]+)"><\/script>/g, (_, f) => `<script>\n${fs.readFileSync(path.join(root, f), 'utf8').replace(/<\/script/gi, '<\\/script')}</script>`);
+html = html.replace(/<script src="((?:src|rules)\/[^"]+)"><\/script>/g, (_, f) => `<script>\n${fs.readFileSync(path.join(root, f), 'utf8').replace(/<\/script/gi, '<\\/script')}</script>`);
 // 發佈時平台會包上 doctype/head/body 骨架：只保留 title、字型、樣式與內容
 const title = html.match(/<title>[\s\S]*?<\/title>/)[0];
 const head = html.match(/<head>([\s\S]*?)<\/head>/)[1];

@@ -65,8 +65,8 @@
       <div class="filters">
         <h2>問題清單 <span id="issue-count" class="count"></span></h2>
         <div class="filter-row">
-          <select id="f-sev" aria-label="嚴重度"><option value="">全部嚴重度</option><option value="error">錯誤</option><option value="warning">警告</option></select>
-          <select id="f-file" aria-label="檔案"><option value="">全部檔案</option><option value="L">承保檔</option><option value="D">給付檔</option></select>
+          <select id="f-sev" aria-label="嚴重度"><option value="">全部嚴重度</option><option value="error">錯誤</option><option value="warning">警告</option><option value="suspect">疑似異常</option></select>
+          <select id="f-file" aria-label="工作表"><option value="">全部工作表</option><option>承保資料</option><option>給付資料</option><option>客戶資料</option><option>商品資料</option><option>上年度承保資料</option><option>控制總數</option><option>資產負債表</option></select>
           <select id="f-cat" aria-label="類別"><option value="">全部類別</option></select>
           <input id="f-q" type="search" placeholder="搜尋保單、欄位、檢核編號…">
         </div>
@@ -81,7 +81,7 @@
       <div class="split">
         <div class="table-wrap">
           <table id="issue-table">
-            <thead><tr><th></th><th>行</th><th>保單號碼</th><th>檢核編號</th><th>欄位</th><th>問題</th></tr></thead>
+            <thead><tr><th></th><th>工作表・行</th><th>保單號碼</th><th>檢核編號</th><th>欄位</th><th>原始值</th><th>問題</th><th>建議修正值</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -215,7 +215,7 @@
       <p id="rules-meta" class="hint"></p>
       <input id="r-q" type="search" placeholder="搜尋規則或欄位…">
     </div>
-    <div class="table-wrap"><table id="rule-table"><thead><tr><th>檢核編號</th><th>層級</th><th>檢核項目</th><th>依據</th><th>嚴重度</th><th class="num">本次</th></tr></thead><tbody></tbody></table></div>
+    <div class="table-wrap"><table id="rule-table"><thead><tr><th>檢核編號</th><th>層級</th><th>檢核項目</th><th>依據</th><th>手冊頁碼</th><th>嚴重度</th><th class="num">本次</th></tr></thead><tbody></tbody></table></div>
     <h2 class="mt">承保資料欄位格式</h2>
     <div class="table-wrap"><table id="layout-table"><thead><tr><th class="num">欄</th><th>名稱</th><th class="num">起</th><th class="num">迄</th><th>型態</th></tr></thead><tbody></tbody></table></div>
     <h2 class="mt">會計科目表（示範）</h2>
@@ -230,6 +230,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="rules/rules.js"></script>
 <script src="src/core.js"></script>
 <script src="src/rulesets/life.js"></script>
 <script src="src/rulesets/finance.js"></script>
@@ -237,6 +238,7 @@
 <script src="src/recon.js"></script>
 <script src="src/sample-data.js"></script>
 <script src="src/master.js"></script>
+<script src="src/workbook.js"></script>
 <script src="src/anomaly.js"></script>
 <script src="src/rule-stats.js"></script>
 <script src="src/mock.js"></script>

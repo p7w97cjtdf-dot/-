@@ -143,6 +143,7 @@
     const truthL = Ls.map(r => Object.assign({}, r));
 
     const key = [];
+    let agedBirth = null;
     let extraL = [];
     if (opts.inject) {
       const find = (pred, from) => Ls.findIndex((r, i) => i >= (from || 0) && pred(r));
@@ -171,7 +172,7 @@
       inj('L', take(r => r.exitType === 'LNN'), '30213_L1306', '停效後下一筆加保別填 INN 而非 RNN', r => { const n = Ls[Ls.indexOf(r) + 1]; n.addType = 'INN'; });
       inj('L', take(r => r.txnSeq === '00001' && r.exitType === 'INN'), '30107_P0901', '同保單兩筆性別不一致', r => { const n = Ls[Ls.indexOf(r) + 1]; n.sex = n.sex === '1' ? '2' : '1'; });
       inj('L', take(r => r.txnSeq === '00001' && r.exitType === 'INN'), '30205_P0502', '保額增加(INN)後保額反而較小', r => { const n = Ls[Ls.indexOf(r) + 1]; n.sumInsuredOrig = String(BigInt(r.sumInsuredOrig) / 2n).padStart(18, '0'); n.sumInsuredTwd = n.sumInsuredOrig; });
-      inj('L', take(r => single(r) && r.payFreq === '1'), '25702_L4103', '躉繳(0)卻填繳費期間 020', r => { r.payFreq = '0'; r.payTerm = '020'; });
+      inj('L', take(r => single(r) && r.payFreq === '1'), 'X002', '被保險人投保年齡 150 歲 (出生日期誤植)', r => { r.birthDate = String(+r.startDate.slice(0, 4) - 150) + r.startDate.slice(4, 6) + '01'; agedBirth = [r.policyNo.trim(), r.birthDate]; });
       inj('L', take(single), 'L4403', '職業類別 8(拒保) 但職業分類代碼不為 0', r => { r.occClass = '8'; r.occCode = '0805001 '; });
       inj('L', take(single), '24602_L2703', '身障等級 2 但身障類別 000', r => { r.disabilityLevel = '2'; });
       inj('L', take(single), '25002_L1233', '次標準體原因=1 但體檢類別=1(標準體)', r => { r.substdReason = '1'; });
@@ -188,7 +189,8 @@
       const d2 = takeD(d => d.claimType === '1' && !/^[V-Y]/.test(d.causeIcd));
       inj('D', d2, '30312_LD019', '給付發生日期與承保退保日期不一致', d => { d.eventDate = plus(d.eventDate, -2); });
       const d3 = takeD(d => d.claimType === '1');
-      inj('D', d3, '24101_D1303', '實際給付金額不同但不同原因填 0', d => { d.paidAmtOrig = String(BigInt(d.dueAmtOrig) + 1234500n).padStart(18, '0'); d.paidAmtTwd = d.currency === 'NTD' ? d.paidAmtOrig : d.paidAmtTwd; });
+      inj('D', d3, '26600_D1002', '理賠發生日期早於保險期間起日 (承保退保日期未同步，連帶 30312_LD019)', d => { d.eventDate = plus(d.startDate, -20); });
+      key[key.length - 1].affects = [`30312_LD019 ${d3.policyNo.trim()}/${d3.policySeq.trim()}`];
       const d4 = takeD(d => d.claimType === '1' && /^[V-Y]/.test(d.causeIcd));
       const l4 = Ls.find(r => r.policyNo === d4.policyNo); l4.exitType = 'DEA';
       key.push({ file: 'L', policy: d4.policyNo.trim() + '/' + d4.policySeq.trim(), ruleId: '26904_D1402', desc: '外因(意外)死亡，承保退保別卻填 DEA(疾病死亡)' });
@@ -295,7 +297,8 @@
       const rows = sample.CUSTOMER_CSV.trimEnd().split('\n').map(l => l.split(','));
       const get = (p, role) => rows.find(z => z[0] === p && z[2] === role);
       const keep = new Set(CUSTOMER_KEY.map(k => k.policy.split('/')[0]));
-      custPatch.push(['P250006201', '19431101']);            // 試用資料被保險人生日與承保檔不同
+      custPatch.push(['P250006201', '19431101']);
+      if (agedBirth) custPatch.push(agedBirth);            // 150 歲情境：客戶資料同步，避免另外變成客戶資料不一致            // 試用資料被保險人生日與承保檔不同
       for (const [p, birth, from] of custPatch) {
         const ins = get(p, '2'), own = get(p, '1');
         if (!ins) continue;

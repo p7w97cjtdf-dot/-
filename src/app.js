@@ -17,9 +17,9 @@
 
   // ---------- 檔案 ----------
   const SLOTS = ['L', 'D', 'prior', 'control', 'statement', 'products', 'customers'];
-  function setFile(fid, name, text) {
+  function setFile(fid, name, text, fromSheet) {
     if ((fid === 'L' || fid === 'D') && /\.csv$/i.test(name)) { text = DQ.csvToFixedWidth(text, rs.layouts[fid]); name = name.replace(/\.csv$/i, '.txt'); }
-    state.files[fid] = { name, text };
+    state.files[fid] = { name, text, fromSheet: !!fromSheet };
     $('#name-' + fid).textContent = name;
   }
   function guessSlot(name, fallback) {
@@ -31,29 +31,16 @@
     if (/資產負債|財報|statement|balance/i.test(name)) return 'statement';
     return fallback;
   }
-  // Excel 活頁簿：依工作表名稱分配到各檔案
-  const SHEET_SLOT = [['上年度', 'prior'], ['承保', 'L'], ['給付', 'D'], ['理賠', 'D'], ['控制總數', 'control'], ['資產負債', 'statement'], ['商品', 'products'], ['客戶', 'customers']];
+  // Excel 活頁簿：依工作表名稱分配到各檔案 (src/workbook.js)
   async function readWorkbook(file) {
     if (!window.XLSX) { $('#sample-note').textContent = 'Excel 解析元件未載入，請確認網路連線，或改用 CSV。'; return; }
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-    const got = {};
-    for (const name of wb.SheetNames) {
-      const hit = SHEET_SLOT.find(([k]) => name.includes(k));
-      if (hit && !got[hit[1]]) got[hit[1]] = XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false });
-    }
+    const { got, from } = DQ.workbook.slots(XLSX, wb);
     if (!Object.keys(got).length) { $('#sample-note').textContent = `「${file.name}」沒有可辨識的工作表（承保資料、給付資料、客戶資料、商品資料…）`; return; }
-    // 由承保資料推得公司代號與填報年度，作為檔名 (對帳依填報年度彙總)
-    let co = '01', year = String(new Date().getFullYear() - 1);
-    if (got.L) {
-      const fixed = DQ.csvToFixedWidth(got.L, rs.layouts.L), recs = DQ.parseFixedWidth(fixed, rs.layouts.L).records;
-      if (recs[0]) co = recs[0].company;
-      const ys = recs.flatMap(r => [r.addDate, r.exitDate]).filter(d => DQ.isValidDate(d)).map(d => d.slice(0, 4));
-      if (ys.length) year = ys.sort().pop();
-    }
-    const names = { L: `LFL${co}_${year}.csv`, D: `LFD${co}_${year}.csv`, prior: `LFL${co}_${year - 1}.csv`, control: `控制總數_${year}.csv`, statement: `資產負債表_${year}.csv`, products: `商品資料_${year}.csv`, customers: `客戶資料_${year}.csv` };
-    for (const [slot, csv] of Object.entries(got)) setFile(slot, names[slot], slot === 'prior' ? DQ.csvToFixedWidth(csv, rs.layouts.L) : csv);
-    state.key = state.reconKey = state.masterKey = null;
-    $('#sample-note').textContent = `已從「${file.name}」匯入 ${Object.keys(got).length} 個工作表：${Object.keys(got).map(k => names[k].replace(/\.csv$/, '')).join('、')}`;
+    const fs = DQ.workbook.files(got);
+    for (const [slot, f] of Object.entries(fs)) { state.files[slot] = f; $('#name-' + slot).textContent = `${f.name}（工作表：${from[slot]}）`; }
+    state.key = state.reconKey = state.masterKey = state.anomalyKey = null;
+    $('#sample-note').textContent = `已從「${file.name}」匯入 ${Object.keys(got).length} 個工作表：${Object.keys(got).map(k => from[k]).join('、')}`;
     run();
   }
   function readFile(fid, file) {
@@ -109,6 +96,17 @@
     state.elapsed = performance.now() - t0;
     console.info(`[檢核耗時] ${(state.elapsed / 1000).toFixed(3)} 秒：承保 ${(f.L && state.res.meta.L) ? state.res.meta.L.count : 0} 筆、給付 ${(f.D && state.res.meta.D) ? state.res.meta.D.count : 0} 筆，${Object.values(f).filter(Boolean).length} 個檔案`);
     state.extra = [].concat(state.roll ? state.roll.issues : [], state.ctl ? state.ctl.issues : [], state.stmt ? state.stmt.issues : [], mst.filter(i => i.file !== 'L'));
+    // 全部工作表的問題併成一張結果表 (明細、客戶、商品、上年度、控制總數、資產負債表)
+    const SHEET = { L: '承保資料', D: '給付資料', C: '客戶資料', P: '商品資料', R: '控制總數', S: '資產負債表' };
+    for (const i of state.res.issues) i.sheet = SHEET[i.file];
+    for (const i of state.roll ? state.roll.issues : []) i.sheet = i.line ? '承保資料' : '上年度承保資料';
+    const cat = fin.catalog.concat(DQ.master.catalog);
+    for (const i of state.extra) {
+      if (!i.sheet) i.sheet = SHEET[i.file] || i.file;
+      if (i.id == null) i.id = ++nextId;
+      const d = cat.find(c => c.id === i.ruleId); if (d && !i.ruleName) { i.ruleName = d.name; i.ref = i.ref || d.ref; }
+    }
+    state.all = state.res.issues.concat(state.extra.filter(i => !state.res.issues.includes(i)));
     state.sel = null; state.aiSummary = null;
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
     if (DQ.app && DQ.app.onRun) DQ.app.onRun();
@@ -123,6 +121,7 @@
   function hitCount(key) { return key.filter(k => state.res.issues.some(i => i.ruleId === k.ruleId && (!k.policy || (i.policy || '').trim() === k.policy))).length; }
   function renderSummary() {
     const s = state.res.summary;
+    const allErr = state.all.filter(i => i.severity === 'error').length;
     const tiles = Object.entries(s.byFile).map(([fid, b]) => `
       <div class="tile ${b.passRate === 1 ? 'ok' : ''}"><span class="k">${rs.layouts[fid].title}通過率</span>
         <span class="v">${(b.passRate * 100).toFixed(1)}%</span>
@@ -132,7 +131,7 @@
     const allMst = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
     const mdet = state.masterKey ? `<div class="tile ok"><span class="k">客戶／商品錯誤偵測</span><span class="v">${state.masterKey.filter(k => allMst.some(i => i.ruleId === k.ruleId && i.policy === k.policy)).length}/${state.masterKey.length}</span><span class="s">試用資料的解答比對</span></div>` : '';
     $('#summary').innerHTML = tiles +
-      `<div class="tile ${s.errors ? 'err' : 'ok'}"><span class="k">錯誤</span><span class="v">${s.errors}</span><span class="s">${s.errors ? '修正後才能申報' : '可申報'}</span></div>
+      `<div class="tile ${allErr ? 'err' : 'ok'}"><span class="k">錯誤</span><span class="v">${allErr}</span><span class="s">${allErr ? `承保／給付 ${s.errors}・其他工作表 ${allErr - s.errors}` : '可申報'}</span></div>
        <div class="tile ${s.warnings ? 'warn' : 'ok'}"><span class="k">警告</span><span class="v">${s.warnings}</span><span class="s">建議確認的合理性問題</span></div>
        <div class="tile ${s.suspects ? 'suspect' : 'ok'}"><span class="k">疑似異常</span><span class="v">${s.suspects}</span><span class="s">需人工判斷，不計入錯誤</span></div>
        <div class="tile"><span class="k">可自動修正</span><span class="v">${s.fixable}</span><span class="s">有明確修正值</span></div>${det}${mdet}
@@ -140,28 +139,38 @@
        <div class="cats" id="cats"></div>`;
   }
   function renderCats() {
-    const cats = Object.entries(state.res.summary.byCategory).sort((a, b) => b[1] - a[1]);
+    const byCat = {};
+    for (const i of state.all) byCat[i.category] = (byCat[i.category] || 0) + 1;
+    const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
     $('#cats').innerHTML = cats.map(([c, n]) => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${state.cat === c}">${esc(c)}<b>${n}</b></button>`).join('');
     $('#cats').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; state.cat = state.cat === b.dataset.cat ? '' : b.dataset.cat; $('#f-cat').value = state.cat; renderCats(); renderTable(); };
     $('#f-cat').innerHTML = '<option value="">全部類別</option>' + cats.map(([c]) => `<option${c === state.cat ? ' selected' : ''}>${esc(c)}</option>`).join('');
   }
   function filtered() {
-    const sev = $('#f-sev').value, file = $('#f-file').value, cat = $('#f-cat').value, q = $('#f-q').value.trim().toLowerCase();
-    return state.res.issues.filter(i => (!sev || i.severity === sev) && (!file || i.file === file) && (!cat || i.category === cat) &&
+    const sev = $('#f-sev').value, sheet = $('#f-file').value, cat = $('#f-cat').value, q = $('#f-q').value.trim().toLowerCase();
+    return state.all.filter(i => (!sev || i.severity === sev) && (!sheet || i.sheet === sheet) && (!cat || i.category === cat) &&
       (!q || [i.policy, i.ruleId, i.ruleName, i.message, DQ.report.fieldLabel(rs, i), i.value].join(' ').toLowerCase().includes(q)));
   }
   function renderTable() {
     const list = filtered();
-    $('#issue-count').textContent = `${list.length} / ${state.res.issues.length}`;
+    $('#issue-count').textContent = `${list.length} / ${state.all.length}`;
     $('#issue-table tbody').innerHTML = list.length ? list.map(i => `
       <tr data-id="${i.id}" class="${state.sel === i.id ? 'sel' : ''}">
         <td class="sev"><i class="${i.severity}" title="${SEV[i.severity]}"></i></td>
-        <td class="num">${FILE[i.file]}${i.line || '-'}</td>
-        <td class="mono">${esc((i.policy || '').trim())}</td>
+        <td class="where">${esc(i.sheet || '')} <span class="num">${rowLabel(i)}</span></td>
+        <td class="mono">${esc((i.policy || i.code || '').trim())}</td>
         <td class="mono">${esc(i.ruleId)}</td>
         <td>${esc(DQ.report.fieldLabel(rs, i).replace(/欄\d+ /g, ''))}</td>
-        <td>${esc(i.message)}${i.fix ? '<span class="pill">可修正</span>' : ''}</td>
-      </tr>`).join('') : `<tr><td colspan="6" class="empty">${state.res.issues.length ? '沒有符合篩選條件的問題' : '沒有發現任何問題，資料可申報。'}</td></tr>`;
+        <td class="mono val">${esc(String(i.value == null ? '' : i.value).replace(/ /g, '·'))}</td>
+        <td>${esc(i.message)}</td>
+        <td class="mono">${i.fix ? `${esc(i.fix.value)}${state.res.issues.includes(i) ? '<span class="pill">可一鍵修正</span>' : ''}` : ''}</td>
+      </tr>`).join('') : `<tr><td colspan="8" class="empty">${state.all.length ? '沒有符合篩選條件的問題' : '沒有發現任何問題，資料可申報。'}</td></tr>`;
+  }
+  // 行號：文字檔為第 N 筆；由 Excel 匯入時換算成 Excel 列號 (第 1 列為標題)；CSV 工作表為檔案中的列號
+  function rowLabel(i) {
+    if (!i.line) return '';
+    if (i.file === 'L' || i.file === 'D') { const f = state.files[i.file]; return f && f.fromSheet ? `第 ${i.line + 1} 列` : `第 ${i.line} 行`; }
+    return `第 ${i.line} 列`;
   }
   ['#f-sev', '#f-file', '#f-q'].forEach(s => $(s).addEventListener('input', renderTable));
   $('#f-cat').addEventListener('input', () => { state.cat = $('#f-cat').value; renderCats(); renderTable(); });
@@ -186,13 +195,13 @@
   }
   function renderDetail() {
     const el = $('#detail');
-    const i = state.res && state.res.issues.find(x => x.id === state.sel);
+    const i = state.res && state.all.find(x => x.id === state.sel);
     if (!i) {
       el.innerHTML = `<h3>選取一個問題</h3><p class="hint">這裡會顯示該筆資料的欄位位置（字元起迄）、同保單的其他異動、修正建議，並可請 AI 解釋。</p><p class="hint">「·」代表空白；黃色標示為出問題的欄位。</p>`;
       return;
     }
-    const lay = rs.layouts[i.file];
-    const rec = (state.res.data[i.file] || []).find(r => r._line === i.line);
+    const lay = rs.layouts[i.file] || { title: i.sheet, recordLength: -1, fields: [], field: () => null, keyOf: () => '' };
+    const rec = i.line ? (state.res.data[i.file] || []).find(r => r._line === i.line) : null;
     const okLen = rec && rec._raw.length === lay.recordLength;
     const all = okLen ? lay.fields.map(f => ({ f, hit: i.fields.includes(f.key) })) : [];
     const hits = all.filter(x => x.hit), rest = all.filter(x => !x.hit);
@@ -204,12 +213,12 @@
       <dl class="kv">
         <dt>檢核項目</dt><dd>${esc(i.ruleName || '-')}</dd>
         <dt>依據</dt><dd>${esc(i.ref || '-')}</dd>
-        <dt>位置</dt><dd>${lay.title} 第 ${i.line || '-'} 行${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}</dd>
+        <dt>位置</dt><dd>${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}</dd>
         <dt>欄位</dt><dd>${esc(DQ.report.fieldLabel(rs, i) || '-')}</dd>
         ${i.value !== '' ? `<dt>欄位值</dt><dd class="mono">${esc(String(i.value).replace(/ /g, '·'))}</dd>` : ''}
       </dl>
       <div class="fixbox"><div><b>修正建議：</b>${esc(i.suggestion || '請人工確認')}</div>
-        ${i.fix ? `<div><button class="btn small" id="btn-fix-one">套用此修正</button> <span class="mono hint">${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}</span></div>` : ''}</div>
+        ${i.fix && state.res.issues.includes(i) ? `<div><button class="btn small" id="btn-fix-one">套用此修正</button> <span class="mono hint">${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}</span></div>` : ''}</div>
       ${rec ? `<div><div class="label">原始資料（每列 50 字元，左側為起始位置）</div><div class="ruler">${ruler(lay, rec._raw, i.fields)}</div></div>` : ''}
       ${hits.length ? `<table class="fields"><tbody>${hits.map(row).join('')}</tbody></table>` : ''}
       ${rest.length ? `<details><summary class="hint">顯示其餘 ${rest.length} 個欄位</summary><table class="fields"><tbody>${rest.map(row).join('')}</tbody></table></details>` : ''}
@@ -387,6 +396,15 @@
   // ---------- 報告 / 規則 ----------
   function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
   function renderReport() { $('#report-frame').srcdoc = reportHTML(); }
+  // 手冊頁碼 (rules/rules.js)：PDF 頁碼與頁面上印的頁碼
+  const SRCDOC = { rules: '檢核規則', manual: '填報手冊' };
+  function pageOf(id) {
+    const src = window.DQ.ruleSource, r = src && src.rules.concat(src.toolRules).find(x => x.id === id);
+    if (!r) return '<span class="hint">匯入規則</span>';
+    const s = r.source;
+    if (s.doc === 'tool') return `<span class="hint" title="${esc(s.note || '')}">本工具補充</span>`;
+    return `<span title="${esc((s.note ? s.note + '；' : '') + (s.program ? `檢核程式說明表 PDF 第 ${s.program} 頁` : ''))}">${SRCDOC[s.doc]} p.${s.page}${s.label ? `（${esc(s.label)}）` : ''}</span>`;
+  }
   function renderRules() {
     const q = $('#r-q').value.trim().toLowerCase();
     const by = {};
@@ -396,7 +414,7 @@
     const list = cat.filter(r => !q || [r.id, r.name, r.level, r.ref].join(' ').toLowerCase().includes(q));
     const imported = cat.length - st.total;
     $('#rules-meta').textContent = `內建 ${st.total} 條檢核規則：${st.cats.map(c => `${c.name} ${c.n}`).join('、')}${imported ? `；另有匯入規則 ${imported} 條` : ''}`;
-    $('#rule-table tbody').innerHTML = list.map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.level)}</td><td>${esc(r.name)}</td><td>${esc(r.ref)}</td><td><span class="badge ${r.severity}">${SEV[r.severity]}</span></td><td class="num">${by[r.id] || ''}</td></tr>`).join('');
+    $('#rule-table tbody').innerHTML = list.map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.level)}</td><td>${esc(r.name)}</td><td>${esc(r.ref)}</td><td>${pageOf(r.id)}</td><td><span class="badge ${r.severity}">${SEV[r.severity]}</span></td><td class="num">${by[r.id] || ''}</td></tr>`).join('');
     $('#layout-table tbody').innerHTML = rs.layouts.L.fields.map(f => `<tr><td class="num">${f.no}</td><td>${esc(f.name)}</td><td class="num">${f.start}</td><td class="num">${f.start + f.len - 1}</td><td class="mono">${f.type}(${String(f.len).padStart(2, '0')})</td></tr>`).join('');
     $('#chart-table tbody').innerHTML = fin.chart.map(a => `<tr><td class="mono">${a.code}</td><td class="ind d${a.code.length <= 1 ? 0 : a.code.length <= 2 ? 1 : 2}">${esc(a.name)}</td><td>${a.until ? `<span class="badge warning">${a.until} 停用 → ${a.replacedBy}</span>` : ''}</td></tr>`).join('');
   }

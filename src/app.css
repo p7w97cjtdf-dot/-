@@ -115,8 +115,8 @@ button, input, select { font: inherit; color: inherit; }
 .filter-row, .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .filter-row select, .filter-row input, .rules-head input { padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); min-width: 0; }
 .filter-row input { flex: 1; min-width: 160px; }
-.split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; align-items: start; }
-@media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.split { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(320px, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .split { grid-template-columns: minmax(0, 1fr); } }
 .table-wrap { overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); max-height: 70vh; min-width: 0; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -263,3 +263,8 @@ td.mono { white-space: nowrap; }
 .tile.suspect .v { color: #0e7490; }
 td.sev i.suspect { background: repeating-linear-gradient(#0e7490 0 4px, transparent 4px 7px); }
 .badge.suspect { background: #ecfeff; color: #0e7490; }
+
+/* 結果表：工作表・行、原始值 */
+#issue-table td.where { white-space: nowrap; font-size: 13px; }
+#issue-table td.val { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
+#issue-table td:nth-child(7) { min-width: 18ch; }
