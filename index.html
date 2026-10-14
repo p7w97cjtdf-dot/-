@@ -37,6 +37,7 @@
     <button role="tab" id="tab-check" aria-selected="true" data-view="check">明細檢核 <span class="tc" id="tc-check"></span></button>
     <button role="tab" id="tab-recon" aria-selected="false" data-view="recon">跨系統對帳 <span class="tc" id="tc-recon"></span></button>
     <button role="tab" id="tab-decode" aria-selected="false" data-view="decode">退件解碼</button>
+    <button role="tab" id="tab-import" aria-selected="false" data-view="import">規則匯入 <span class="tc ok" id="tc-import"></span></button>
     <button role="tab" id="tab-report" aria-selected="false" data-view="report">報告</button>
     <button role="tab" id="tab-rules" aria-selected="false" data-view="rules">檢核規則</button>
   </nav>
@@ -132,6 +133,60 @@
     <div id="dec-out" class="findings"></div>
   </section>
 
+  <!-- ================= 規則匯入 ================= -->
+  <section id="view-import" class="view" hidden>
+    <div class="block">
+      <div class="block-head">
+        <div><h2>規則匯入：把規則文件轉成可執行規則</h2>
+          <p class="hint">上傳主辦單位或公司內部的檢核規則文件（PDF、Word、文字檔），由 Claude 讀懂條文，轉成系統能執行的規則。每條規則都會先在正確範例資料上試跑：在正確資料上就觸發的規則，很可能是轉錯了，會標出來讓你確認。確認後才套用到檢核。</p></div>
+      </div>
+      <div class="imp-src">
+        <label class="drop" id="drop-rule" for="file-rule"><span class="drop-k">規則文件</span><span class="drop-n" id="name-rule">PDF / Word / TXT / MD</span><span class="drop-h">在瀏覽器內讀取文字，不會上傳檔案</span><input type="file" id="file-rule" accept=".pdf,.docx,.txt,.md,.csv"></label>
+        <div class="imp-pages" id="imp-pages" hidden>
+          <span class="label">轉換頁數</span>
+          <input id="pg-from" type="number" min="1" aria-label="起始頁"> – <input id="pg-to" type="number" min="1" aria-label="結束頁">
+          <button class="btn ghost small" id="btn-pages">讀取這些頁</button>
+          <span class="hint" id="pg-note"></span>
+        </div>
+        <div class="actions">
+          <span class="label">範例文件</span>
+          <button class="chip" id="ex-company">公司內部核保規則</button>
+          <button class="chip" id="ex-manual">填報手冊檢核條文節錄</button>
+        </div>
+      </div>
+      <textarea id="rule-text" rows="9" placeholder="上傳文件後，擷取出的文字會出現在這裡；也可以直接貼上規則條文。"></textarea>
+      <div class="actions">
+        <button class="btn" id="btn-convert">用 AI 轉換成規則</button>
+        <button class="btn ghost" id="btn-preconverted">載入預先轉換結果（不需 AI）</button>
+        <span class="hint" id="conv-note"></span>
+      </div>
+    </div>
+
+    <div class="block" id="imp-result" hidden>
+      <div class="block-head">
+        <div><h2>轉換結果</h2><p class="hint" id="imp-meta"></p></div>
+        <div class="actions">
+          <button class="btn" id="btn-apply">套用勾選的規則</button>
+          <button class="btn ghost" id="btn-dl-rules">下載規則 JSON</button>
+        </div>
+      </div>
+      <div class="chips" id="imp-chips"></div>
+      <div id="imp-cards" class="rule-cards"></div>
+      <div id="imp-unconv"></div>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div><h2>已套用的匯入規則 <span class="count" id="applied-count"></span></h2><p class="hint">已套用的規則會和內建規則一起執行，結果出現在「明細檢核」，類別為「匯入規則」。規則會保存在這個瀏覽器。</p></div>
+        <div class="actions">
+          <label class="btn ghost" for="file-rules-json">匯入規則 JSON<input type="file" id="file-rules-json" accept=".json" hidden></label>
+          <button class="btn ghost" id="btn-clear-rules">全部移除</button>
+        </div>
+      </div>
+      <div id="applied-list" class="applied"></div>
+    </div>
+  </section>
+
   <!-- ================= 報告 ================= -->
   <section id="view-report" class="view" hidden>
     <div class="report-bar">
@@ -159,13 +214,20 @@
 <footer class="foot">規則依據：人壽保險業個人壽險填報手冊（2025 填報年度）與新式個人壽險檢核規則；會計科目表為示範用簡化版。檢核在瀏覽器內執行，資料不會上傳。</footer>
 
 <script src="config.local.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="src/core.js"></script>
 <script src="src/rulesets/life.js"></script>
 <script src="src/rulesets/finance.js"></script>
 <script src="src/report.js"></script>
 <script src="src/recon.js"></script>
 <script src="src/mock.js"></script>
+<script src="src/rules-dsl.js"></script>
+<script src="src/rule-import.js"></script>
+<script src="src/rule-samples.js"></script>
 <script src="src/ai.js"></script>
 <script src="src/app.js"></script>
+<script src="src/app-import.js"></script>
 </body>
 </html>

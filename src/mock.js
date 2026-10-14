@@ -124,7 +124,12 @@
     const reserved = new Set();
     const edge = (pay, maxEvent) => {
       const d = Ds.find(x => ['1', '2', '3'].includes(x.claimType) && !reserved.has(x.policyNo) && x.eventDate.startsWith(String(Y)) && x.eventDate <= maxEvent);
-      if (d) { d.payDate = pay; reserved.add(d.policyNo); }
+      if (d) {
+        // 事故日移到給付日前 10 天，承保退保日同步，讓理賠處理天數合理
+        const ev2 = plus(pay, -10), l = Ls.find(r => r.policyNo === d.policyNo && r.exitDate === d.eventDate);
+        if (l && ev2 > d.startDate) { l.exitDate = ev2; d.eventDate = ev2; }
+        d.payDate = pay; reserved.add(d.policyNo);
+      }
       return d;
     };
     const juneClaim = edge(`${Y}0630`, `${Y}0625`), yearEndClaim = edge(`${Y}1230`, `${Y}1225`);
@@ -196,6 +201,19 @@
       key.push({ file: 'L', policy: '', ruleId: 'F003', desc: '檔案中間有空白行' });
     }
 
+    // 匯入規則情境：違反「公司內部核保規則」範例 (非手冊規則，內建檢核不會發現)
+    const ruleKey = [];
+    if (opts.inject) {
+      const busy = r => reserved.has(r.policyNo) || key.some(k => k.policy.startsWith(r.policyNo.trim()));
+      const single = r => r.txnSeq === '00000' && ['EOY', 'XED'].includes(r.exitType) && !busy(r);
+      const old = Ls.find(r => single(r) && r.termType === 'Y' && r.addType !== 'NEW');
+      if (old) { old.birthDate = String(+old.startDate.slice(0, 4) - 78) + old.startDate.slice(4, 6) + '01'; ruleKey.push({ ruleId: 'U002', policy: old.policyNo.trim() + '/' + old.policySeq.trim(), desc: '投保年齡 78 歲承保終身壽險' }); reserved.add(old.policyNo); }
+      const big = Ls.find(r => single(r) && r.addType === 'NEW' && r.currency === 'NTD');
+      if (big) { for (const k of ['sumInsuredOrig', 'sumInsuredTwd', 'illnessDeathOrig', 'illnessDeathTwd']) big[k] = '4000000000'; ruleKey.push({ ruleId: 'U001', policy: big.policyNo.trim() + '/' + big.policySeq.trim(), desc: '新契約保額 4,000 萬元未體檢' }); reserved.add(big.policyNo); }
+      const slow = Ds.find(d => d.claimType === '1' && !reserved.has(d.policyNo) && !key.some(k => k.policy.startsWith(d.policyNo.trim())) && Ds.filter(x => x.policyNo === d.policyNo).length === 1);
+      if (slow) { slow.payDate = plus(slow.eventDate, 120); ruleKey.push({ ruleId: 'U007', policy: slow.policyNo.trim() + '/' + slow.policySeq.trim(), desc: '死亡給付在事故後 120 天才給付' }); reserved.add(slow.policyNo); }
+    }
+
     // 結轉情境：復效時保額被改動但未以 INN/DNN 申報
     const reconKey = [];
     if (opts.inject) {
@@ -213,7 +231,7 @@
     });
     if (opts.inject) lines.splice(Math.floor(lines.length / 2), 0, '');
     const dLines = Ds.map(r => buildLine(D, r));
-    const out = { L: lines.join('\n') + '\n', D: dLines.join('\n') + '\n', key, reconKey,
+    const out = { L: lines.join('\n') + '\n', D: dLines.join('\n') + '\n', key, reconKey, ruleKey,
       names: { L: `LFL${CO}_${Y}.txt`, D: `LFD${CO}_${Y}.txt`, prior: `LFL${CO}_${Y - 1}.txt`, control: `控制總數_${Y}.csv`, statement: `資產負債表_${Y}.csv` } };
     Object.assign(out, reconInputs(out, truthL, { Y, CO, inject: opts.inject, rand, ri, juneClaim, yearEndClaim, reconKey }));
     return out;

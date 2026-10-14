@@ -10,7 +10,10 @@
   const yuan = R.yuan;
   let INTRO = '規則引擎已完成逐欄檢核與對帳。按「產生 AI 分析摘要」，由 Claude 歸納錯誤的根本原因、修正優先順序與退件風險。';
 
-  const state = { files: {}, res: null, sel: null, cat: '' };
+  const state = { files: {}, res: null, sel: null, cat: '', customRules: [] };
+  // 匯入並套用的規則與內建規則合併
+  function activeRules() { return state.customRules.length ? DQ.dsl.extend(rs, state.customRules) : rs; }
+  try { const saved = JSON.parse(localStorage.getItem('dq-custom-rules') || '[]'); if (Array.isArray(saved)) state.customRules = saved.filter(r => !DQ.dsl.validateRule(r, rs.layouts).length); } catch (e) { /* 無法讀取時忽略 */ }
 
   // ---------- 檔案 ----------
   const SLOTS = ['L', 'D', 'prior', 'control', 'statement'];
@@ -52,13 +55,14 @@
   // ---------- 執行 ----------
   function run() {
     const f = state.files;
-    state.res = DQ.validate(rs, { L: f.L, D: f.D });
+    state.res = DQ.validate(activeRules(), { L: f.L, D: f.D });
     state.roll = f.L ? R.rollForward(state.res, f.prior && f.prior.text) : null;
     state.ctl = f.control ? R.controlRecon(state.res, f.control.text, state.roll ? state.roll.issues : []) : null;
     state.stmt = f.statement ? R.statement(f.statement.text, state.res) : null;
     state.extra = [].concat(state.roll ? state.roll.issues : [], state.ctl ? state.ctl.issues : [], state.stmt ? state.stmt.issues : []);
     state.sel = null; state.aiSummary = null;
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
+    if (DQ.app && DQ.app.onRun) DQ.app.onRun();
     $('#dec-out').innerHTML = ''; $('#dec-ai').textContent = '';
     $('#ai-out').className = 'ai-out'; $('#ai-out').textContent = INTRO;
     const reconErr = state.extra.filter(i => i.severity === 'error').length;
@@ -319,7 +323,7 @@
     const q = $('#r-q').value.trim().toLowerCase();
     const by = {};
     for (const i of state.res.issues.concat(state.extra || [])) by[i.ruleId] = (by[i.ruleId] || 0) + 1;
-    const cat = rs.catalog.concat(fin.catalog);
+    const cat = activeRules().catalog.concat(fin.catalog);
     const list = cat.filter(r => !q || [r.id, r.name, r.level, r.ref].join(' ').toLowerCase().includes(q));
     $('#rules-meta').textContent = `共 ${cat.length} 條檢核規則（資料類型、代碼、單筆、多筆、跨檔、邏輯合理性、跨系統對帳、期初期末結轉、財報勾稽）`;
     $('#rule-table tbody').innerHTML = list.map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.level)}</td><td>${esc(r.name)}</td><td>${esc(r.ref)}</td><td><span class="badge ${r.severity}">${SEV[r.severity]}</span></td><td class="num">${by[r.id] || ''}</td></tr>`).join('');
@@ -344,6 +348,12 @@
     INTRO += '（使用你的 Claude 帳號，不需 API key；第一次使用時會詢問是否允許。）';
     if (was) $('#ai-out').textContent = INTRO;
   });
+
+  // 提供給規則匯入分頁使用
+  DQ.app = {
+    state, run, showTab, select, apiKey: () => apiKey(), download,
+    setCustomRules(rules) { state.customRules = rules; try { localStorage.setItem('dq-custom-rules', JSON.stringify(rules)); } catch (e) { /* ignore */ } run(); },
+  };
 
   loadSample(true);
   if (state.res.issues.length) select(state.res.issues.find(i => i.line && i.fields.length).id);

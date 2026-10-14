@@ -203,3 +203,27 @@ textarea { width: 100%; font: 14px/1.5 var(--font-mono); padding: 8px 10px; bord
 .finding summary b { color: var(--err); font-variant-numeric: tabular-nums; margin-left: 4px; }
 .table-wrap.flat { border: 0; max-height: 360px; }
 .chip.jump { font-family: var(--font-body); white-space: nowrap; }
+
+/* rule import */
+.tc.ok { color: var(--accent); }
+.imp-src { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.imp-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.imp-pages input { width: 76px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-variant-numeric: tabular-nums; }
+.rule-cards { display: flex; flex-direction: column; gap: 10px; }
+.rule-card { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rule-card.info { border-left-color: var(--info); }
+.rule-card.bad { border-left-color: var(--err); }
+.rc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rc-check { font-size: 13px; color: var(--mut); display: inline-flex; gap: 4px; align-items: center; }
+.rc-logic { font-size: 14px; display: flex; flex-direction: column; gap: 2px; background: var(--bg); border-radius: 6px; padding: 8px 10px; }
+.rc-logic .kw { display: inline-block; min-width: 3em; font-weight: 700; color: var(--accent); }
+.rc-src { margin: 0; font-size: 13px; color: var(--mut); border-left: 2px solid var(--line); padding-left: 10px; }
+.rc-src cite { font-style: normal; margin-left: 8px; font-size: 12px; }
+.rc-test { font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+.rc-test .bad { color: var(--err); }
+.rc-json { font: 12px/1.5 var(--font-mono); background: var(--bg); padding: 8px 10px; border-radius: 6px; overflow-x: auto; margin: 6px 0 0; }
+.applied { display: flex; flex-direction: column; gap: 6px; }
+.applied-row { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content max-content; gap: 10px; align-items: center; font-size: 14px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.applied-row .hint { display: block; }
+@media (max-width: 640px) { .applied-row { grid-template-columns: minmax(0, 1fr) max-content; } }
+label.btn input[hidden] { display: none; }

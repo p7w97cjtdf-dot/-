@@ -27,24 +27,29 @@
     return !!platform;
   })();
 
-  async function ask(apiKey, prompt) {
+  async function ask(apiKey, prompt, opts) {
+    opts = opts || {};
+    const system = opts.system || SYSTEM;
     if (platform) {
-      const out = await platform(`${SYSTEM}\n\n${prompt}`, { modelTier: 'default' });
+      const out = await platform(`${system}\n\n${prompt}`, { modelTier: opts.tier || 'default' });
       return out.text.trim();
     }
     if (!apiKey) throw new Error('需要 Anthropic API key');
     const c = await client(apiKey);
-    const msg = await c.beta.messages.create({
+    const params = {
       model: MODEL,
-      max_tokens: 16000,
+      max_tokens: opts.maxTokens || 16000,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium' },
+      output_config: { effort: opts.effort || 'medium' },
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
-      system: SYSTEM,
+      system,
       messages: [{ role: 'user', content: prompt }],
-    });
+    };
+    // 長輸出 (規則轉換) 用串流，避免逾時
+    const msg = opts.stream ? await c.beta.messages.stream(params).finalMessage() : await c.beta.messages.create(params);
     if (msg.stop_reason === 'refusal') throw new Error('模型拒絕回應此請求，請調整內容後再試。');
+    if (msg.stop_reason === 'max_tokens') throw new Error('回覆超過長度上限，請減少一次轉換的頁數');
     return msg.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
   }
 
@@ -117,5 +122,9 @@ ${JSON.stringify(brief)}
   }
 
   root.DQ = root.DQ || {};
-  root.DQ.ai = { summarize, explain, decode, MODEL, ready, usesPlatform: () => !!platform };
+  // 規則轉換：較高的推理強度，輸出 JSON
+  const RULE_SYSTEM = '你是保險業法規申報資料的檢核規則工程師，負責把規則文件精確轉成 JSON 規則。只輸出 JSON。';
+  function convertRules(apiKey, prompt) { return ask(apiKey, prompt, { system: RULE_SYSTEM, tier: 'complex', effort: 'high', maxTokens: 32000, stream: true }); }
+
+  root.DQ.ai = { summarize, explain, decode, convertRules, MODEL, ready, usesPlatform: () => !!platform };
 })(typeof self !== 'undefined' ? self : this);
