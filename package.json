@@ -1,0 +1,12 @@
+{
+  "name": "life-insurance-data-validation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "個人壽險年度填報資料品質與檢核助手",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "samples": "node tools/generate-samples.js",
+    "validate": "node tools/validate.js"
+  },
+  "engines": { "node": ">=18" }
+}
