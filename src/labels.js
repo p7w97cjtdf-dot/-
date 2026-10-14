@@ -27,7 +27,7 @@
   // 和系統總數比對的結果
   const STATUS = { 一致: '相符', 時間差: '結帳日不同', 定義差: '算法不同', 待查: '需要追查', 格式錯誤: '格式有誤' };
   // 工作表 / 資料名稱 (Excel 工作表也用這些名稱)
-  const SHEET = { L: '保單資料', D: '理賠資料', prior: '去年保單資料', C: '客戶資料', P: '商品資料', R: '系統總數', S: '資產負債表' };
+  const SHEET = { L: '保單資料', D: '理賠資料', prior: '去年保單資料', C: '客戶資料', P: '商品資料', R: '系統總數', S: '資產負債表', CL: '癌症險保單資料', CD: '癌症險理賠資料', AL: '傷害險保單資料', AD: '傷害險理賠資料' };
   const cat = c => CAT[c] || c, level = l => LEVEL[l] || l, status = s => STATUS[s] || s;
   return { SEV, SEV_HINT, CAT, LEVEL, STATUS, SHEET, cat, level, status };
 });

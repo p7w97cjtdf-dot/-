@@ -277,7 +277,7 @@
     }
 
     // 跨檔檢核
-    if (ruleset.crossRules && Object.keys(meta).length > 1) {
+    if (ruleset.crossRules && Object.keys(meta).length) {
       for (const rule of ruleset.crossRules) {
         rule(data, (fid, rec, iss) => {
           const layout = ruleset.layouts[fid];

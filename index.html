@@ -36,6 +36,10 @@
         <label class="drop opt" id="drop-statement" for="file-statement"><span class="drop-k">資產負債表</span><span class="drop-n" id="name-statement">尚未放入</span><span class="drop-h">檢查報表加總</span><input type="file" id="file-statement" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
         <label class="drop opt" id="drop-products" for="file-products"><span class="drop-k">商品資料</span><span class="drop-n" id="name-products">尚未放入</span><span class="drop-h">商品代號、停售日</span><input type="file" id="file-products" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
         <label class="drop opt" id="drop-customers" for="file-customers"><span class="drop-k">客戶資料</span><span class="drop-n" id="name-customers">尚未放入</span><span class="drop-h">要保人、被保險人</span><input type="file" id="file-customers" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-CL" for="file-CL"><span class="drop-k">癌症險保單資料</span><span class="drop-n" id="name-CL">尚未放入</span><span class="drop-h">CRL 開頭的承保檔</span><input type="file" id="file-CL" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-CD" for="file-CD"><span class="drop-k">癌症險理賠資料</span><span class="drop-n" id="name-CD">尚未放入</span><span class="drop-h">CRD 開頭的給付檔</span><input type="file" id="file-CD" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-AL" for="file-AL"><span class="drop-k">傷害險保單資料</span><span class="drop-n" id="name-AL">尚未放入</span><span class="drop-h">PAL 開頭的承保檔</span><input type="file" id="file-AL" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-AD" for="file-AD"><span class="drop-k">傷害險理賠資料</span><span class="drop-n" id="name-AD">尚未放入</span><span class="drop-h">PAD 開頭的給付檔</span><input type="file" id="file-AD" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
       </div>
     </details>
   </section>
@@ -240,6 +244,10 @@
 <script src="src/labels.js"></script>
 <script src="src/core.js"></script>
 <script src="src/rulesets/life.js"></script>
+<script src="src/rulesets/occupation.js"></script>
+<script src="src/rulesets/ext-common.js"></script>
+<script src="src/rulesets/cancer.js"></script>
+<script src="src/rulesets/index.js"></script>
 <script src="src/rulesets/finance.js"></script>
 <script src="src/report.js"></script>
 <script src="src/recon.js"></script>

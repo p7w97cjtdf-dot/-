@@ -8,14 +8,17 @@
   const isNode = typeof module === 'object' && module.exports;
   const C = isNode ? require('./core.js') : root.DQ;
   const life = isNode ? require('./rulesets/life.js') : root.DQ.rulesets.life;
-  const m = factory(C, life);
+  const all = isNode ? require('./rulesets/index.js') : root.DQ.rulesets.all;
+  const m = factory(C, life, all);
   if (isNode) module.exports = m; else root.DQ.workbook = m;
-})(typeof self !== 'undefined' ? self : this, function (C, life) {
+})(typeof self !== 'undefined' ? self : this, function (C, life, all) {
   'use strict';
   const L = life.layouts.L, D = life.layouts.D;
   // 工作表名稱包含這些字就分配到對應的上傳格 (「去年保單資料」要先於「保單」比對)；舊名稱 (承保、給付、上年度、控制總數) 也接受
-  const SHEET_SLOT = [['上年度', 'prior'], ['去年', 'prior'], ['承保', 'L'], ['保單', 'L'], ['給付', 'D'], ['理賠', 'D'], ['控制總數', 'control'], ['系統總數', 'control'], ['資產負債', 'statement'], ['商品', 'products'], ['客戶', 'customers']];
-  const NAMES = { L: '保單資料', D: '理賠資料', customers: '客戶資料', products: '商品資料', prior: '去年保單資料', control: '系統總數', statement: '資產負債表' };
+  // 癌症險、傷害險的工作表名稱也含「保單」「理賠」，要先比對
+  const SHEET_SLOT = [['癌症險保單', 'CL'], ['癌症險理賠', 'CD'], ['癌症保單', 'CL'], ['癌症理賠', 'CD'], ['傷害險保單', 'AL'], ['傷害險理賠', 'AD'], ['傷害保單', 'AL'], ['傷害理賠', 'AD'], ['上年度', 'prior'], ['去年', 'prior'], ['承保', 'L'], ['保單', 'L'], ['給付', 'D'], ['理賠', 'D'], ['控制總數', 'control'], ['系統總數', 'control'], ['資產負債', 'statement'], ['商品', 'products'], ['客戶', 'customers']];
+  const NAMES = { L: '保單資料', D: '理賠資料', customers: '客戶資料', products: '商品資料', prior: '去年保單資料', control: '系統總數', statement: '資產負債表', CL: '癌症險保單資料', CD: '癌症險理賠資料', AL: '傷害險保單資料', AD: '傷害險理賠資料' };
+  const EXT = ['CL', 'CD', 'AL', 'AD'];
 
   const recs = (text, lay) => C.parseFixedWidth(text, lay).records.filter(r => r._raw.length === lay.recordLength);
   const fixed = (text, lay) => ({ header: lay.fields.map(f => f.name), rows: recs(text, lay).map(r => lay.fields.map(f => r[f.key])) });
@@ -31,10 +34,20 @@
     };
   }
 
+  // 癌症險 / 傷害險試用活頁簿：每個明細檔一張工作表
+  function extSheets(g) {
+    const out = {};
+    for (const k of EXT) if (g[k] && all.layouts[k]) out[NAMES[k]] = fixed(g[k], all.layouts[k]);
+    return out;
+  }
   // 名稱看不出來時，改看第一列標題 (例如使用者把工作表命名為 Sheet1)
   function bySignature(head) {
     const h = new Set(head.map(x => String(x || '').replace(/^\uFEFF/, '').trim()));
     const has = (...k) => k.every(x => h.has(x));
+    if (has('承保範圍代號', '暴露數')) return 'CL';
+    if (has('罹患癌症種類(ICD-10)', '給付項目')) return 'CD';
+    if (all.layouts.AL && has(all.layouts.AL.fields[12].name, all.layouts.AL.fields[32].name)) return 'AL';
+    if (all.layouts.AD && has(all.layouts.AD.fields[3].name, all.layouts.AD.fields[5].name) && !has('給付類別')) return 'AD';
     if (has('給付類別', '保單編號')) return 'D';
     if (has('加保別', '退保別', '保單編號')) return 'L';
     if (has('角色', '姓名', '證件編號')) return 'customers';
@@ -77,14 +90,16 @@
       const ys = r.flatMap(x => [x.addDate, x.exitDate]).filter(d => C.isValidDate(d)).map(d => d.slice(0, 4));
       if (ys.length) year = ys.sort().pop();
     }
-    const names = { L: `LFL${co}_${year}.txt`, D: `LFD${co}_${year}.txt`, prior: `LFL${co}_${year - 1}.txt`, control: `控制總數_${year}.csv`, statement: `資產負債表_${year}.csv`, products: `商品資料_${year}.csv`, customers: `客戶資料_${year}.csv` };
+    // 癌症險、傷害險：公司代號與年度取自自己的保單資料 (檔名規則：前綴＋填報年度＋公司代號)
+    const ext = k => { const lay = all.layouts[k[0] === 'C' ? 'CL' : 'AL'], t = got[k[0] === 'C' ? 'CL' : 'AL']; if (!t || !lay) return [co, year]; const r = C.parseFixedWidth(C.csvToFixedWidth(t, lay), lay).records[0]; return r ? [r.company, (r.addYear || r.year || year)] : [co, year]; };
+    const names = { CL: `CRL${ext('CL')[1]}${ext('CL')[0]}.txt`, CD: `CRD${ext('CD')[1]}${ext('CD')[0]}.txt`, AL: `PAL${ext('AL')[1]}${ext('AL')[0]}.txt`, AD: `PAD${ext('AD')[1]}${ext('AD')[0]}.txt`, L: `LFL${co}_${year}.txt`, D: `LFD${co}_${year}.txt`, prior: `LFL${co}_${year - 1}.txt`, control: `控制總數_${year}.csv`, statement: `資產負債表_${year}.csv`, products: `商品資料_${year}.csv`, customers: `客戶資料_${year}.csv` };
     const out = {};
     for (const [slot, text] of Object.entries(got)) {
-      const lay = slot === 'D' ? D : (slot === 'L' || slot === 'prior') ? L : null;
+      const lay = slot === 'D' ? D : (slot === 'L' || slot === 'prior') ? L : EXT.includes(slot) ? all.layouts[slot] : null;
       out[slot] = { name: names[slot], text: lay ? C.csvToFixedWidth(text, lay) : text, fromSheet: true };
     }
     return out;
   }
 
-  return { SHEET_SLOT, NAMES, sheets, slots, files };
+  return { SHEET_SLOT, NAMES, sheets, extSheets, slots, files };
 });

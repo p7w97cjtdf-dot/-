@@ -142,7 +142,7 @@
     if ((p = take('surrender'))) { p.recs[1].exposure = '1000000'; add(p, ['CRL264_03', 'CRL304_02'], '解約那一筆的暴露數填 1 (全年)'); }
     if ((p = take('lapseRnn'))) { p.recs[2].addType = 'EDN'; add(p, ['CRL302_06'], '停效 (LNN) 之後的加保別寫成 EDN，應為 RNN 復效'); }
     if ((p = take('maturity'))) { p.recs[0].exitType = 'EDD'; add(p, ['CRL309_03', 'CRL309_02'], '保險今年到期，但退保別填 EDD 而非 MAD'); }
-    if ((p = take('lapseRnn'))) { p.recs[2].exposure = '0900000'; add(p, ['CRL304_04'], '停效又復效，同一保單年度暴露數合計大於 1'); }
+    if ((p = take('lapseRnn'))) { p.recs[2].exposure = String(Math.min(999999, 1050000 - +p.recs[1].exposure)).padStart(7, '0'); add(p, ['CRL304_04'], '停效又復效，同一保單年度暴露數合計大於 1'); }
     // 給付
     const dOf = s => { const q = by(s).find(x => !used.has(x)); if (q) used.add(q); return q ? Ds.filter(d => d.policyNo === q.base.policyNo) : []; };
     const claims = by('claim').filter(x => !used.has(x));
@@ -170,5 +170,19 @@
     }
   }
 
-  return { generateCancer, generateAccident: accident ? (o => accident.mock(o)) : null };
+  // 驗收：key 的每個錯誤都要被列出的檢核編號找到 (同一張保單)；不能有解答以外的問題
+  function check(g, res) {
+    const missed = g.key.filter(k => !k.rules.every(id => res.issues.some(i => i.ruleId === id && (i.policy || '').trim() === k.policy)));
+    const stray = res.issues.filter(i => !g.key.some(k => k.policy === (i.policy || '').trim() && k.rules.includes(i.ruleId)));
+    return { total: g.key.length, found: g.key.length - missed.length, missed, stray };
+  }
+  // 依險種產生資料並檢查 (tests 與 tests/run.html 共用)
+  function run(product, opts, ruleset) {
+    const g = (product === 'cancer' ? generateCancer : accident.mock)(opts);
+    const P = product === 'cancer' ? ['CL', 'CD'] : ['AL', 'AD'];
+    const res = C.validate(ruleset || (product === 'cancer' ? cancer : accident), { [P[0]]: { name: g.names[P[0]], text: g[P[0]] }, [P[1]]: { name: g.names[P[1]], text: g[P[1]] } });
+    return { g, res, c: check(g, res) };
+  }
+
+  return { generateCancer, generateAccident: accident ? (o => accident.mock(o)) : null, check, run };
 });

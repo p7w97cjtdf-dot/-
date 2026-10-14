@@ -4,7 +4,7 @@
 (function (root, factory) {
   const isNode = typeof module === 'object' && module.exports;
   const deps = isNode
-    ? { life: require('./rulesets/life.js'), fin: require('./rulesets/finance.js'), master: require('./master.js'), anomaly: require('./anomaly.js') }
+    ? { life: require('./rulesets/life.js'), fin: require('./rulesets/finance.js'), master: require('./master.js'), anomaly: require('./anomaly.js'), ext: [require('./rulesets/cancer.js'), (() => { try { return require('./rulesets/accident.js'); } catch (e) { return null; } })()] }
     : null;
   const m = factory(deps);
   if (isNode) module.exports = m; else { root.DQ = root.DQ || {}; root.DQ.ruleStats = m; }
@@ -24,7 +24,10 @@
       { key: 'roll', name: '期初期末結轉', n: uniq(fin(['期初期末結轉'])), note: '上年度期末 vs 本年度期初逐保單勾稽' },
       { key: 'anomaly', name: '合理性（疑似異常）', n: uniq(d.anomaly.catalog), note: '不計入錯誤，需人工判斷' },
     ];
-    return { cats, total: cats.reduce((s, c) => s + c.n, 0), by: Object.fromEntries(cats.map(c => [c.key, c.n])) };
+    // 其他險種 (癌症保險、傷害保險)：另外列出，不併入個人壽險的總數 (介紹頁的數字以個人壽險為準)
+    const extList = d.ext || deps && deps.ext || (typeof self !== 'undefined' && self.DQ && self.DQ.rulesets ? [self.DQ.rulesets.cancer, self.DQ.rulesets.accident] : []);
+    const ext = extList.filter(Boolean).map(r => ({ key: r.id, name: r.name, n: uniq(r.catalog), version: r.version }));
+    return { cats, total: cats.reduce((s, c) => s + c.n, 0), by: Object.fromEntries(cats.map(c => [c.key, c.n])), ext, extTotal: ext.reduce((s, c) => s + c.n, 0) };
   }
   return { count };
 });
