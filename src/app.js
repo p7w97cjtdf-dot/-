@@ -508,6 +508,12 @@
 
   // 手機上清單預設收起 (主要用逐筆確認)，按「看全部清單」展開
   $('#btn-list').onclick = () => { const on = document.body.classList.toggle('show-list'); $('#btn-list').setAttribute('aria-expanded', on); $('#btn-list').textContent = on ? '收起清單' : '看全部清單'; };
+  // 頁尾：各險種規則的版本與條數
+  (() => {
+    const st = DQ.ruleStats.count(), MANUAL = { cancer: '個人癌症保險填報手冊', accident: '新式傷害保險填報手冊' };
+    $('#rule-version').textContent = `檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度，${st.total} 條）` +
+      st.ext.map(e => `、${MANUAL[e.key] || e.name}（${e.version} 年版，${e.n} 條）`).join('') + '。';
+  })();
   // 打開時不載入任何資料：只顯示拖放框
   document.body.classList.add('no-data');
   $('#sample-note').textContent = '還沒有資料。把申報文字檔或 Excel 拖到上方的框。';

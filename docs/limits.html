@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>限制與風險評估｜申報資料檢核助手</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #ffffff; --ink: #111111; --grey: #5f5f5f; --rule: #e2e2e2; --tile: #f4f4f4; --red: #e60012;
+  --body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #121212; --ink: #f2f2f2; --grey: #a8a8a8; --rule: #2e2e2e; --tile: #1c1c1c; --red: #ff4d5a; }
+}
+:root[data-theme="dark"] { --bg: #121212; --ink: #f2f2f2; --grey: #a8a8a8; --rule: #2e2e2e; --tile: #1c1c1c; --red: #ff4d5a; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.75 var(--body); -webkit-font-smoothing: antialiased; }
+main { max-width: 860px; margin: 0 auto; padding: 40px 16px 64px; }
+a { color: inherit; }
+.back { font-size: 14px; color: var(--grey); text-decoration: none; }
+.back:hover { color: var(--ink); }
+h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.25; margin: 18px 0 8px; letter-spacing: .02em; }
+.lede { color: var(--grey); margin: 0 0 8px; }
+.meta { color: var(--grey); font-size: 13px; margin: 0 0 32px; }
+h2 { font-size: 22px; margin: 44px 0 12px; padding-top: 14px; border-top: 2px solid var(--ink); }
+h2 small { font: 500 12px var(--mono); color: var(--red); display: block; letter-spacing: .08em; margin-bottom: 2px; }
+h3 { font-size: 17px; margin: 24px 0 6px; }
+p, li { margin: 0 0 10px; }
+ul { padding-left: 1.2em; }
+.table-wrap { overflow-x: auto; margin: 12px 0 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--rule); }
+th { background: var(--tile); font-weight: 700; white-space: nowrap; }
+td.num, th.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.tag { display: inline-block; font-size: 12px; padding: 1px 8px; border: 1px solid var(--rule); border-radius: 999px; white-space: nowrap; }
+.tag.hi { border-color: var(--red); color: var(--red); }
+.note { background: var(--tile); padding: 14px 16px; border-left: 3px solid var(--red); margin: 16px 0; }
+.mono { font-family: var(--mono); font-size: .92em; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="../index.html">← 回到檢核工具</a>
+  <h1>限制與風險評估</h1>
+  <p class="lede">申報資料檢核助手的展示範圍、AI 應用方式、已知限制，以及使用時的風險與對策。</p>
+  <p class="meta">適用版本：本 repository 目前版本　｜　資料來源：主辦單位提供之填報手冊與自建模擬資料</p>
+
+  <h2><small>01 SCOPE</small>展示範圍</h2>
+  <p>這是一個<b>原型 (Prototype)</b>：在瀏覽器內讀入申報資料，依填報手冊的規則自動找出錯誤、說明怎麼改、可一鍵修正並產生檢核報告。不串接任何保險公司的正式系統。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>險種／資料</th><th>檢查內容</th><th class="num">規則數</th><th>依據</th></tr></thead>
+    <tbody id="scope-rows">
+      <tr><td>個人壽險（承保、給付）</td><td>欄位格式、代碼、單筆與多筆邏輯、承保與給付對應</td><td class="num">256</td><td>個人壽險填報手冊、檢核規則（2025 填報年度）</td></tr>
+      <tr><td>個人壽險：客戶與商品資料</td><td>身分證號、地址與郵遞區號、同一人資料一致、商品代號與停售日</td><td class="num">15</td><td>本工具補充（主檔交叉比對）</td></tr>
+      <tr><td>個人壽險：對帳與勾稽</td><td>和上游系統總數比對、去年與今年接續、資產負債表加總</td><td class="num">14</td><td>本工具補充（以手冊欄位為基礎）</td></tr>
+      <tr><td>個人壽險：不太合理的資料</td><td>沒有違反規定但不合理（例如年齡、金額異常），交由人工判斷</td><td class="num">4</td><td>本工具補充</td></tr>
+      <tr><td>個人癌症保險（承保、給付）</td><td>欄位格式、代碼、承保範圍與保額、保單年度與保險年齡、暴露數、承保與給付對應</td><td class="num" id="n-cancer">156</td><td>個人癌症保險填報手冊（2024 年版）壹拾、欄位檢核說明</td></tr>
+      <tr><td>個人傷害保險（承保、給付）</td><td id="acc-desc">欄位格式、代碼、契約異動、保額與保費、醫療給付、承保與給付對應</td><td class="num" id="n-accident">—</td><td>新式傷害保險填報手冊（2021 年版）陸、檢核規則</td></tr>
+    </tbody>
+  </table></div>
+  <h3>不在這次展示範圍內</h3>
+  <ul>
+    <li><b>旅行平安保險</b>（TAL/TAD 檔）、<b>填報對象檔</b>與<b>彙送管制檔</b>：格式已整理，但未實作檢查。</li>
+    <li><b>修改歷史資料流程</b>：只檢查「年度填報」流程。</li>
+    <li><b>需要前一年度資料的檢查</b>：癌症險、傷害險中比對前一填報年度退保別的規則未實作（個人壽險已提供「去年保單資料」比對）。</li>
+    <li><b>串接正式系統</b>：資料由使用者自行放入檔案，不直接讀取公司資料庫。</li>
+  </ul>
+
+  <h2><small>02 DATA</small>資料來源</h2>
+  <ul>
+    <li><b>檢核規則</b>：主辦單位提供的四份填報手冊（個人壽險填報手冊與檢核規則 2025、癌症保險 2024、傷害保險）。檢核編號沿用手冊編號，工具列出每條規則對應的手冊頁碼；工具另外補充的規則會標示「本工具另外加的」。</li>
+    <li><b>測試資料</b>：全部為自行產生的<b>模擬資料</b>，依手冊格式與合理的商業邏輯建立（商品代號、職業分類代碼、郵遞區號、保額與保費關係等），不含任何真實個資。</li>
+    <li><b>錯誤情境</b>：模擬資料中刻意放入各類錯誤（格式、代碼、前後矛盾、跨檔不一致、對帳差異、不太合理的資料），每個錯誤都附「錯誤解答」，可用來驗證工具是否全部找到、有沒有誤報。</li>
+  </ul>
+
+  <h2><small>03 AI</small>AI 應用方式</h2>
+  <p>比賽規定 AI 是可運用的技術方向之一，不限定成果形式。本工具的設計是：<b>檢查本身不用 AI，AI 用在「看懂」與「轉換」</b>。</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>用途</th><th>做什麼</th><th>為什麼這樣設計</th></tr></thead>
+    <tbody>
+      <tr><td>核心檢查</td><td>規則引擎逐條執行手冊規則（不用 AI）</td><td>申報檢核要能<b>重現、可稽核</b>：同一份資料每次結果必須相同，每個問題都能追到手冊條文與頁碼。</td></tr>
+      <tr><td>整理重點</td><td>AI 用白話說明問題主要出在哪裡、先改什麼</td><td>上百個問題時，幫使用者抓出根本原因（例如同一個欄位整批填錯）。</td></tr>
+      <tr><td>看懂退件通知</td><td>把退件代碼對應到資料中的哪幾筆、哪個欄位，AI 補充說明怎麼改</td><td>退件通知常只有代碼，定位工作由規則完成，AI 只做說明。</td></tr>
+      <tr><td>新增檢查規則</td><td>AI 把文字規則（例如公司內部核保規則）轉成工具可執行的檢查</td><td>手冊改版或公司自訂規則時，不必改程式。轉好的規則會先在正確資料上試跑，經人確認後才啟用。</td></tr>
+    </tbody>
+  </table></div>
+  <p>AI 功能只在 claude.ai 線上版提供，使用開啟者自己的 Claude 帳號，<b>不需要 API key</b>；直接開啟網頁（含 GitHub Pages）時 AI 按鈕會隱藏，其餘功能完整可用。</p>
+
+  <h2><small>04 VALIDATION</small>驗證結果</h2>
+  <p>每次修改後執行自動測試（<span class="mono">npm test</span> 與瀏覽器測試頁 <span class="mono">tests/run.html</span>）：</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>資料</th><th class="num">刻意放入的錯誤</th><th class="num">找到</th><th class="num">正確資料誤報</th></tr></thead>
+    <tbody id="val-rows">
+      <tr><td>個人壽險試用資料（文字檔）</td><td class="num">68</td><td class="num">68</td><td class="num">0</td></tr>
+      <tr><td>個人壽險試用資料（Excel）</td><td class="num">66</td><td class="num">66</td><td class="num">0</td></tr>
+      <tr><td>個人壽險 1000 張保單（Excel）</td><td class="num">61</td><td class="num">61</td><td class="num">0</td></tr>
+      <tr><td>個人癌症保險試用資料</td><td class="num">33</td><td class="num">33</td><td class="num">0</td></tr>
+      <tr id="val-acc"><td>個人傷害保險試用資料</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+    </tbody>
+  </table></div>
+  <p>另以多組亂數種子產生不同大小的資料（最多 1000 張保單），確認錯誤全部找到、正確資料 0 誤報。Excel 版少 2 項是因為「每筆長度不足」與「空白行」無法用 Excel 儲存格表示，文字檔版可測。</p>
+
+  <h2><small>05 LIMITS</small>已知限制</h2>
+  <ul>
+    <li><b>規則是人工整理的</b>：依手冊條文轉成程式，條文有歧義時採較寬鬆的解讀並以「建議確認」呈現；手冊中明顯的筆誤（例如比較符號寫反）依上下文判斷，並在程式註解記錄。</li>
+    <li><b>手冊會改版</b>：規則跟著手冊版本（壽險 2025 填報年度、癌症險 2024 年版、傷害險 2021 年版）。新版手冊需要更新規則；可用「新增檢查規則」先補上，再正式改版。</li>
+    <li><b>代碼表不完整之處</b>：ICD-10-CM 疾病代碼手冊未附完整表，工具只檢查格式與癌症代碼範圍（C00–C96、D00–D09 等）；郵遞區號只檢查前 3 碼。</li>
+    <li><b>只做申報前自我檢查</b>：通過本工具不代表保發中心的檢核一定通過；最終以正式檢核與退件通知為準。</li>
+    <li><b>效能</b>：在一般筆電的瀏覽器上，1000 張保單（約 1,300 筆異動）的明細檢查約 0.1 秒完成；數十萬筆的資料檔未做壓力測試。</li>
+  </ul>
+
+  <h2><small>06 RISKS</small>風險評估與對策</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>風險</th><th>可能影響</th><th>對策</th></tr></thead>
+    <tbody>
+      <tr><td>個資外洩 <span class="tag hi">高</span></td><td>申報資料含被保險人資料</td><td>所有檢查在使用者電腦的瀏覽器內執行，<b>資料不上傳</b>；手冊規定證件號碼填 0，工具也會檢查。使用 AI 時，送出的內容先遮罩姓名、身分證號與地址，並在畫面上說明會送出什麼。</td></tr>
+      <tr><td>AI 產生錯誤內容 <span class="tag hi">高</span></td><td>說明或轉換的規則有誤</td><td>AI 不參與判定對錯；AI 文字標示為 AI 產出。AI 轉換的規則先在「全部正確」的資料上試跑，在正確資料上也報錯的標為「疑似轉錯」，<b>預設不啟用</b>，須經人確認。</td></tr>
+      <tr><td>規則漏判或誤判 <span class="tag">中</span></td><td>該抓的錯誤沒抓到，或把正確資料判為錯誤</td><td>每條規則附手冊頁碼供核對；自動測試以「錯誤解答」驗證全部找到、0 誤報；不確定的情況以「建議確認」或「請人工判斷」呈現，不直接判錯。</td></tr>
+      <tr><td>一鍵修改改錯 <span class="tag">中</span></td><td>自動帶入的修正值不正確</td><td>只有工具能確定正確值時才提供一鍵修改（例如依起日推算迄日）；修改後重新檢查，並保留原檔，使用者可下載改好的檔案自行比對。</td></tr>
+      <tr><td>手冊版本落差 <span class="tag">中</span></td><td>主辦單位更新規則後結果不一致</td><td>頁尾與報告標示規則版本與條數；規則集中在 <span class="mono">src/rulesets/</span>，可單獨更新。</td></tr>
+      <tr><td>外部元件無法載入 <span class="tag">低</span></td><td>公司防火牆擋住讀取 Excel 的元件</td><td>repository 內附備用檔，自動改用；仍無法載入時畫面會說明，文字檔仍可直接檢查。</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">本工具供申報前自我檢查使用，檢查結果不代表保發中心或主管機關的正式審核。</div>
+</main>
+</body>
+</html>

@@ -345,6 +345,9 @@ td .pill { border-radius: 0; background: transparent; border: 1px solid var(--go
 .back { align-self: flex-start; background: none; border: 0; padding: 6px 0; color: var(--mut); letter-spacing: .06em; font-size: 13px; min-height: 44px; }
 .back:hover { color: var(--fg); }
 .foot { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 8px; }
+.foot p { margin: 0 0 6px; line-height: 1.6; }
+.foot .disclaimer { color: var(--fg); }
+.foot a { color: inherit; text-decoration: underline; }
 
 /* 原始資料預設收合 */
 details.raw { border-top: 1px solid var(--line); padding-top: 4px; }
