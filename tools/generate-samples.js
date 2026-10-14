@@ -13,7 +13,10 @@ for (const [dir, inject] of [['clean', false], ['dirty', true]]) {
   fs.mkdirSync(d, { recursive: true });
   fs.writeFileSync(path.join(d, g.names.L), g.L);
   fs.writeFileSync(path.join(d, g.names.D), g.D);
-  if (inject) fs.writeFileSync(path.join(d, 'answer-key.json'), JSON.stringify(g.key, null, 2) + '\n');
+  fs.writeFileSync(path.join(d, g.names.prior), g.prior);
+  fs.writeFileSync(path.join(d, g.names.control), g.control);
+  fs.writeFileSync(path.join(d, g.names.statement), g.statement);
+  if (inject) fs.writeFileSync(path.join(d, 'answer-key.json'), JSON.stringify({ 明細檢核: g.key, 對帳與勾稽: g.reconKey }, null, 2) + '\n');
   // 另存 CSV 版本 (方便以 Excel 開啟展示)
   const parsed = C.parseFixedWidth(g.L, life.layouts.L).records.filter(r => r._raw.length === life.layouts.L.recordLength);
   fs.writeFileSync(path.join(d, g.names.L.replace('.txt', '.csv')), C.recordsToCSV(life.layouts.L, parsed));

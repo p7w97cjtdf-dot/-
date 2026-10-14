@@ -49,14 +49,23 @@
     return { 規則集: rs.name, 摘要: res.summary, 最常見錯誤: tops, 問題樣本: samples };
   }
 
-  async function summarize(apiKey, rs, res) {
-    const data = JSON.stringify(compact(rs, res));
-    return ask(apiKey, `以下是本次個人壽險填報資料的檢核結果 (JSON)：
+  function compactRecon(r) {
+    if (!r) return null;
+    const o = {};
+    if (r.ctl) o.上游控制總數對帳 = { 摘要: r.ctl.summary, 差異: r.ctl.rows.filter(x => x.status && x.status !== '一致').map(x => ({ 系統: x.source, 項目: x.name, 期間: x.period, 差異筆數: x.diff && x.diff.cnt, 差異金額: x.diff && x.diff.amt / 100, 判定: x.status, 說明: x.explain })) };
+    if (r.roll) o.期初期末結轉 = { 期初: r.roll.movement.open, 上年度期末: r.roll.movement.priorClose, 問題: r.roll.issues.map(i => ({ 編號: i.ruleId, 保單: i.policy, 問題: i.message })) };
+    if (r.stmt) o.資產負債表勾稽 = { 平衡: r.stmt.summary.balanced, 問題: r.stmt.issues.map(i => ({ 編號: i.ruleId, 科目: i.code, 根因: i.chainRole || '', 問題: i.message, 說明: i.explain || '' })) };
+    return o;
+  }
+
+  async function summarize(apiKey, rs, res, recon) {
+    const data = JSON.stringify(Object.assign(compact(rs, res), { 對帳與勾稽: compactRecon(recon) }));
+    return ask(apiKey, `以下是本次法規申報資料的檢核結果 (JSON)，包含個人壽險申報明細檢核、與上游系統控制總數對帳、上年度期末結轉、資產負債表勾稽：
 ${data}
 
 請產出「檢核結果分析摘要」，依序包含：
 1. 整體評估：資料品質一句話結論，以及若直接申報的退件風險 (高/中/低) 與理由。
-2. 根本原因：把問題歸成 3~5 類可能的系統性原因 (例如：轉檔程式未補前置 0、日期民國/西元混用、異動鏈結邏輯錯誤、承保與給付系統未對帳)，每類列出對應的檢核編號與筆數。
+2. 根本原因：把問題歸成 3~5 類可能的系統性原因 (例如：轉檔程式未補前置 0、日期民國/西元混用、異動鏈結邏輯錯誤、各系統結帳時點或幣別口徑不同、會計科目未隨 IFRS 更新)，每類列出對應的檢核編號與筆數。區分「需修正申報檔」與「屬時間差/定義差、只需在對帳底稿說明」兩種。
 3. 修正優先順序：先修哪些、為什麼 (考慮會連帶引發其他錯誤的問題、跨檔問題)。
 4. 預防建議：資料產出端可加的控管。
 每段精簡，使用條列，總長度 500 字內。`);
@@ -79,6 +88,22 @@ ${data}
 請用 3~5 點說明：這條規則在檢查什麼、這筆資料為何不通過、正確值應該怎麼判斷 (若可推得請直接給值)、是否可能是系統性問題。200 字內。`);
   }
 
+  async function decode(apiKey, text, decoded) {
+    const brief = decoded.findings.map(f => ({ 線索: f.clue, 類型: f.kind, 說明: f.explain,
+      定位結果: f.groups.slice(0, 8).map(g => ({ 編號: g.ruleId, 項目: g.name, 筆數: g.items.length,
+        範例: g.items.slice(0, 3).map(i => ({ 位置: `${i.file}${i.line ? ' 第' + i.line + '行/列' : ''}`, 保單或科目: (i.policy || i.code || '').trim(), 值: String(i.value).trim(), 問題: i.message, 建議: i.suggestion })) })) }));
+    return ask(apiKey, `主管機關/申報系統的退件訊息如下：
+「${text}」
+
+規則引擎已依目前資料重新檢核，並把訊息中的代碼、行號與關鍵字對應到具體問題：
+${JSON.stringify(brief)}
+
+請用繁體中文回答 (300 字內，條列)：
+1. 這則退件訊息最可能指的是哪些問題 (說明判斷依據；若是籠統代碼，指出最可能的 1~2 類並說明理由)。
+2. 修正步驟與順序 (指出可一次修正多筆的系統性問題)。
+3. 重新申報前還應檢查什麼，避免再次被退件。`);
+  }
+
   root.DQ = root.DQ || {};
-  root.DQ.ai = { summarize, explain, MODEL };
+  root.DQ.ai = { summarize, explain, decode, MODEL };
 })(typeof self !== 'undefined' ? self : this);

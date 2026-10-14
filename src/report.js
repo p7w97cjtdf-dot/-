@@ -14,6 +14,7 @@
 
   function fieldLabel(rs, i) {
     const lay = rs.layouts[i.file];
+    if (!lay) return '';
     return (i.fields || []).map(k => { const f = lay && lay.field(k); return f ? `欄${f.no} ${f.name}` : k; }).join('、');
   }
 
@@ -41,10 +42,13 @@
     return out.join('\n');
   }
 
-  function toCSV(rs, res) {
+  const TITLE = { S: '資產負債表', R: '控制總數對帳' };
+  const titleOf = (rs, f) => rs.layouts[f] ? rs.layouts[f].title : TITLE[f] || f;
+  function toCSV(rs, res, extra) {
     const head = ['序號', '嚴重度', '檔案', '行號', '保單號碼', '檢核編號', '檢核項目', '類別', '欄位', '欄位值', '問題說明', '修正建議', '可自動修正'];
     const q = v => { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    const rows = res.issues.map(i => [i.id, SEV[i.severity], rs.layouts[i.file].title, i.line, (i.policy || '').trim(), i.ruleId, i.ruleName, i.category, fieldLabel(rs, i), i.value, i.message, i.suggestion, i.fix ? '是' : '']);
+    const all = res.issues.concat((extra || []).map((i, n) => Object.assign({ id: res.issues.length + n + 1 }, i)));
+    const rows = all.map(i => [i.id, SEV[i.severity], titleOf(rs, i.file), i.line, (i.policy || i.code || '').trim(), i.ruleId, i.ruleName || '', i.category, fieldLabel(rs, i), i.value, i.message + (i.explain ? '；' + i.explain : ''), i.suggestion, i.fix ? '是' : '']);
     return '﻿' + [head].concat(rows).map(r => r.map(q).join(',')).join('\n') + '\n';
   }
 
@@ -85,12 +89,34 @@ th{position:sticky;top:0;background:var(--bg);font-weight:600}.num{text-align:ri
 <div class="meta">產生時間：${esc(new Date(res.generatedAt).toLocaleString('zh-TW'))}　檔案：${Object.entries(res.meta).map(([k, m]) => esc(m.name || rs.layouts[k].title)).join('、')}</div>
 <div class="cards">${fileCards}<div class="card"><div class="k">錯誤</div><div class="v err">${s.errors}</div><div class="s">需修正後才能申報</div></div><div class="card"><div class="k">警告</div><div class="v warn">${s.warnings}</div><div class="s">建議確認之合理性問題</div></div><div class="card"><div class="k">可自動修正</div><div class="v">${s.fixable}</div><div class="s">有明確修正值</div></div></div>
 ${opts.aiSummary ? `<h2>AI 分析摘要</h2><div class="ai">${esc(opts.aiSummary)}</div>` : ''}
-<h2>問題類別分布</h2>${cats.map(([c, n]) => `<div class="bar"><span>${esc(c)}</span><i style="width:${Math.max(2, n / maxCat * 60)}%"></i><span>${n}</span></div>`).join('')}
+${reconHTML(opts.recon)}
+<h2>明細檢核：問題類別分布</h2>${cats.map(([c, n]) => `<div class="bar"><span>${esc(c)}</span><i style="width:${Math.max(2, n / maxCat * 60)}%"></i><span>${n}</span></div>`).join('')}
 <h2>最常見的檢核錯誤</h2><div class="scroll"><table><thead><tr><th>檢核編號</th><th>檢核項目</th><th>嚴重度</th><th class="num">次數</th><th>範例說明</th><th>修正建議</th></tr></thead><tbody>
 ${tops.map(t => `<tr><td class="mono">${esc(t.ruleId)}</td><td>${esc(t.name)}</td><td><span class="sev ${t.severity}">${SEV[t.severity]}</span></td><td class="num">${t.count}</td><td>${esc(t.sample.message)}</td><td>${esc(t.sample.suggestion)}</td></tr>`).join('')}</tbody></table></div>
 <h2>問題明細（${res.issues.length} 項）</h2><div class="scroll"><table><thead><tr><th>#</th><th>嚴重度</th><th>檔案</th><th class="num">行號</th><th>保單號碼</th><th>檢核編號</th><th>欄位</th><th>欄位值</th><th>問題說明</th><th>修正建議</th></tr></thead><tbody>${rows}</tbody></table></div>
 <p class="meta">檢核依據：${esc(rs.name)} 填報手冊與檢核規則；檢核編號沿用手冊「(新)檢核編號」，X 開頭為本工具補充之邏輯合理性檢核。</p>
 </main></body></html>`;
+  }
+
+  function reconHTML(r) {
+    if (!r) return '';
+    const y = c => (c < 0 ? '-' : '') + (Math.abs(c) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
+    let h = '';
+    if (r.ctl) {
+      const s = r.ctl.summary, rows = r.ctl.rows.filter(x => x.status !== '一致' && x.up);
+      h += `<h2>跨系統對帳：上游控制總數</h2><p>共 ${s.total} 項：一致 ${s.ok}、時間差 ${s.timing}、定義差 ${s.definition}、待查 ${s.open}。</p>` +
+        (rows.length ? `<div class="scroll"><table><thead><tr><th>來源系統</th><th>項目</th><th>期間</th><th class="num">差異</th><th>判定</th><th>說明</th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(x.source)}</td><td>${esc(x.name)}</td><td class="mono">${esc(x.period)}</td><td class="num">${x.diff.cnt} 筆 / ${y(x.diff.amt)}</td><td>${esc(x.status)}</td><td>${esc(x.explain)}</td></tr>`).join('')}</tbody></table></div>` : '');
+    }
+    if (r.roll) {
+      const m = r.roll.movement;
+      h += `<h2>期初 / 期末結轉</h2><p>期初有效 ${m.open[0]} 件 / ${y(m.open[1])} 元${r.roll.hasPrior ? `（上年度期末 ${m.priorClose[0]} 件 / ${y(m.priorClose[1])} 元）` : ''}；期末有效 ${m.closeActual[0]} 件 / ${y(m.closeActual[1])} 元；結轉問題 ${r.roll.issues.length} 項。</p>` +
+        (r.roll.issues.length ? `<div class="scroll"><table><thead><tr><th>檢核</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody>${r.roll.issues.map(i => `<tr><td class="mono">${i.ruleId}</td><td class="mono">${esc(i.policy)}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
+    }
+    if (r.stmt) {
+      h += `<h2>財報勾稽：資產負債表</h2><p>${r.stmt.summary.balanced ? '資產 = 負債 + 權益，報表平衡。' : '資產負債表不平衡。'}錯誤 ${r.stmt.summary.errors} 項、提醒 ${r.stmt.summary.warnings} 項。</p>` +
+        (r.stmt.issues.length ? `<div class="scroll"><table><thead><tr><th>檢核</th><th>科目</th><th>根因</th><th>問題</th><th>建議</th></tr></thead><tbody>${r.stmt.issues.map(i => `<tr><td class="mono">${i.ruleId}</td><td class="mono">${esc(i.code)}</td><td>${esc(i.chainRole || '')}</td><td>${esc(i.message)}</td><td>${esc((i.explain ? i.explain + ' ' : '') + i.suggestion)}</td></tr>`).join('')}</tbody></table></div>` : '');
+    }
+    return h;
   }
 
   return { toText, toCSV, toHTML, toRejectFile, topRules, fieldLabel };

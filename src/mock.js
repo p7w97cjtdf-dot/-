@@ -7,9 +7,11 @@
   const isNode = typeof module === 'object' && module.exports;
   const core = isNode ? require('./core.js') : root.DQ;
   const life = isNode ? require('./rulesets/life.js') : root.DQ.rulesets.life;
-  const m = factory(core, life);
+  const fin = isNode ? require('./rulesets/finance.js') : root.DQ.rulesets.finance;
+  const recon = isNode ? require('./recon.js') : root.DQ.recon;
+  const m = factory(core, life, fin, recon);
   if (isNode) module.exports = m; else root.DQ.mock = m;
-})(typeof self !== 'undefined' ? self : this, function (C, life) {
+})(typeof self !== 'undefined' ? self : this, function (C, life, fin, recon) {
   'use strict';
   const { buildLine, addYearsMinusDay, fmtDate, toDate, monthsBetween } = C;
   const L = life.layouts.L, D = life.layouts.D, ZIP = life.tables.zip;
@@ -118,11 +120,21 @@
       for (const r of recs) Ls.push(r);
     }
 
+    // 對帳情境：固定兩筆落在結帳邊界附近的給付 (6/30、12/30)
+    const reserved = new Set();
+    const edge = (pay, maxEvent) => {
+      const d = Ds.find(x => ['1', '2', '3'].includes(x.claimType) && !reserved.has(x.policyNo) && x.eventDate.startsWith(String(Y)) && x.eventDate <= maxEvent);
+      if (d) { d.payDate = pay; reserved.add(d.policyNo); }
+      return d;
+    };
+    const juneClaim = edge(`${Y}0630`, `${Y}0625`), yearEndClaim = edge(`${Y}1230`, `${Y}1225`);
+    const truthL = Ls.map(r => Object.assign({}, r));
+
     const key = [];
     let extraL = [];
     if (opts.inject) {
       const find = (pred, from) => Ls.findIndex((r, i) => i >= (from || 0) && pred(r));
-      const used = new Set();
+      const used = new Set(reserved);
       const take = pred => { const i = Ls.findIndex((r, k) => !used.has(Ls[k].policyNo) && pred(r)); if (i < 0) throw new Error('no candidate'); used.add(Ls[i].policyNo); return Ls[i]; };
       const takeD = pred => { const d = Ds.find(x => !used.has(x.policyNo) && pred(x)); if (!d) throw new Error('no claim candidate'); used.add(d.policyNo); return d; };
       const single = r => r.txnSeq === '00000' && ['EOY', 'XED'].includes(r.exitType);
@@ -162,7 +174,7 @@
       Ds.splice(Ds.indexOf(dea), 1);
       key.push({ file: 'L', policy: dea.policyNo.trim() + '/' + dea.policySeq.trim(), ruleId: '30301_LD012', desc: '疾病死亡(DEA)但給付檔漏報' });
       const d2 = takeD(d => d.claimType === '1' && !/^[V-Y]/.test(d.causeIcd));
-      inj('D', d2, '30312_LD019', '給付發生日期與承保退保日期不一致', d => { d.eventDate = plus(d.eventDate, -2); d.payDate = plus(d.eventDate, 10); });
+      inj('D', d2, '30312_LD019', '給付發生日期與承保退保日期不一致', d => { d.eventDate = plus(d.eventDate, -2); });
       const d3 = takeD(d => d.claimType === '1');
       inj('D', d3, '24101_D1303', '實際給付金額不同但不同原因填 0', d => { d.paidAmtOrig = String(BigInt(d.dueAmtOrig) + 1234500n).padStart(18, '0'); d.paidAmtTwd = d.currency === 'NTD' ? d.paidAmtOrig : d.paidAmtTwd; });
       const d4 = takeD(d => d.claimType === '1' && /^[V-Y]/.test(d.causeIcd));
@@ -184,6 +196,15 @@
       key.push({ file: 'L', policy: '', ruleId: 'F003', desc: '檔案中間有空白行' });
     }
 
+    // 結轉情境：復效時保額被改動但未以 INN/DNN 申報
+    const reconKey = [];
+    if (opts.inject) {
+      const rnn = Ls.slice().reverse().find(r => r.addType === 'RNN' && !reserved.has(r.policyNo) && !key.some(k => k.policy.startsWith(r.policyNo.trim())));
+      if (rnn) {
+        rnn.sumInsuredOrig = String(BigInt(rnn.sumInsuredOrig) * 6n / 5n); rnn.sumInsuredTwd = String(BigInt(rnn.sumInsuredTwd) * 6n / 5n);
+        reconKey.push({ module: 'roll', ruleId: 'P004', policy: rnn.policyNo.trim() + '/' + rnn.policySeq.trim(), desc: '復效(RNN)時保額變動，未以保額增加(INN)申報' });
+      }
+    }
     for (const e of extraL) Ls.splice(Ls.indexOf(e.after) + 1, 0, e.rec);
     const lines = Ls.map(r => {
       let s = buildLine(L, r);
@@ -192,8 +213,106 @@
     });
     if (opts.inject) lines.splice(Math.floor(lines.length / 2), 0, '');
     const dLines = Ds.map(r => buildLine(D, r));
-    return { L: lines.join('\n') + '\n', D: dLines.join('\n') + '\n', key,
-      names: { L: `LFL${CO}_${Y}.txt`, D: `LFD${CO}_${Y}.txt` } };
+    const out = { L: lines.join('\n') + '\n', D: dLines.join('\n') + '\n', key, reconKey,
+      names: { L: `LFL${CO}_${Y}.txt`, D: `LFD${CO}_${Y}.txt`, prior: `LFL${CO}_${Y - 1}.txt`, control: `控制總數_${Y}.csv`, statement: `資產負債表_${Y}.csv` } };
+    Object.assign(out, reconInputs(out, truthL, { Y, CO, inject: opts.inject, rand, ri, juneClaim, yearEndClaim, reconKey }));
+    return out;
+  }
+
+  // ---------- 對帳用輸入：上年度申報檔、上游控制總數、資產負債表 ----------
+  function reconInputs(out, truthL, o) {
+    const { Y, inject, ri, reconKey } = o;
+    const res = C.validate(life, { L: { name: out.names.L, text: out.L }, D: { name: out.names.D, text: out.D } });
+    const agg = recon.aggregate(res);
+    const keyOf = r => r.policyNo.trim() + '/' + r.policySeq.trim();
+    const amtOf = d => Number(d.paidAmtTwd);
+
+    // 上年度申報檔 (取自注入錯誤前的資料)
+    const firsts = new Map();
+    for (const r of truthL) if (!firsts.has(keyOf(r)) || r.txnSeq < firsts.get(keyOf(r)).txnSeq) firsts.set(keyOf(r), r);
+    let prior = [...firsts.values()].filter(r => ['XED', 'EOY'].includes(r.addType)).map(r => Object.assign({}, r, {
+      txnSeq: '00000', addType: r.startDate >= `${Y - 1}0101` ? 'NEW' : 'XED', addDate: r.startDate >= `${Y - 1}0101` ? r.startDate : '00000000',
+      exitType: r.startDate >= `${Y - 1}0101` ? 'XED' : 'EOY', exitDate: '00000000', lapseReason: 'N', paidMonths: '000' }));
+    if (inject) {
+      const pool = prior.slice().reverse().filter(r => !out.key.some(k => k.policy === keyOf(r)) && !reconKey.some(k => k.policy === keyOf(r)));
+      const lost = Object.assign({}, pool[0], { policyNo: `P${Y - 2001}LOST0001` });
+      prior.push(lost);
+      reconKey.push({ module: 'roll', ruleId: 'P001', policy: keyOf(lost), desc: '上年度期末有效保單，本年度漏報' });
+      const changed = pool[1];
+      prior[prior.indexOf(changed)] = Object.assign({}, changed, { sumInsuredOrig: String(BigInt(changed.sumInsuredOrig) * 4n / 5n), sumInsuredTwd: String(BigInt(changed.sumInsuredTwd) * 4n / 5n) });
+      reconKey.push({ module: 'roll', ruleId: 'P003', policy: keyOf(changed), desc: '本年度期初保額 ≠ 上年度期末保額 (上年度末增額未申報)' });
+      const dropped = pool[2];
+      prior = prior.filter(r => r !== dropped);
+      reconKey.push({ module: 'roll', ruleId: 'P002', policy: keyOf(dropped), desc: '本年度以持續有效(XED)申報，但上年度申報檔無此保單' });
+    }
+    const priorText = prior.map(r => buildLine(L, r)).join('\n') + '\n';
+
+    // 上游控制總數 (各系統依自己的結帳口徑)
+    const rows = [];
+    for (const [k, a] of agg) { const [item, period] = k.split('|'); rows.push({ item, period, cnt: a.cnt, amt: a.amt, recs: a.recs }); }
+    const row = (item, period) => rows.find(r => r.item === item && r.period === period) || (rows.push({ item, period, cnt: 0, amt: 0, recs: [] }), rows[rows.length - 1]);
+    const move = (claim, from, to) => { const a = row('CLM', from), b = row('CLM', to); a.cnt--; a.amt -= amtOf(claim); b.cnt++; b.amt += amtOf(claim); };
+    if (inject) {
+      if (o.juneClaim) { move(o.juneClaim, `${Y}-06`, `${Y}-07`); reconKey.push({ module: 'control', item: 'CLM', period: `${Y}-06`, status: '時間差', desc: '6/30 給付，理賠系統以入帳日計入 7 月' }, { module: 'control', item: 'CLM', period: `${Y}-07`, status: '時間差', desc: '同上 (相互抵銷)' }); }
+      if (o.yearEndClaim) { move(o.yearEndClaim, `${Y}-12`, `${Y + 1}-01`); reconKey.push({ module: 'control', item: 'CLM', period: `${Y}-12`, status: '時間差', desc: '12/30 給付，理賠系統計入次年 1 月 (跨年度)' }); }
+      const inf = row('INF', String(Y));
+      inf.amt = inf.recs.reduce((s, x) => s + (x.currency !== 'NTD' ? x.orig : x.amt), 0);
+      reconKey.push({ module: 'control', item: 'INF', period: String(Y), status: '定義差', desc: '保單管理系統外幣保單以原幣加總' });
+      const nb = row('NB', `${Y}-03`); nb.cnt += 1; nb.amt += 285000000;
+      reconKey.push({ module: 'control', item: 'NB', period: `${Y}-03`, status: '待查', desc: '新契約系統多 1 件 285 萬元，申報漏報' });
+    }
+    rows.sort((a, b) => a.item.localeCompare(b.item) || a.period.localeCompare(b.period));
+    const money = c => (c / 100).toFixed(2);
+    const control = '\uFEFF來源系統,項目代號,項目名稱,期間,筆數,金額\n' + rows.filter(r => r.cnt || r.amt).map(r => [recon.ITEMS[r.item].source, r.item, recon.ITEMS[r.item].name, r.period, r.cnt, money(r.amt)].join(',')).join('\n') + '\n';
+
+    // 資產負債表
+    const yi = n => n * 100;                                // 元 → 分
+    const bal = {};
+    const leaf = (code, open, inc, dec) => { bal[code] = { open, inc, dec, close: open + inc - dec }; };
+    const rnd = (a, b) => yi(ri(a, b) * 1000);
+    for (const c of ['1101', '1102', '1103', '1201', '1202', '1301', '1302', '1303', '1401', '1402', '1501', '1601']) { const op = rnd(200000, 9000000); leaf(c, op, rnd(10000, 900000), rnd(10000, 900000)); }
+    for (const c of ['2102', '2103', '2301', '2302', '2303', '2304', '2305', '2306', '2401']) { const op = rnd(100000, 5000000); leaf(c, op, rnd(10000, 600000), rnd(10000, 600000)); }
+    for (const c of ['3101', '3201', '3202', '3301']) leaf(c, rnd(100000, 900000), 0, 0);
+    const paid = res.data.D.filter(d => d._raw.length === life.layouts.D.recordLength && d.payDate.startsWith(String(Y))).reduce((s, d) => s + amtOf(d), 0);
+    leaf('2101', rnd(1000, 5000), paid + rnd(100, 900), paid);
+    const sumOf = (codes, k) => codes.reduce((s, c) => s + bal[c][k], 0);
+    const A = ['1101', '1102', '1103', '1201', '1202', '1301', '1302', '1303', '1401', '1402', '1501', '1601'];
+    const Lb = ['2101', '2102', '2103', '2301', '2302', '2303', '2304', '2305', '2306', '2401'];
+    const E = ['3101', '3201', '3202', '3301'];
+    const plugOpen = sumOf(A, 'open') - sumOf(Lb, 'open') - sumOf(E, 'open'), plugClose = sumOf(A, 'close') - sumOf(Lb, 'close') - sumOf(E, 'close');
+    bal['3203'] = { open: plugOpen, inc: Math.max(plugClose - plugOpen, 0), dec: Math.max(plugOpen - plugClose, 0), close: plugClose };
+    if (inject && o.yearEndClaim) {
+      const x = amtOf(o.yearEndClaim);
+      bal['2101'].dec -= x; bal['2101'].close += x;      // 12/30 給付，會計次年入帳
+      bal['1102'].inc += x; bal['1102'].close += x;
+      reconKey.push({ module: 'stmt', ruleId: 'S008', code: '2101', desc: '應付保險給付與給付明細差一筆 12/30 給付 (會計次年入帳)' });
+    }
+    const totals = () => {
+      for (const a of fin.chart.slice().reverse()) if (!a.until && !bal[a.code]) {
+        const kids = fin.children(a.code).filter(k => bal[k.code]);
+        bal[a.code] = ['open', 'inc', 'dec', 'close'].reduce((o2, k) => (o2[k] = kids.reduce((s, c) => s + bal[c.code][k], 0), o2), {});
+      }
+    };
+    totals();
+    const codeMap = {}, typo = {};
+    if (inject) {
+      // 責任準備金期末餘額數字對調，上層小計以公式帶出 → 本列結轉不符 + 資產負債表不平
+      const c = bal['2303'], s = String(c.close / 100);
+      let i = 2; while (i < s.length - 1 && s[i] === s[i + 1]) i++;
+      const t = s.slice(0, i) + s[i + 1] + s[i] + s.slice(i + 2), d = Number(t) * 100 - c.close;
+      c.close += d; bal['23'].close += d; bal['2'].close += d;
+      reconKey.push({ module: 'stmt', ruleId: 'S003', code: '2303', desc: '責任準備金期末餘額數字對調' }, { module: 'stmt', ruleId: 'S005', code: '1', desc: '連帶造成資產負債表不平' });
+      codeMap['1302'] = '1304'; reconKey.push({ module: 'stmt', ruleId: 'S002', code: '1304', desc: '使用 IFRS 9 後已停用之「備供出售金融資產」' });
+      codeMap['1401'] = '1410'; reconKey.push({ module: 'stmt', ruleId: 'S001', code: '1410', suggest: '1401', desc: '科目代號誤植 (1401 → 1410)' });
+      void typo;
+    }
+    const lines2 = fin.chart.filter(a => !a.until && bal[a.code]).map(a => {
+      const b = bal[a.code], code = codeMap[a.code] || a.code;
+      const name = codeMap[a.code] && fin.byCode.get(code) ? fin.byCode.get(code).name : a.name;
+      return [code, name, money(b.open), money(b.inc), money(b.dec), money(b.close)].join(',');
+    });
+    const statement = '\uFEFF科目代號,科目名稱,期初餘額,本期增加,本期減少,期末餘額\n' + lines2.join('\n') + '\n';
+    return { prior: priorText, control, statement };
   }
 
   return { generate };
