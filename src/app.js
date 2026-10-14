@@ -87,12 +87,15 @@
     state.key = inject ? g.key : null; state.reconKey = inject ? g.reconKey : null; state.masterKey = inject ? g.masterKey : null;
     run();
   }
-  $('#btn-dirty').onclick = () => loadSample(true);
+  // 範例：載入後直接選第一個問題，右側就有說明可看
+  const firstIssue = () => { const i = state.res.issues.find(x => x.line && x.fields.length); if (i) select(i.id, true); };
+  $('#btn-dirty').onclick = () => { loadSample(true); firstIssue(); };
   $('#btn-clean').onclick = () => loadSample(false);
 
   // ---------- 執行 ----------
   function run() {
     const f = state.files;
+    document.body.classList.remove('no-data');
     const t0 = performance.now();
     state.res = DQ.validate(activeRules(), { L: f.L, D: f.D });
     // 客戶資料、商品資料：指向承保檔某一列的問題併入明細檢核 (可用欄位尺規與自動修正)
@@ -213,7 +216,7 @@
     const el = $('#detail');
     const i = state.res && state.all.find(x => x.id === state.sel);
     if (!i) {
-      el.innerHTML = `<h3>點左邊任一個問題</h3><p class="hint">這裡會說明問題在哪裡、建議怎麼改，並顯示那一行資料的內容。</p><p class="hint">「·」代表空白；黃色是有問題的地方。</p>`;
+      el.innerHTML = `<h3>點左邊任一個問題</h3><p class="hint">這裡會說明問題在哪裡、建議怎麼改，需要時可以展開那一行的原始資料。</p>`;
       return;
     }
     const lay = rs.layouts[i.file] || { title: i.sheet, recordLength: -1, fields: [], field: () => null, keyOf: () => '' };
@@ -222,6 +225,9 @@
     const all = okLen ? lay.fields.map(f => ({ f, hit: i.fields.includes(f.key) })) : [];
     const hits = all.filter(x => x.hit), rest = all.filter(x => !x.hit);
     const row = ({ f, hit }) => `<tr class="${hit ? 'hit' : ''}"><td class="num">${f.no}</td><td>${esc(f.name)}</td><td class="num mono">${f.start}-${f.start + f.len - 1}</td><td class="v">${esc(rec[f.key])}</td></tr>`;
+    // 原始資料預設收合；摘要顯示出問題欄位的字元起迄 (多個欄位分別列出，例：第 87–94、117–124 字)
+    const spans = hits.map(x => x.f).sort((a, b) => a.start - b.start).map(f => f.len > 1 ? `${f.start}–${f.start + f.len - 1}` : `${f.start}`);
+    const range = spans.length ? `（第 ${spans.join('、')} 字）` : '';
     const siblings = okLen && i.file === 'L' ? state.res.data.L.filter(r => r !== rec && r._raw.length === lay.recordLength && lay.keyOf(r) === lay.keyOf(rec)) : [];
     el.innerHTML = `
       <div><span class="badge ${i.severity}">${SEV[i.severity]}</span> <span class="hint">${esc(LB.SEV_HINT[i.severity] || '')}</span></div>
@@ -231,13 +237,17 @@
         <dt>位置</dt><dd>${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}</dd>
         <dt>欄位</dt><dd>${esc(DQ.report.fieldLabel(rs, i) || '-')}</dd>
         ${i.value !== '' ? `<dt>目前的值</dt><dd class="mono">${esc(String(i.value).replace(/ /g, '·'))}</dd>` : ''}
+        ${i.fix ? `<dt>建議修正值</dt><dd class="mono fixval">${esc(i.fix.value)}</dd>` : ''}
         <dt>規則編號</dt><dd class="mono">${esc(i.ruleId)}${i.ref ? `<span class="hint">（${esc(i.ref)}）</span>` : ''}</dd>
       </dl>
       <div class="fixbox"><div><b>建議怎麼改：</b>${esc(i.suggestion || '請人工確認')}</div>
         ${i.fix && state.res.issues.includes(i) ? `<div><button class="btn small" id="btn-fix-one">改成建議的值</button> <span class="mono hint">${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}</span></div>` : ''}</div>
-      ${rec ? `<div><div class="label">這一行的原始內容（左邊數字是第幾個字）</div><div class="ruler">${ruler(lay, rec._raw, i.fields)}</div></div>` : ''}
-      ${hits.length ? `<table class="fields"><tbody>${hits.map(row).join('')}</tbody></table>` : ''}
-      ${rest.length ? `<details><summary class="hint">看這一行的其他 ${rest.length} 個欄位</summary><table class="fields"><tbody>${rest.map(row).join('')}</tbody></table></details>` : ''}
+      ${rec ? `<details class="raw"><summary>顯示原始資料${range}</summary>
+        <p class="hint">左邊數字是第幾個字；「·」代表空白；黃色是有問題的地方。</p>
+        <div class="ruler">${ruler(lay, rec._raw, i.fields)}</div>
+        ${hits.length ? `<table class="fields"><tbody>${hits.map(row).join('')}</tbody></table>` : ''}
+        ${rest.length ? `<details><summary class="hint">看這一行的其他 ${rest.length} 個欄位</summary><table class="fields"><tbody>${rest.map(row).join('')}</tbody></table></details>` : ''}
+      </details>` : ''}
       ${siblings.length ? `<div><div class="label">同一張保單的其他資料</div><table class="fields"><tbody>${[rec].concat(siblings).sort((a, b) => a.txnSeq.localeCompare(b.txnSeq)).map(r => `<tr class="${r === rec ? 'hit' : ''}"><td class="num">第${r._line}行</td><td class="v">${r.txnSeq}</td><td class="v">${r.addType} ${r.addDate}</td><td class="v">→ ${r.exitType} ${r.exitDate}</td></tr>`).join('')}</tbody></table></div>` : ''}
       <div><button class="btn ghost small ai-btn" id="btn-explain">請 AI 用白話解釋</button><p class="ai-notice">按下後會把這個問題和相關欄位送給 AI（Claude），不會送出整筆資料。</p><div class="ask" id="explain-out"></div></div>`;
     const one = $('#btn-fix-one');
@@ -468,7 +478,8 @@
     setCustomRules(rules) { state.customRules = rules; try { localStorage.setItem('dq-custom-rules', JSON.stringify(rules)); } catch (e) { /* ignore */ } run(); },
   };
 
-  loadSample(true);
-  if (state.res.issues.length) select(state.res.issues.find(i => i.line && i.fields.length).id, true);
+  // 打開時不載入任何資料：只顯示拖放框與範例按鈕
+  document.body.classList.add('no-data');
+  $('#sample-note').textContent = '還沒有資料。把 Excel 拖到上方的框，或先按範例看看效果。';
   if (['check', 'recon', 'decode', 'report', 'rules'].includes(hash)) showTab(hash);
 })();

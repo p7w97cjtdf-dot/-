@@ -345,3 +345,19 @@ td .pill { border-radius: 0; background: transparent; border: 1px solid var(--go
 .back { align-self: flex-start; background: none; border: 0; padding: 6px 0; color: var(--mut); letter-spacing: .06em; font-size: 13px; min-height: 44px; }
 .back:hover { color: var(--fg); }
 .foot { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 8px; }
+
+/* 原始資料預設收合 */
+details.raw { border-top: 1px solid var(--line); padding-top: 4px; }
+details.raw > summary { min-height: 44px; display: flex; align-items: center; font-size: 14px; letter-spacing: .04em; color: var(--fg); }
+details.raw > summary:hover { color: var(--gold); }
+details.raw[open] > summary { margin-bottom: 4px; }
+details.raw > .hint { margin: 0 0 6px; }
+details.raw > .ruler, details.raw > .fields { margin-bottom: 8px; }
+.kv dd.fixval { color: var(--gold); font-weight: 600; }
+
+/* 打開時還沒有資料：只顯示拖放框與範例按鈕 */
+body.no-data #view-check, body.no-data .view, body.no-data .tabs.advanced { display: none; }
+details.raw > summary { list-style: none; gap: 8px; }
+details.raw > summary::-webkit-details-marker { display: none; }
+details.raw > summary::before { content: "▸"; color: var(--gold); width: 1em; }
+details.raw[open] > summary::before { content: "▾"; }
