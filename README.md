@@ -26,6 +26,10 @@ THEME 6 | Finance, Actuarial & Data Management — **6-2 資料品質與檢核�
 - 在頁面「AI 分析」欄位貼上 key，只會存在自己的瀏覽器。
 - 本機展示用：把 `config.example.js` 複製成 `config.local.js` 並填入 key，頁面開啟時自動帶入。`config.local.js` 已列入 `.gitignore`，**不要把 key commit 到 GitHub 或放進公開網頁**，任何能開啟頁面的人都看得到瀏覽器端的 key。
 
+## 線上版
+
+線上版：https://claude.ai/artifact/5S7mth9Cc6eoRnirRjBMDW（需由擁有者在頁面的「分享」選單開放權限）。線上版的 AI 功能使用開啟者自己的 Claude 帳號，不需要 API key；第一次使用時會詢問是否允許。重新打包：`node tools/build-artifact.js dist/index.html`。
+
 ## 快速開始
 
 直接用瀏覽器開啟 `index.html`，頁面已載入一組含錯誤與差異的模擬資料（5 個檔案）。

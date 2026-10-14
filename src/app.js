@@ -8,7 +8,7 @@
   const SEV = { error: '錯誤', warning: '警告' };
   const FILE = { L: '承保', D: '給付', S: '財報', R: '對帳' };
   const yuan = R.yuan;
-  const INTRO = '規則引擎已完成逐欄檢核與對帳。按「產生 AI 分析摘要」，由 Claude 歸納錯誤的根本原因、修正優先順序與退件風險。';
+  let INTRO = '規則引擎已完成逐欄檢核與對帳。按「產生 AI 分析摘要」，由 Claude 歸納錯誤的根本原因、修正優先順序與退件風險。';
 
   const state = { files: {}, res: null, sel: null, cat: '' };
 
@@ -162,14 +162,21 @@
     if (one) one.onclick = () => applyFix([i.id]);
     $('#btn-explain').onclick = async () => {
       const key = apiKey(), out = $('#explain-out');
-      if (!key) { out.textContent = '請先在上方「AI 分析」輸入 Anthropic API key。'; return; }
+      if (!key && !DQ.ai.usesPlatform()) { out.textContent = '請先在上方「AI 分析」輸入 Anthropic API key。'; return; }
       out.textContent = 'Claude 分析中…';
       try { out.textContent = await DQ.ai.explain(key, rs, state.res, i); } catch (e) { out.textContent = 'AI 呼叫失敗：' + e.message; }
     };
   }
 
   // ---------- 修正 / 下載 ----------
-  function download(name, text, type) {
+  let saver = null;
+  if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { saver = d; }, () => {});
+  async function download(name, text, type) {
+    if (saver) {
+      try { await saver.save({ filename: name, data: text }); }
+      catch (e) { $('#action-note').textContent = e && e.code === 'declined' ? '已取消下載。' : '此處無法下載檔案。'; }
+      return;
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type: type || 'text/plain;charset=utf-8' }));
     a.download = name; document.body.appendChild(a); a.click();
@@ -280,7 +287,7 @@
     const key = apiKey(), out = $('#dec-ai');
     if (!$('#dec-text').value.trim()) { out.textContent = '請先貼上退件訊息。'; return; }
     if (!state.decoded) decodeNow();
-    if (!key) { out.textContent = '請先在「明細檢核」分頁的 AI 分析輸入 Anthropic API key。'; return; }
+    if (!key && !DQ.ai.usesPlatform()) { out.textContent = '請先在「明細檢核」分頁的 AI 分析輸入 Anthropic API key。'; return; }
     out.className = 'ai-out'; out.textContent = 'Claude 正在解讀退件訊息…';
     try { out.textContent = await DQ.ai.decode(key, $('#dec-text').value, state.decoded); out.className = 'ai-out done'; } catch (e) { out.textContent = 'AI 呼叫失敗：' + e.message; }
   };
@@ -296,7 +303,7 @@
   if (!$('#api-key').value && window.DQ_CONFIG && window.DQ_CONFIG.apiKey) $('#api-key').value = window.DQ_CONFIG.apiKey;
   $('#btn-ai').onclick = async () => {
     const key = apiKey(), out = $('#ai-out');
-    if (!key) { out.textContent = '請輸入 Anthropic API key。金鑰只保存在你的瀏覽器，用來直接呼叫 Claude API。'; return; }
+    if (!key && !DQ.ai.usesPlatform()) { out.textContent = '請輸入 Anthropic API key。金鑰只保存在你的瀏覽器，用來直接呼叫 Claude API。'; return; }
     $('#btn-ai').disabled = true; out.className = 'ai-out'; out.textContent = 'Claude 正在分析檢核與對帳結果…';
     try {
       state.aiSummary = await DQ.ai.summarize(key, rs, state.res, { ctl: state.ctl, roll: state.roll, stmt: state.stmt });
@@ -328,6 +335,15 @@
   }
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.view));
   const hash = (location.hash || '').slice(1);
+
+  // 線上頁面：使用平台內建 Claude，隱藏 API key 欄位
+  DQ.ai.ready.then(ok => {
+    if (!ok) return;
+    $('#api-key').hidden = true;
+    const was = $('#ai-out').textContent === INTRO;
+    INTRO += '（使用你的 Claude 帳號，不需 API key；第一次使用時會詢問是否允許。）';
+    if (was) $('#ai-out').textContent = INTRO;
+  });
 
   loadSample(true);
   if (state.res.issues.length) select(state.res.issues.find(i => i.line && i.fields.length).id);

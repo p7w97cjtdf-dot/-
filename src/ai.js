@@ -20,7 +20,19 @@
 使用者會提供規則引擎的檢核結果。請用繁體中文、以壽險公司精算/資訊人員看得懂的方式回答。
 只根據提供的資料推論，不要捏造不存在的錯誤；不確定時說明需要人工確認的地方。`;
 
+  // 在 claude.ai 線上頁面中改用平台內建的 Claude (sample)，使用者不需 API key
+  let platform = null;
+  const ready = (async () => {
+    try { if (root.claude && root.claude.use) platform = await root.claude.use('sample'); } catch (e) { platform = null; }
+    return !!platform;
+  })();
+
   async function ask(apiKey, prompt) {
+    if (platform) {
+      const out = await platform(`${SYSTEM}\n\n${prompt}`, { modelTier: 'default' });
+      return out.text.trim();
+    }
+    if (!apiKey) throw new Error('需要 Anthropic API key');
     const c = await client(apiKey);
     const msg = await c.beta.messages.create({
       model: MODEL,
@@ -105,5 +117,5 @@ ${JSON.stringify(brief)}
   }
 
   root.DQ = root.DQ || {};
-  root.DQ.ai = { summarize, explain, decode, MODEL };
+  root.DQ.ai = { summarize, explain, decode, MODEL, ready, usesPlatform: () => !!platform };
 })(typeof self !== 'undefined' ? self : this);
