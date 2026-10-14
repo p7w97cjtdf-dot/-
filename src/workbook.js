@@ -31,12 +31,36 @@
     };
   }
 
-  // 依工作表名稱分配：回傳 { slot: csv文字 } 與 { slot: 工作表名稱 }
+  // 名稱看不出來時，改看第一列標題 (例如使用者把工作表命名為 Sheet1)
+  function bySignature(head) {
+    const h = new Set(head.map(x => String(x || '').replace(/^\uFEFF/, '').trim()));
+    const has = (...k) => k.every(x => h.has(x));
+    if (has('給付類別', '保單編號')) return 'D';
+    if (has('加保別', '退保別', '保單編號')) return 'L';
+    if (has('角色', '姓名', '證件編號')) return 'customers';
+    if (has('商品代號', '停售日')) return 'products';
+    if (has('來源系統', '項目代號')) return 'control';
+    if (has('科目代號', '期末餘額')) return 'statement';
+    return null;
+  }
+  // 依工作表名稱分配，名稱不符時依標題列判斷：回傳 { slot: csv文字 } 與 { slot: 工作表名稱 }
+  // 兩張工作表都像保單資料、又沒有名稱可判斷時，日期較早的那張當作去年保單資料
   function slots(XLSX, wb) {
-    const got = {}, from = {};
+    const got = {}, from = {}, unknown = [];
     for (const name of wb.SheetNames) {
       const hit = SHEET_SLOT.find(([k]) => name.includes(k));
-      if (hit && !got[hit[1]]) { got[hit[1]] = XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false }); from[hit[1]] = name; }
+      if (hit && !got[hit[1]]) { got[hit[1]] = XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false, rawNumbers: true }); from[hit[1]] = name; }
+      else if (!hit) unknown.push(name);
+    }
+    for (const name of unknown) {
+      const head = (XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false })[0]) || [];
+      let slot = bySignature(head);
+      if (slot === 'L' && got.L) slot = got.prior ? null : 'prior';
+      if (slot && !got[slot]) { got[slot] = XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false, rawNumbers: true }); from[slot] = name; }
+    }
+    if (got.L && got.prior && !SHEET_SLOT.some(([k, v]) => v === 'prior' && from.prior.includes(k))) {
+      const lastYear = csvText => { const r = C.parseFixedWidth(C.csvToFixedWidth(csvText, L), L).records; return r.map(x => x.startDate).filter(d => C.isValidDate(d)).sort().pop() || ''; };
+      if (lastYear(got.prior) > lastYear(got.L)) { [got.L, got.prior] = [got.prior, got.L]; [from.L, from.prior] = [from.prior, from.L]; }
     }
     return { got, from };
   }

@@ -33,9 +33,12 @@
     return fallback;
   }
   // Excel 活頁簿：依工作表名稱分配到各檔案 (src/workbook.js)
+  const BOOK = /\.(xlsx|xlsm|xls|ods)$/i;
   async function readWorkbook(file) {
-    if (!window.XLSX) { $('#sample-note').textContent = '讀取 Excel 需要連上網路，請確認網路後重新整理頁面。'; return; }
-    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    if (!window.XLSX) { $('#sample-note').textContent = '讀取 Excel 的元件沒有載入成功（可能是網路或公司防火牆擋住）。請確認網路後重新整理頁面，或請 IT 開放 cdnjs.cloudflare.com。'; return; }
+    let wb;
+    try { wb = XLSX.read(await file.arrayBuffer(), { type: 'array' }); }
+    catch (e) { $('#sample-note').textContent = `「${file.name}」無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次。`; return; }
     const { got, from } = DQ.workbook.slots(XLSX, wb);
     if (!Object.keys(got).length) { $('#sample-note').textContent = `「${file.name}」裡找不到可以辨識的工作表。工作表名稱需包含：保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數或資產負債表`; return; }
     const fs = DQ.workbook.files(got);
@@ -44,24 +47,28 @@
     $('#sample-note').textContent = `已讀取「${file.name}」的 ${Object.keys(got).length} 張工作表：${Object.keys(got).map(k => from[k]).join('、')}`;
     run();
   }
-  function readFile(fid, file) {
-    if (/\.xlsx$/i.test(file.name)) { readWorkbook(file); return; }
-    const fr = new FileReader();
-    fr.onload = () => { setFile(fid, file.name, String(fr.result)); run(); };
-    fr.readAsText(file, 'utf-8');
+  // 文字檔與 CSV：先當 UTF-8 讀，失敗時改用 Big5 (Windows 的 Excel「另存 CSV」預設是 Big5)
+  function decodeText(buf) {
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^\uFEFF/, ''); }
+    catch (e) { return new TextDecoder('big5').decode(buf); }
+  }
+  async function readFile(fid, file) {
+    if (BOOK.test(file.name)) { readWorkbook(file); return; }
+    setFile(fid, file.name, decodeText(await file.arrayBuffer()));
+    run();
   }
   for (const fid of SLOTS) {
     const input = $('#file-' + fid), drop = $('#drop-' + fid);
     input.addEventListener('change', () => input.files[0] && readFile(fid, input.files[0]));
     drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-    drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); for (const f of e.dataTransfer.files) readFile(guessSlot(f.name, fid), f); });
+    drop.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove('over'); for (const f of e.dataTransfer.files) readFile(guessSlot(f.name, fid), f); });
   }
   // 上方的大框：Excel 依工作表名稱分配；文字檔、CSV 依檔名判斷是哪一份資料
   function readMany(files) {
     const unknown = [];
     for (const f of files) {
-      if (/\.xlsx$/i.test(f.name)) { readWorkbook(f); continue; }
+      if (BOOK.test(f.name)) { readWorkbook(f); continue; }
       const slot = guessSlot(f.name, null);
       if (slot) readFile(slot, f); else unknown.push(f.name);
     }
@@ -74,7 +81,10 @@
   const book = $('#drop-book');
   book.addEventListener('dragover', e => { e.preventDefault(); book.classList.add('over'); });
   book.addEventListener('dragleave', () => book.classList.remove('over'));
-  book.addEventListener('drop', e => { e.preventDefault(); book.classList.remove('over'); readMany([...e.dataTransfer.files]); });
+  book.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); book.classList.remove('over'); readMany([...e.dataTransfer.files]); });
+  // 檔案沒拖進框內時，瀏覽器預設會直接打開檔案、離開這個頁面：改成一樣讀取
+  document.addEventListener('dragover', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+  document.addEventListener('drop', e => { if (!e.dataTransfer || !e.dataTransfer.files.length) return; e.preventDefault(); if (!e.target.closest('.drop')) readMany([...e.dataTransfer.files]); });
 
   function loadSample(inject) {
     const g = DQ.mock.generate({ inject });
@@ -93,8 +103,15 @@
   $('#btn-clean').onclick = () => loadSample(false);
 
   // ---------- 執行 ----------
+  const SLOT_NAME = { L: '保單資料', D: '理賠資料', prior: '去年保單資料', control: '系統總數', statement: '資產負債表', products: '商品資料', customers: '客戶資料' };
   function run() {
     const f = state.files;
+    // 沒有保單資料也沒有理賠資料時無法檢查：說明還缺什麼，不顯示「0 個問題」
+    if (!f.L && !f.D) {
+      document.body.classList.add('no-data');
+      $('#sample-note').textContent = `已放入：${Object.keys(f).filter(k => f[k]).map(k => SLOT_NAME[k]).join('、')}。還需要保單資料或理賠資料才能開始檢查。`;
+      return;
+    }
     document.body.classList.remove('no-data');
     const t0 = performance.now();
     state.res = DQ.validate(activeRules(), { L: f.L, D: f.D });

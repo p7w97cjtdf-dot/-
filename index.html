@@ -21,7 +21,7 @@
     <label class="drop big" id="drop-book" for="file-book">
       <span class="drop-k">把 Excel 檔拖到這裡，或點這裡選擇檔案</span>
       <span class="drop-h">工作表名稱含「保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數、資產負債表」就會自動分好；也可以一次放入多個文字檔或 CSV。</span>
-      <input type="file" id="file-book" accept=".xlsx,.txt,.csv" multiple>
+      <input type="file" id="file-book" accept=".xlsx,.xls,.xlsm,.ods,.txt,.csv" multiple>
     </label>
     <div class="samples">
       <span class="label">先看範例</span>
@@ -32,13 +32,13 @@
     <details class="more">
       <summary>分別放入各份資料（進階）</summary>
       <div class="upload">
-        <label class="drop" id="drop-L" for="file-L"><span class="drop-k">保單資料</span><span class="drop-n" id="name-L">尚未放入</span><span class="drop-h">每張保單的申報資料</span><input type="file" id="file-L" accept=".txt,.csv,.xlsx"></label>
-        <label class="drop" id="drop-D" for="file-D"><span class="drop-k">理賠資料</span><span class="drop-n" id="name-D">尚未放入</span><span class="drop-h">每筆理賠給付的申報資料</span><input type="file" id="file-D" accept=".txt,.csv,.xlsx"></label>
-        <label class="drop opt" id="drop-prior" for="file-prior"><span class="drop-k">去年保單資料</span><span class="drop-n" id="name-prior">尚未放入</span><span class="drop-h">確認去年底和今年初接得上</span><input type="file" id="file-prior" accept=".txt,.csv,.xlsx"></label>
-        <label class="drop opt" id="drop-control" for="file-control"><span class="drop-k">系統總數</span><span class="drop-n" id="name-control">尚未放入</span><span class="drop-h">各系統的筆數與金額總數</span><input type="file" id="file-control" accept=".csv,.xlsx"></label>
-        <label class="drop opt" id="drop-statement" for="file-statement"><span class="drop-k">資產負債表</span><span class="drop-n" id="name-statement">尚未放入</span><span class="drop-h">檢查報表加總</span><input type="file" id="file-statement" accept=".csv,.xlsx"></label>
-        <label class="drop opt" id="drop-products" for="file-products"><span class="drop-k">商品資料</span><span class="drop-n" id="name-products">尚未放入</span><span class="drop-h">商品代號、停售日</span><input type="file" id="file-products" accept=".csv,.xlsx"></label>
-        <label class="drop opt" id="drop-customers" for="file-customers"><span class="drop-k">客戶資料</span><span class="drop-n" id="name-customers">尚未放入</span><span class="drop-h">要保人、被保險人</span><input type="file" id="file-customers" accept=".csv,.xlsx"></label>
+        <label class="drop" id="drop-L" for="file-L"><span class="drop-k">保單資料</span><span class="drop-n" id="name-L">尚未放入</span><span class="drop-h">每張保單的申報資料</span><input type="file" id="file-L" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop" id="drop-D" for="file-D"><span class="drop-k">理賠資料</span><span class="drop-n" id="name-D">尚未放入</span><span class="drop-h">每筆理賠給付的申報資料</span><input type="file" id="file-D" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-prior" for="file-prior"><span class="drop-k">去年保單資料</span><span class="drop-n" id="name-prior">尚未放入</span><span class="drop-h">確認去年底和今年初接得上</span><input type="file" id="file-prior" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-control" for="file-control"><span class="drop-k">系統總數</span><span class="drop-n" id="name-control">尚未放入</span><span class="drop-h">各系統的筆數與金額總數</span><input type="file" id="file-control" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-statement" for="file-statement"><span class="drop-k">資產負債表</span><span class="drop-n" id="name-statement">尚未放入</span><span class="drop-h">檢查報表加總</span><input type="file" id="file-statement" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-products" for="file-products"><span class="drop-k">商品資料</span><span class="drop-n" id="name-products">尚未放入</span><span class="drop-h">商品代號、停售日</span><input type="file" id="file-products" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-customers" for="file-customers"><span class="drop-k">客戶資料</span><span class="drop-n" id="name-customers">尚未放入</span><span class="drop-h">要保人、被保險人</span><input type="file" id="file-customers" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
       </div>
     </details>
   </section>
@@ -232,6 +232,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>window.XLSX || document.write('<script src="vendor/xlsx.full.min.js"><\/script>');</script>
 <script src="rules/rules.js"></script>
 <script src="src/labels.js"></script>
 <script src="src/core.js"></script>
@@ -252,5 +253,15 @@
 <script src="src/ai.js"></script>
 <script src="src/app.js"></script>
 <script src="src/app-import.js"></script>
+<script>
+// 找不到程式檔時 (例如直接在壓縮檔裡開啟 index.html，或只複製了這一個檔案)，畫面會出現但按鈕沒有反應：在頁首說明原因
+if (!window.DQ || !window.DQ.app) {
+  var d = document.createElement('div');
+  d.setAttribute('role', 'alert');
+  d.style.cssText = 'margin:16px;padding:14px 16px;border:2px solid #B91C1C;background:#FEF2F2;color:#7F1D1D;font:15px/1.6 system-ui,"Microsoft JhengHei",sans-serif';
+  d.innerHTML = '<b>工具沒有完整開啟，所以放入資料後不會有反應。</b><br>找不到程式檔（src、rules 資料夾）。請先把整個資料夾<b>解壓縮</b>，再開啟資料夾裡的 index.html；index.html 必須和 src、rules、vendor 資料夾放在同一個資料夾裡。';
+  document.body.insertBefore(d, document.body.firstChild);
+}
+</script>
 </body>
 </html>

@@ -74,6 +74,15 @@ AI 說明**不需要 API key**：只在 claude.ai 的線上版提供，使用開
 
 配色與字體採用 UI UX Pro Max 的「E-commerce Luxury」（石墨黑、金色點綴、米白底；標題 Cormorant＋思源宋體），規範見 `design-system/filing-validation-assistant/pages/tool.md`。
 
+## 放入資料沒有反應時
+
+- **畫面上方出現紅框「工具沒有完整開啟」**：`index.html` 旁邊找不到 `src`、`rules`、`vendor` 資料夾。常見原因是直接在壓縮檔裡點開，或只複製了 `index.html`。請先解壓縮整個資料夾再開啟。
+- **讀不了 Excel**：工具先從 cdnjs 載入 SheetJS，被網路或公司防火牆擋住時，會自動改用 `vendor/xlsx.full.min.js`（同版本）。
+- 支援 `.xlsx`、`.xls`、`.xlsm`、`.ods`；工作表名稱不是預設名稱（例如 Sheet1）時，會依第一列的欄位名稱判斷是哪一份資料。
+- CSV、文字檔先用 UTF-8 讀，失敗時自動改用 Big5（Windows 的 Excel「另存 CSV」預設是 Big5）。
+- 只放了客戶、商品等資料、沒有保單或理賠資料時，會提示還缺什麼，不會顯示「0 個問題」。
+- 檔案沒拖進框內也會讀取，不會讓瀏覽器直接打開那個檔案。
+
 ## 用語
 
 畫面、報告與 Excel 一律使用白話（對照表在 `src/labels.js`）：錯誤／警告／疑似異常分別顯示為「必須修改／建議確認／請人工判斷」；問題類別如「單筆邏輯」顯示為「同一筆資料前後矛盾」；和系統總數比對的「時間差／定義差／待查」顯示為「結帳日不同／算法不同／需要追查」。檢查程式內部仍使用原本的名稱。
@@ -157,6 +166,7 @@ tools/validate.js          命令列檢核 (stderr 輸出檢核耗時)
 tools/bench.js             計時
 docs/index.html            介紹頁 (landing page)
 rules/source/              主辦單位填報手冊 (本機，不進版控)
+vendor/                    備用的 SheetJS (cdnjs 載不到時使用)
 tests/                     node:test 測試
 samples/                   clean/ 正確範例、dirty/ 含錯誤範例
 ```
