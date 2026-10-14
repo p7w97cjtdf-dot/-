@@ -35,7 +35,7 @@
   </table>
 
   <h2>用實際的 Excel 檔再測一次（選用）</h2>
-  <p class="hint">選擇 <span class="mono">samples/excel/試用資料_含錯誤.xlsx</span> 與 <span class="mono">試用資料_正確.xlsx</span>（可一次選兩個）。有「錯誤解答」工作表的視為含錯誤版。</p>
+  <p class="hint">選擇 <span class="mono">samples/excel/</span> 裡的試用資料（可一次選多個，例如 <span class="mono">試用資料_含錯誤.xlsx</span>、<span class="mono">試用資料_1000張_含錯誤.xlsx</span> 與對應的正確版）。有「錯誤解答」工作表的視為含錯誤版。</p>
   <label class="file">選擇 Excel 檔…<input type="file" id="xlsx" accept=".xlsx" multiple></label>
   <table><tbody id="rows-file"></tbody></table>
 </main>
@@ -118,6 +118,11 @@
     });
     safe('rows', '正確版（Excel 往返）', () => cleanRow('rows', '正確版（Excel 往返）', T.checkClean(T.full(viaExcel(DQ.mock.generate({})).files))));
   } else row('rows', 'Excel 往返測試（SheetJS 未載入，請確認網路連線）', '-', 'SKIP');
+  safe('rows', '其他資料組', () => {
+    const big = { seed: 2026, policies: 1000 };
+    dirtyRows('rows', '含錯誤版（1000 張保單）', T.checkDirty(DQ.mock.generate(Object.assign({ inject: true }, big)), T.full(T.filesOf(DQ.mock.generate(Object.assign({ inject: true }, big))))), false);
+    cleanRow('rows', '正確版（1000 張保單）', T.checkClean(T.full(T.filesOf(DQ.mock.generate(big)))));
+  });
   const ms = performance.now() - t0;
 
   function finish() {
@@ -138,7 +143,11 @@
       try {
         const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
         const { got } = W.slots(XLSX, wb), r = T.full(W.files(got));
-        if (wb.SheetNames.includes('錯誤解答')) dirtyRows('rows-file', f.name, T.checkDirty(dirty, r, { excel: true }), true);
+        // 說明工作表記有資料組 (seed、policies)，用同一組參數重建錯誤解答來對照；沒有時視為預設試用資料
+        const note = wb.Sheets['說明'] ? XLSX.utils.sheet_to_csv(wb.Sheets['說明']) : '';
+        const m = note.match(/seed=(\d+), policies=(\d+)/);
+        const ds = m ? { seed: +m[1], policies: +m[2] } : {};
+        if (wb.SheetNames.includes('錯誤解答')) dirtyRows('rows-file', f.name, T.checkDirty(DQ.mock.generate(Object.assign({ inject: true }, ds)), r, { excel: true }), true);
         else cleanRow('rows-file', f.name, T.checkClean(r));
       } catch (err) { row('rows-file', f.name, '執行錯誤', 'FAIL', `<pre>${esc(err.stack || err.message)}</pre>`); }
       finish();

@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 // 匯出試用活頁簿的資料 (JSON)，供 tools/build_workbook.py 產生 Excel
-// 用法：node tools/export-workbook.js [--clean] > data.json
+// 用法：node tools/export-workbook.js [--clean] [--seed 2026 --policies 1000] > data.json
+//   不指定 --seed/--policies 時為預設試用資料 (samples/excel/試用資料_*.xlsx)
 const C = require('../src/core.js');
 const fin = require('../src/rulesets/finance.js');
 const { generate } = require('../src/mock.js');
 
 const inject = !process.argv.includes('--clean');
-const g = generate({ inject });
+const arg = k => { const i = process.argv.indexOf(k); return i > 0 ? +process.argv[i + 1] : undefined; };
+const opts = Object.assign({ inject }, arg('--seed') ? { seed: arg('--seed') } : {}, arg('--policies') ? { policies: arg('--policies') } : {});
+const g = generate(opts);
 const W = require('../src/workbook.js');
 const csv = text => { const rows = C.parseCSV(text.replace(/^\uFEFF/, '')); return { header: rows[0], rows: rows.slice(1) }; };
 const SH = W.sheets(g);
@@ -31,11 +34,11 @@ const parentOf = code => { for (let k = code.length - 1; k >= 1; k--) if (fin.by
 const children = codes.map(c => codes.map((x, j) => (fin.byCode.has(x) ? fin.byCode.get(x).parent : parentOf(x)) === c ? j : -1).filter(j => j >= 0));
 
 console.log(JSON.stringify({
-  inject, names: g.names,
+  inject, names: g.names, dataset: { seed: opts.seed || 20251014, policies: opts.policies || 120 },
   sheets: {
     ...SH, 資產負債表: Object.assign({}, SH.資產負債表, { children }),
   },
   key: keyRows,
-  skipped: inject ? ['保單資料文字檔中「長度不足」的一筆與「空白行」無法在 Excel 中表示，請用 samples/dirty/LFL01_2025.txt 測試這兩項。' +
+  skipped: inject ? ['保單資料文字檔中「長度不足」的一筆與「空白行」無法在 Excel 中表示，請用文字檔版本測試這兩項。' +
     `長度不足的那筆 (${(g.key.find(k => k.ruleId === '10300').affects || [''])[0].split(' ')[1] || ''}) 因此不在本檔「保單資料」，客戶資料會連帶出現 1 項 C007。`] : [],
 }));

@@ -58,6 +58,7 @@ ws.column_dimensions["C"].width = 80
 ws["A1"] = "申報資料檢核助手｜試用資料" + ("（含錯誤）" if data["inject"] else "（正確）")
 ws["A1"].font = TITLE
 intro = [
+    f"資料組：seed={data['dataset']['seed']}, policies={data['dataset']['policies']}（tests/run.html 用來對照錯誤解答）",
     "用途：個人壽險年度申報的模擬資料，供試用「申報資料檢核助手」。資料皆為假設，不含真實個資。",
     "使用方式：開啟檢核工具，把這個 Excel 檔拖進上方的大框，工具會依工作表名稱自動分好。",
     ("本檔刻意放入各種錯誤，答案在「錯誤解答」工作表；試用時可先不看答案，比對工具找到的結果。"
