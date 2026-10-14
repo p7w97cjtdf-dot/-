@@ -131,7 +131,7 @@
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
     if (DQ.app && DQ.app.onRun) DQ.app.onRun();
     $('#dec-out').innerHTML = ''; $('#dec-ai').textContent = '';
-    $('#ai-out').className = 'ai-out'; $('#ai-out').textContent = INTRO;
+    $('#ai-box').hidden = true; $('#ai-out').className = 'ai-out'; $('#ai-out').textContent = '';
     const reconErr = state.extra.filter(i => i.severity === 'error').length;
     $('#tc-check').textContent = state.all.filter(i => i.severity === 'error').length || '';
     $('#tc-recon').textContent = reconErr || '';
@@ -139,31 +139,28 @@
 
   // ---------- 明細檢核 ----------
   function hitCount(key) { return key.filter(k => state.res.issues.some(i => i.ruleId === k.ruleId && (!k.policy || (i.policy || '').trim() === k.policy))).length; }
+  // 摘要：四個重點數字；其他資訊 (耗時、範例錯誤找到幾個) 放在下方一行小字
   function renderSummary() {
-    const s = state.res.summary;
-    const allErr = state.all.filter(i => i.severity === 'error').length;
-    const tiles = Object.entries(s.byFile).map(([fid, b]) => `
-      <div class="tile ${b.passRate === 1 ? 'ok' : ''}"><span class="k">${SHEET[fid]}正確的比例</span>
-        <span class="v">${(b.passRate * 100).toFixed(1)}%</span>
-        <span class="s">共 ${b.records} 筆${b.policies ? `（${b.policies} 張保單）` : ''}，${b.badRecords} 筆要修改</span>
-        <span class="meter"><i style="width:${b.passRate * 100}%"></i></span></div>`).join('');
-    const det = state.key ? `<div class="tile ok"><span class="k">範例錯誤找到</span><span class="v">${hitCount(state.key)}/${state.key.length}</span><span class="s">保單與理賠資料，對照錯誤解答</span></div>` : '';
+    const s = state.res.summary, all = state.all;
+    const n = sev => all.filter(i => i.severity === sev).length;
+    const fixable = all.filter(i => i.fix && state.res.issues.includes(i)).length;
+    const tile = (cls, k, v, sub) => `<div class="tile ${cls}"><span class="k">${k}</span><span class="v">${v}</span><span class="s">${sub}</span></div>`;
+    $('#summary').innerHTML =
+      tile(n('error') ? 'err' : 'ok', SEV.error, n('error'), n('error') ? LB.SEV_HINT.error : '沒有必須修改的地方，可以送出') +
+      tile(n('warning') ? 'warn' : 'ok', SEV.warning, n('warning'), LB.SEV_HINT.warning) +
+      tile(n('suspect') ? 'suspect' : 'ok', SEV.suspect, n('suspect'), LB.SEV_HINT.suspect) +
+      tile('fix', '可以一鍵修改', fixable, '工具知道正確的值');
+    const recs = Object.entries(s.byFile).map(([fid, b]) => `${SHEET[fid]} ${b.records} 筆`).join('、');
     const allMst = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
-    const mdet = state.masterKey ? `<div class="tile ok"><span class="k">客戶／商品錯誤找到</span><span class="v">${state.masterKey.filter(k => allMst.some(i => i.ruleId === k.ruleId && i.policy === k.policy)).length}/${state.masterKey.length}</span><span class="s">對照錯誤解答</span></div>` : '';
-    $('#summary').innerHTML = tiles +
-      `<div class="tile ${allErr ? 'err' : 'ok'}"><span class="k">${SEV.error}</span><span class="v">${allErr}</span><span class="s">${allErr ? LB.SEV_HINT.error : '沒有必須修改的地方，可以送出'}</span></div>
-       <div class="tile ${s.warnings ? 'warn' : 'ok'}"><span class="k">${SEV.warning}</span><span class="v">${s.warnings}</span><span class="s">${LB.SEV_HINT.warning}</span></div>
-       <div class="tile ${s.suspects ? 'suspect' : 'ok'}"><span class="k">${SEV.suspect}</span><span class="v">${s.suspects}</span><span class="s">${LB.SEV_HINT.suspect}</span></div>
-       <div class="tile"><span class="k">可以一鍵修改</span><span class="v">${s.fixable}</span><span class="s">工具知道正確的值</span></div>${det}${mdet}
-       <div class="tile"><span class="k">檢查花了</span><span class="v">${(state.elapsed / 1000).toFixed(2)} 秒</span><span class="s">共 ${Object.values(state.files).filter(Boolean).length} 份資料</span></div>
-       <div class="cats" id="cats"></div>`;
+    const found = state.key ? `　範例刻意放的錯誤找到：保單與理賠 ${hitCount(state.key)}/${state.key.length}、客戶與商品 ${state.masterKey.filter(k => allMst.some(i => i.ruleId === k.ruleId && i.policy === k.policy)).length}/${state.masterKey.length}。` : '';
+    $('#summary-note').textContent = `已檢查 ${recs}，共 ${Object.values(state.files).filter(Boolean).length} 份資料，花了 ${(state.elapsed / 1000).toFixed(2)} 秒。${found}`;
   }
   function renderCats() {
     const byCat = {};
     for (const i of state.all) byCat[i.category] = (byCat[i.category] || 0) + 1;
     const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
-    $('#cats').innerHTML = cats.map(([c, n]) => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${state.cat === c}">${esc(LB.cat(c))}<b>${n}</b></button>`).join('');
-    $('#cats').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; state.cat = state.cat === b.dataset.cat ? '' : b.dataset.cat; $('#f-cat').value = state.cat; renderCats(); renderTable(); };
+    if ($('#cats')) $('#cats').innerHTML = cats.map(([c, n]) => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${state.cat === c}">${esc(LB.cat(c))}<b>${n}</b></button>`).join('');
+    if ($('#cats')) $('#cats').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; state.cat = state.cat === b.dataset.cat ? '' : b.dataset.cat; $('#f-cat').value = state.cat; renderCats(); renderTable(); };
     $('#f-cat').innerHTML = '<option value="">全部問題類型</option>' + cats.map(([c]) => `<option value="${esc(c)}"${c === state.cat ? ' selected' : ''}>${esc(LB.cat(c))}</option>`).join('');
   }
   function filtered() {
@@ -194,7 +191,7 @@
   ['#f-sev', '#f-file', '#f-q'].forEach(s => $(s).addEventListener('input', renderTable));
   $('#f-cat').addEventListener('input', () => { state.cat = $('#f-cat').value; renderCats(); renderTable(); });
   $('#issue-table tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) select(+tr.dataset.id); });
-  function select(id) { state.sel = id; renderTable(); renderDetail(); const tr = $(`#issue-table tr[data-id="${id}"]`); if (tr) tr.scrollIntoView({ block: 'nearest' }); }
+  function select(id, quiet) { state.sel = id; renderTable(); renderDetail(); const tr = $(`#issue-table tr[data-id="${id}"]`); if (tr && !quiet) tr.scrollIntoView({ block: 'nearest' }); }
 
   function ruler(lay, raw, hitFields) {
     const marks = new Array(raw.length).fill(false);
@@ -408,6 +405,7 @@
   function showAI(out, text) { out.innerHTML = `<div class="ai-tag">${esc(DQ.ai.LABEL)}</div><div class="ai-text">${esc(text)}</div>`; }
   $('#btn-ai').onclick = async () => {
     const out = $('#ai-out');
+    $('#ai-box').hidden = false;
     if (!DQ.ai.available()) { out.textContent = DQ.ai.OFFLINE; return; }
     $('#btn-ai').disabled = true; out.className = 'ai-out'; out.textContent = 'AI 正在整理重點…';
     try {
@@ -445,10 +443,14 @@
   $('#r-q').addEventListener('input', renderRules);
 
   // ---------- 分頁 ----------
+  // 進階功能 (頁尾)：切換後回到頁首；每個進階頁上方有「回到檢查結果」
   function showTab(view) {
     document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x.dataset.view === view));
     document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
+    if (view !== 'check') window.scrollTo({ top: $('#view-' + view).offsetTop - 12 });
   }
+  document.querySelectorAll('.view:not(#view-check)').forEach(v => v.insertAdjacentHTML('afterbegin', '<button class="back" type="button">← 回到檢查結果</button>'));
+  document.addEventListener('click', e => { if (e.target.closest('.back')) showTab('check'); });
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.view));
   const hash = (location.hash || '').slice(1);
 
@@ -457,7 +459,7 @@
     document.body.classList.toggle('no-ai', !ok);
     const was = $('#ai-out').textContent === INTRO;
     INTRO = ok ? INTRO + '（使用你自己的 Claude 帳號，第一次使用時會詢問是否允許。）' : DQ.ai.OFFLINE;
-    if (was) $('#ai-out').textContent = INTRO;
+    if (was && !$('#ai-box').hidden) $('#ai-out').textContent = INTRO;
   });
 
   // 提供給規則匯入分頁使用
@@ -467,6 +469,6 @@
   };
 
   loadSample(true);
-  if (state.res.issues.length) select(state.res.issues.find(i => i.line && i.fields.length).id);
+  if (state.res.issues.length) select(state.res.issues.find(i => i.line && i.fields.length).id, true);
   if (['check', 'recon', 'decode', 'report', 'rules'].includes(hash)) showTab(hash);
 })();

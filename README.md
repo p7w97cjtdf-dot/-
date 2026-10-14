@@ -68,6 +68,12 @@ AI 說明**不需要 API key**：只在 claude.ai 的線上版提供，使用開
 
 線上版：https://claude.ai/artifact/5S7mth9Cc6eoRnirRjBMDW（需由擁有者在頁面的「分享」選單開放權限）。線上版的 AI 功能使用開啟者自己的 Claude 帳號，不需要 API key；第一次使用時會詢問是否允許。重新打包：`node tools/build-artifact.js dist/index.html`。
 
+## 介面
+
+檢核工具（`index.html`）是一頁式流程：把 Excel 拖進上方大框 → 四個重點數字（必須修改、建議確認、請人工判斷、可以一鍵修改）→ 找到的問題（可依狀況、資料篩選與搜尋，點一列看右側說明與原始內容）→ 一鍵修改、下載問題清單、下載報告、下載改好的保單資料。數字核對明細、看懂退件通知、新增檢查規則、預覽報告、檢查項目一覽收在頁尾的「進階功能」。
+
+配色與字體採用 UI UX Pro Max 的「E-commerce Luxury」（石墨黑、金色點綴、米白底；標題 Cormorant＋思源宋體），規範見 `design-system/filing-validation-assistant/pages/tool.md`。
+
 ## 用語
 
 畫面、報告與 Excel 一律使用白話（對照表在 `src/labels.js`）：錯誤／警告／疑似異常分別顯示為「必須修改／建議確認／請人工判斷」；問題類別如「單筆邏輯」顯示為「同一筆資料前後矛盾」；和系統總數比對的「時間差／定義差／待查」顯示為「結帳日不同／算法不同／需要追查」。檢查程式內部仍使用原本的名稱。

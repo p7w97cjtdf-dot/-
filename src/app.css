@@ -1,44 +1,47 @@
-/* Layout: header + upload strip, summary tiles, AI note, then issue list (table | record inspector) */
-/* Design system: design-system/filing-validation-assistant/MASTER.md (UI UX Pro Max)
-   Minimalism & Swiss · dense dashboard · subtle motion. Layout: header + import strip, tabs, summary tiles, issue list (table | record inspector) */
+/* 配色：UI UX Pro Max「E-commerce Luxury」(uupm.cc 精品電商示範同一套資料)
+   石墨黑主色 #1C1917、金色點綴 #A16207、米白底 #FAFAF9、細邊框 #D6D3D1；標題 Cormorant＋思源宋體，內文 Montserrat＋思源黑體 */
 :root {
-  --bg: #F8FAFC;          /* background */
-  --panel: #FFFFFF;       /* card */
-  --fg: #1E3A8A;          /* foreground */
-  --mut: #475569;         /* muted foreground */
-  --line: #DBEAFE;        /* border */
-  --accent: #1E40AF;      /* primary */
-  --accent-ink: #FFFFFF;  /* on primary */
-  --accent-soft: #E9EEF6; /* muted */
-  --cta: #D97706;         /* accent / CTA */
-  --cta-ink: #000000;     /* on accent */
-  --err: #DC2626;         /* destructive */
-  --err-soft: #FEE2E2;
-  --warn: #B45309;        /* amber text (CTA amber is < 4.5:1 as text) */
-  --warn-soft: #FEF3C7;
-  --hl: #FDE68A;
-  --info: #1D4ED8;
-  --info-soft: #DBEAFE;
-  --radius: 4px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, .05);
-  --font-display: "Fira Sans", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
-  --font-body: "Fira Sans", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --bg: #FAFAF9;
+  --panel: #FFFFFF;
+  --fg: #0C0A09;
+  --mut: #57534E;
+  --line: #D6D3D1;
+  --line-soft: #E7E5E4;
+  --accent: #1C1917;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #F5F5F4;
+  --cta: #A16207;
+  --cta-ink: #FFFFFF;
+  --gold: #A16207;
+  --err: #B91C1C;
+  --err-soft: #FEF2F2;
+  --warn: #92400E;
+  --warn-soft: #FEF6E7;
+  --suspect: #475569;
+  --suspect-soft: #F1F5F9;
+  --hl: #F6E9C8;
+  --info: #44403C;
+  --info-soft: #F5F5F4;
+  --radius: 2px;
+  --shadow-sm: none;
+  --font-display: "Cormorant", "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --font-body: "Montserrat", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
   --font-mono: "Fira Code", "Noto Sans TC", ui-monospace, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0B1220; --panel: #111A2E; --fg: #DBE4F5; --mut: #94A3B8; --line: #1E2A44;
-    --accent: #60A5FA; --accent-ink: #0B1220; --accent-soft: #172554; --cta: #F59E0B; --cta-ink: #000000;
-    --err: #F87171; --err-soft: #3B1414; --warn: #FBBF24; --warn-soft: #3A2A0A; --hl: #6B5310; --info: #93C5FD; --info-soft: #1E2A44;
-    --shadow-sm: none;
+    --bg: #0C0A09; --panel: #1C1917; --fg: #FAFAF9; --mut: #A8A29E; --line: #44403C; --line-soft: #292524;
+    --accent: #FAFAF9; --accent-ink: #0C0A09; --accent-soft: #292524; --cta: #CA8A04; --cta-ink: #0C0A09; --gold: #D6A73A;
+    --err: #F87171; --err-soft: #2A1212; --warn: #FBBF24; --warn-soft: #2A2110; --suspect: #94A3B8; --suspect-soft: #1E2530;
+    --hl: #4A3A12; --info: #D6D3D1; --info-soft: #292524;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0B1220; --panel: #111A2E; --fg: #DBE4F5; --mut: #94A3B8; --line: #1E2A44;
-  --accent: #60A5FA; --accent-ink: #0B1220; --accent-soft: #172554; --cta: #F59E0B; --cta-ink: #000000;
-  --err: #F87171; --err-soft: #3B1414; --warn: #FBBF24; --warn-soft: #3A2A0A; --hl: #6B5310; --info: #93C5FD; --info-soft: #1E2A44;
-  --shadow-sm: none;
+  --bg: #0C0A09; --panel: #1C1917; --fg: #FAFAF9; --mut: #A8A29E; --line: #44403C; --line-soft: #292524;
+  --accent: #FAFAF9; --accent-ink: #0C0A09; --accent-soft: #292524; --cta: #CA8A04; --cta-ink: #0C0A09; --gold: #D6A73A;
+  --err: #F87171; --err-soft: #2A1212; --warn: #FBBF24; --warn-soft: #2A2110; --suspect: #94A3B8; --suspect-soft: #1E2530;
+  --hl: #4A3A12; --info: #D6D3D1; --info-soft: #292524;
   color-scheme: dark;
 }
 
@@ -255,14 +258,14 @@ td.mono { white-space: nowrap; }
 /* AI 傳送提示與 AI 產出標示 */
 .ai-notice { margin: 6px 0 0; font-size: 12px; color: var(--mut); }
 .ai-notice::before { content: "↗ "; }
-.ai-tag { display: inline-block; font-size: 12px; font-weight: 600; line-height: 18px; padding: 0 7px; border: 1px solid #7c3aed; color: #6d28d9; border-radius: 4px; white-space: nowrap; }
+.ai-tag { display: inline-block; font-size: 12px; font-weight: 600; line-height: 18px; padding: 0 7px; border: 1px solid var(--gold); color: var(--gold); border-radius: 4px; white-space: nowrap; }
 .ai-out .ai-tag, .ask .ai-tag { margin-bottom: 6px; }
 .ai-text { white-space: pre-wrap; }
 
 /* 疑似異常（需人工判斷）：不是錯誤，用虛線色條與青色區分 */
-.tile.suspect .v { color: #0e7490; }
-td.sev i.suspect { background: repeating-linear-gradient(#0e7490 0 4px, transparent 4px 7px); }
-.badge.suspect { background: #ecfeff; color: #0e7490; }
+.tile.suspect .v { color: var(--suspect); }
+td.sev i.suspect { background: repeating-linear-gradient(var(--suspect) 0 4px, transparent 4px 7px); }
+.badge.suspect { background: var(--suspect-soft); color: var(--suspect); }
 
 /* 結果表：工作表・行、原始值 */
 #issue-table td.where { white-space: nowrap; font-size: 13px; }
@@ -277,4 +280,68 @@ details.more { margin-top: 4px; }
 details.more > summary { cursor: pointer; color: var(--mut); font-size: 14px; padding: 6px 0; min-height: 44px; display: flex; align-items: center; }
 details.more[open] > summary { margin-bottom: 8px; }
 /* 在電腦上直接開啟時沒有 AI：按鈕變淡，按下會說明原因 */
-body.no-ai .ai-btn { opacity: .55; }
+body.no-ai .ai-btn, body.no-ai .ai-notice { display: none; }
+
+/* ===== 精品風格 (E-commerce Luxury)：細線、方角、襯線標題、寬字距小標、金色重點 ===== */
+body { font-size: 15px; letter-spacing: .01em; }
+.top { padding-block: 40px 20px; border-bottom: 1px solid var(--line); margin-bottom: 20px; align-items: flex-end; }
+.brand h1 { font-family: var(--font-display); font-weight: 600; font-size: 40px; letter-spacing: .02em; line-height: 1.1; }
+.brand h1::after { content: ""; display: block; width: 48px; height: 1px; background: var(--gold); margin-top: 14px; }
+.sub { font-size: 14px; margin-top: 12px; max-width: 60ch; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 22px; letter-spacing: .02em; }
+.label { text-transform: uppercase; letter-spacing: .18em; font-size: 11px; }
+
+.btn { border-radius: 0; padding: 9px 18px; font-size: 13px; letter-spacing: .1em; font-weight: 500; }
+.btn.ghost { border-color: var(--line); color: var(--fg); }
+.btn.ghost:hover { border-color: var(--fg); }
+.btn.cta { background: var(--cta); border-color: var(--cta); color: var(--cta-ink); font-weight: 600; }
+.btn.cta:hover { filter: brightness(1.08); }
+.btn.small { padding: 4px 10px; letter-spacing: .06em; }
+
+.drop { border-radius: 0; border: 1px solid var(--line); background: var(--panel); }
+.drop.big { border: 1px solid var(--fg); padding: 36px 20px; gap: 8px; }
+.drop.big .drop-k { font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: .02em; }
+.drop.big:hover, .drop.big.over { border-color: var(--gold); background: var(--accent-soft); }
+.samples { padding: 14px 0 4px; }
+details.more > summary { letter-spacing: .06em; }
+
+.summary { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--fg); border-bottom: 1px solid var(--line); margin-top: 8px; }
+@media (max-width: 720px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tile:nth-child(2n) { border-right: 0; } .tile:nth-child(-n+2) { border-bottom: 1px solid var(--line); } }
+.tile { border: 0; border-right: 1px solid var(--line); border-radius: 0; background: transparent; padding: 18px 20px; gap: 4px; }
+.tile:last-child { border-right: 0; }
+.tile .k { text-transform: uppercase; letter-spacing: .16em; font-size: 12px; color: var(--mut); }
+.tile .v { font-family: var(--font-display); font-size: 46px; font-weight: 600; line-height: 1; color: var(--fg); }
+.tile.err .v { color: var(--err); }
+.tile.warn .v { color: var(--warn); }
+.tile.ok .v { color: var(--fg); }
+.tile.fix .v { color: var(--gold); }
+.summary-note { margin: 10px 0 0; }
+
+.ai { border: 1px solid var(--line); border-left: 2px solid var(--gold); border-radius: 0; background: var(--panel); }
+.ai-tag { border-radius: 0; letter-spacing: .08em; }
+
+.filters h2 { display: flex; align-items: baseline; gap: 10px; }
+.filter-row select, .filter-row input, .rules-head input, textarea { border-radius: 0; background: var(--panel); padding: 8px 10px; }
+.table-wrap, .detail, .block, .finding, .rule-card, #report-frame, .ruler, .fixbox, .chain, .banner { border-radius: 0; }
+.table-wrap { border-color: var(--line); }
+th { text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-weight: 600; color: var(--mut); border-bottom: 1px solid var(--fg); padding-block: 10px; }
+td { border-bottom-color: var(--line-soft); padding-block: 9px; }
+#issue-table tbody tr:hover { background: var(--accent-soft); }
+#issue-table tbody tr.sel { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--gold); }
+td.sev i { border-radius: 0; width: 3px; }
+td .pill { border-radius: 0; background: transparent; border: 1px solid var(--gold); color: var(--gold); letter-spacing: .04em; }
+.detail { border-color: var(--line); padding: 20px; gap: 12px; }
+.detail h3 { font-family: var(--font-display); font-size: 21px; font-weight: 600; line-height: 1.3; }
+.badge { border-radius: 0; letter-spacing: .06em; }
+.fixbox { background: transparent; border: 1px solid var(--gold); }
+.fixbox b { color: var(--gold); }
+.ruler mark { outline-color: var(--gold); }
+
+/* 頁尾的進階功能 */
+.tabs.advanced { border-bottom: 0; border-top: 1px solid var(--line); margin-top: 32px; padding-top: 14px; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.tabs.advanced .label { margin-right: 8px; }
+.tabs.advanced button { font-size: 13px; padding: 6px 10px; border-bottom: 1px solid transparent; }
+.tabs.advanced button[aria-selected="true"] { border-bottom-color: var(--gold); color: var(--fg); }
+.back { align-self: flex-start; background: none; border: 0; padding: 6px 0; color: var(--mut); letter-spacing: .06em; font-size: 13px; min-height: 44px; }
+.back:hover { color: var(--fg); }
+.foot { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 8px; }
