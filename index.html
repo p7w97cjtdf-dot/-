@@ -7,6 +7,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant:wght@500;600;700&family=Montserrat:wght@400;500;600&family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&family=Fira+Code:wght@400&display=swap">
 <link rel="stylesheet" href="src/app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1C1917">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="檢核助手">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<meta name="description" content="保險申報資料檢核：個人壽險、癌症險、傷害險。自動找出錯誤、說明怎麼改，資料只在你的裝置上處理。">
 </head>
 <body>
 <header class="top">
@@ -269,6 +278,7 @@
 <script src="src/app.js"></script>
 <script src="src/app-import.js"></script>
 <script src="src/review.js"></script>
+<script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 <script>
 // 找不到程式檔時 (例如直接在壓縮檔裡開啟 index.html，或只複製了這一個檔案)，畫面會出現但按鈕沒有反應：在頁首說明原因
 if (!window.DQ || !window.DQ.app) {
