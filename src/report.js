@@ -10,7 +10,7 @@
   'use strict';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const pct = x => (x * 100).toFixed(1) + '%';
-  const SEV = { error: '錯誤', warning: '警告' };
+  const SEV = { error: '錯誤', warning: '警告', suspect: '疑似異常（需人工判斷）' };
 
   function fieldLabel(rs, i) {
     const lay = rs.layouts[i.file];
@@ -32,7 +32,7 @@
     const s = res.summary, out = [];
     out.push(`== 資料檢核結果：${rs.name} ==`);
     for (const [fid, b] of Object.entries(s.byFile)) out.push(`${rs.layouts[fid].title}：${b.records} 筆，有錯誤 ${b.badRecords} 筆，通過率 ${pct(b.passRate)}`);
-    out.push(`錯誤 ${s.errors} 項、警告 ${s.warnings} 項、可自動修正 ${s.fixable} 項`);
+    out.push(`錯誤 ${s.errors} 項、警告 ${s.warnings} 項、疑似異常（需人工判斷）${s.suspects || 0} 項、可自動修正 ${s.fixable} 項`);
     out.push('');
     for (const i of res.issues) {
       out.push(`[${SEV[i.severity]}] ${i.file === 'L' ? '承保' : '給付'}第 ${i.line} 行 ${i.policy ? '保單 ' + i.policy.trim() + ' ' : ''}(${i.ruleId}) ${fieldLabel(rs, i)}`);
@@ -81,14 +81,14 @@ main{max-width:1200px;margin:0 auto}h1{font-size:22px;margin:0 0 4px}h2{font-siz
 .card{border:1px solid var(--line);border-radius:10px;padding:12px 14px}.card .k{font-size:12px;color:var(--mut)}.card .v{font-size:26px;font-weight:700}.card .s{font-size:12px;color:var(--mut)}
 .v.err{color:var(--err)}.v.warn{color:var(--warn)}table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
 th{position:sticky;top:0;background:var(--bg);font-weight:600}.num{text-align:right;font-variant-numeric:tabular-nums}.mono{font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre}
-.sev{font-size:12px;padding:1px 6px;border-radius:4px}.sev.error{background:var(--errbg);color:var(--err)}.sev.warning{background:var(--warnbg);color:var(--warn)}
+.sev{font-size:12px;padding:1px 6px;border-radius:4px}.sev.error{background:var(--errbg);color:var(--err)}.sev.warning{background:var(--warnbg);color:var(--warn)}.sev.suspect{background:#ecfeff;color:#0e7490}
 .bar{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:13px}.bar span:first-child{width:90px}.bar i{display:block;height:10px;background:var(--acc);border-radius:3px}
-.ai{border-left:3px solid var(--acc);padding:4px 14px;white-space:pre-wrap}.scroll{overflow-x:auto}
+.ai{border-left:3px solid var(--acc);padding:4px 14px;white-space:pre-wrap}.ai-tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border:1px solid #7c3aed;color:#6d28d9;border-radius:4px;vertical-align:middle}.scroll{overflow-x:auto}
 @media print{th{position:static}}</style></head><body><main>
 <h1>資料品質檢核報告｜${esc(rs.name)}</h1>
-<div class="meta">產生時間：${esc(new Date(res.generatedAt).toLocaleString('zh-TW'))}　檔案：${Object.entries(res.meta).map(([k, m]) => esc(m.name || rs.layouts[k].title)).join('、')}</div>
-<div class="cards">${fileCards}<div class="card"><div class="k">錯誤</div><div class="v err">${s.errors}</div><div class="s">需修正後才能申報</div></div><div class="card"><div class="k">警告</div><div class="v warn">${s.warnings}</div><div class="s">建議確認之合理性問題</div></div><div class="card"><div class="k">可自動修正</div><div class="v">${s.fixable}</div><div class="s">有明確修正值</div></div></div>
-${opts.aiSummary ? `<h2>AI 分析摘要</h2><div class="ai">${esc(opts.aiSummary)}</div>` : ''}
+<div class="meta">產生時間：${esc(new Date(res.generatedAt).toLocaleString('zh-TW'))}　檔案：${Object.entries(res.meta).map(([k, m]) => esc(m.name || rs.layouts[k].title)).join('、')}${opts.elapsed != null ? `　檢核耗時：${(opts.elapsed / 1000).toFixed(2)} 秒` : ''}</div>
+<div class="cards">${fileCards}<div class="card"><div class="k">錯誤</div><div class="v err">${s.errors}</div><div class="s">需修正後才能申報</div></div><div class="card"><div class="k">警告</div><div class="v warn">${s.warnings}</div><div class="s">建議確認之合理性問題</div></div><div class="card"><div class="k">疑似異常</div><div class="v" style="color:#0e7490">${s.suspects || 0}</div><div class="s">需人工判斷，不計入錯誤</div></div><div class="card"><div class="k">可自動修正</div><div class="v">${s.fixable}</div><div class="s">有明確修正值</div></div></div>
+${opts.aiSummary ? `<h2>AI 分析摘要 <span class="ai-tag">AI 產出</span></h2><p class="meta">以下內容由 Claude 依檢核結果產生（送出前已遮罩姓名、證號、地址），僅供參考；錯誤判定以規則引擎結果為準。</p><div class="ai">${esc(opts.aiSummary)}</div>` : ''}
 ${reconHTML(opts.recon)}
 <h2>明細檢核：問題類別分布</h2>${cats.map(([c, n]) => `<div class="bar"><span>${esc(c)}</span><i style="width:${Math.max(2, n / maxCat * 60)}%"></i><span>${n}</span></div>`).join('')}
 <h2>最常見的檢核錯誤</h2><div class="scroll"><table><thead><tr><th>檢核編號</th><th>檢核項目</th><th>嚴重度</th><th class="num">次數</th><th>範例說明</th><th>修正建議</th></tr></thead><tbody>

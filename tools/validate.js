@@ -9,6 +9,7 @@ const C = require('../src/core.js');
 const life = require('../src/rulesets/life.js');
 const R = require('../src/recon.js');
 const M = require('../src/master.js');
+const A = require('../src/anomaly.js');
 const report = require('../src/report.js');
 
 const args = process.argv.slice(2);
@@ -28,12 +29,18 @@ for (let i = 0; i < args.length; i++) {
 }
 if (!Object.keys(files).length) { console.error('用法：node tools/validate.js <承保檔> [給付檔] [--prior 上年度承保檔] [--control 控制總數.csv] [--statement 資產負債表.csv] [--products 商品資料.csv] [--customers 客戶資料.csv] [--json] [--html 報告.html]'); process.exit(2); }
 
+const t0 = process.hrtime.bigint();
 const res = C.validate(life, files);
 const roll = files.L ? R.rollForward(res, opt.prior) : null;
 const ctl = opt.control ? R.controlRecon(res, opt.control, roll ? roll.issues : []) : null;
 const stmt = opt.statement ? R.statement(opt.statement, res) : null;
 const cust = opt.customers ? M.customers(res, opt.customers) : null;
 const prod = opt.products ? M.products(res, opt.products) : null;
+const anom = A.check(res, opt.customers);
+anom.issues.forEach((i, k) => { i.id = res.issues.length + k + 1; });
+res.issues.push(...anom.issues);
+res.summary = C.summarize(life, res.issues, res.meta);
+const elapsed = Number(process.hrtime.bigint() - t0) / 1e6;
 const extra = [].concat(opt.prior && roll ? roll.issues : [], ctl ? ctl.issues : [], stmt ? stmt.issues : [], cust ? cust.issues : [], prod ? prod.issues : []);
 
 if (json) console.log(JSON.stringify({ summary: res.summary, issues: res.issues, recon: { control: ctl && ctl.rows.map(r => Object.assign({}, r, { recs: undefined })), rollForward: roll, statement: stmt } }, null, 2));
@@ -41,8 +48,10 @@ else {
   console.log(report.toText(life, res));
   if (extra.length) {
     console.log('\n== 對帳與勾稽 ==');
-    for (const i of extra) console.log(`[${i.severity === 'error' ? '錯誤' : '警告'}] (${i.ruleId}) ${i.policy || i.code || ''} ${i.message}${i.explain ? '\n   說明：' + i.explain : ''}\n   建議：${i.suggestion}`);
+    for (const i of extra) console.log(`[${{ error: '錯誤', warning: '警告', suspect: '疑似異常' }[i.severity]}] (${i.ruleId}) ${i.policy || i.code || ''} ${i.message}${i.explain ? '\n   說明：' + i.explain : ''}\n   建議：${i.suggestion}`);
   }
 }
-if (html) { fs.writeFileSync(html, report.toHTML(life, res, { recon: { ctl, roll: opt.prior ? roll : null, stmt, cust, prod } })); console.error('已輸出報告：' + html); }
+// 計時輸出到 stderr，不影響 --json 的輸出
+console.error(`[檢核耗時] ${(elapsed / 1000).toFixed(3)} 秒（承保 ${res.meta.L ? res.meta.L.count : 0} 筆、給付 ${res.meta.D ? res.meta.D.count : 0} 筆，含讀檔後的全部檢核：明細、客戶/商品、合理性、結轉、對帳、財報）`);
+if (html) { fs.writeFileSync(html, report.toHTML(life, res, { elapsed, recon: { ctl, roll: opt.prior ? roll : null, stmt, cust, prod } })); console.error('已輸出報告：' + html); }
 process.exit(res.summary.errors || extra.some(i => i.severity === 'error') ? 1 : 0);

@@ -5,7 +5,7 @@
   const rs = DQ.rulesets.life, fin = DQ.rulesets.finance, R = DQ.recon;
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const SEV = { error: '錯誤', warning: '警告' };
+  const SEV = { error: '錯誤', warning: '警告', suspect: '疑似異常（需人工判斷）' };
   const FILE = { L: '承保', D: '給付', S: '財報', R: '對帳', C: '客戶', P: '商品' };
   const yuan = R.yuan;
   let INTRO = '規則引擎已完成逐欄檢核與對帳。按「產生 AI 分析摘要」，由 Claude 歸納錯誤的根本原因、修正優先順序與退件風險。';
@@ -75,6 +75,7 @@
     setFile('prior', g.names.prior, g.prior); setFile('control', g.names.control, g.control); setFile('statement', g.names.statement, g.statement);
     setFile('products', g.names.products, g.products); setFile('customers', g.names.customers, g.customers);
     $('#sample-note').textContent = inject ? `已載入模擬資料：明細 ${g.key.length} 項錯誤、對帳與財報 ${g.reconKey.length} 項差異` : '已載入正確的模擬資料';
+    state.anomalyKey = inject ? g.anomalyKey : null;
     state.key = inject ? g.key : null; state.reconKey = inject ? g.reconKey : null; state.masterKey = inject ? g.masterKey : null;
     run();
   }
@@ -84,6 +85,7 @@
   // ---------- 執行 ----------
   function run() {
     const f = state.files;
+    const t0 = performance.now();
     state.res = DQ.validate(activeRules(), { L: f.L, D: f.D });
     // 客戶資料、商品資料：指向承保檔某一列的問題併入明細檢核 (可用欄位尺規與自動修正)
     state.cust = f.customers && f.L ? DQ.master.customers(state.res, f.customers.text) : null;
@@ -94,10 +96,18 @@
       const d = DQ.master.catalog.find(c => c.id === i.ruleId);
       state.res.issues.push(Object.assign(i, { id: ++nextId, ruleName: d ? d.name : '', ref: d ? d.ref : '' }));
     }
+    // 資料邏輯合理性：疑似異常 (不計入錯誤)
+    state.anom = f.L || f.D ? DQ.anomaly.check(state.res, f.customers && f.customers.text) : null;
+    for (const i of state.anom ? state.anom.issues : []) {
+      const d = DQ.anomaly.catalog.find(c => c.id === i.ruleId);
+      state.res.issues.push(Object.assign(i, { id: ++nextId, ref: d ? d.ref : '' }));
+    }
     state.res.summary = DQ.summarize(rs, state.res.issues, state.res.meta);
     state.roll = f.L ? R.rollForward(state.res, f.prior && f.prior.text) : null;
     state.ctl = f.control ? R.controlRecon(state.res, f.control.text, state.roll ? state.roll.issues : []) : null;
     state.stmt = f.statement ? R.statement(f.statement.text, state.res) : null;
+    state.elapsed = performance.now() - t0;
+    console.info(`[檢核耗時] ${(state.elapsed / 1000).toFixed(3)} 秒：承保 ${(f.L && state.res.meta.L) ? state.res.meta.L.count : 0} 筆、給付 ${(f.D && state.res.meta.D) ? state.res.meta.D.count : 0} 筆，${Object.values(f).filter(Boolean).length} 個檔案`);
     state.extra = [].concat(state.roll ? state.roll.issues : [], state.ctl ? state.ctl.issues : [], state.stmt ? state.stmt.issues : [], mst.filter(i => i.file !== 'L'));
     state.sel = null; state.aiSummary = null;
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
@@ -124,7 +134,9 @@
     $('#summary').innerHTML = tiles +
       `<div class="tile ${s.errors ? 'err' : 'ok'}"><span class="k">錯誤</span><span class="v">${s.errors}</span><span class="s">${s.errors ? '修正後才能申報' : '可申報'}</span></div>
        <div class="tile ${s.warnings ? 'warn' : 'ok'}"><span class="k">警告</span><span class="v">${s.warnings}</span><span class="s">建議確認的合理性問題</span></div>
+       <div class="tile ${s.suspects ? 'suspect' : 'ok'}"><span class="k">疑似異常</span><span class="v">${s.suspects}</span><span class="s">需人工判斷，不計入錯誤</span></div>
        <div class="tile"><span class="k">可自動修正</span><span class="v">${s.fixable}</span><span class="s">有明確修正值</span></div>${det}${mdet}
+       <div class="tile"><span class="k">檢核耗時</span><span class="v">${(state.elapsed / 1000).toFixed(2)} 秒</span><span class="s">全部 ${Object.values(state.files).filter(Boolean).length} 個檔案</span></div>
        <div class="cats" id="cats"></div>`;
   }
   function renderCats() {
@@ -202,14 +214,14 @@
       ${hits.length ? `<table class="fields"><tbody>${hits.map(row).join('')}</tbody></table>` : ''}
       ${rest.length ? `<details><summary class="hint">顯示其餘 ${rest.length} 個欄位</summary><table class="fields"><tbody>${rest.map(row).join('')}</tbody></table></details>` : ''}
       ${siblings.length ? `<div><div class="label">同保單其他異動</div><table class="fields"><tbody>${[rec].concat(siblings).sort((a, b) => a.txnSeq.localeCompare(b.txnSeq)).map(r => `<tr class="${r === rec ? 'hit' : ''}"><td class="num">第${r._line}行</td><td class="v">${r.txnSeq}</td><td class="v">${r.addType} ${r.addDate}</td><td class="v">→ ${r.exitType} ${r.exitDate}</td></tr>`).join('')}</tbody></table></div>` : ''}
-      <div><button class="btn ghost small" id="btn-explain">請 AI 解釋這個問題</button><div class="ask" id="explain-out"></div></div>`;
+      <div><button class="btn ghost small" id="btn-explain">請 AI 解釋這個問題</button><p class="ai-notice">此功能會將內容傳送至 Claude API（只送這個問題與相關欄位，不送整筆明細）</p><div class="ask" id="explain-out"></div></div>`;
     const one = $('#btn-fix-one');
     if (one) one.onclick = () => applyFix([i.id]);
     $('#btn-explain').onclick = async () => {
       const key = apiKey(), out = $('#explain-out');
       if (!key && !DQ.ai.usesPlatform()) { out.textContent = '請先在上方「AI 分析」輸入 Anthropic API key。'; return; }
       out.textContent = 'Claude 分析中…';
-      try { out.textContent = await DQ.ai.explain(key, rs, state.res, i); } catch (e) { out.textContent = 'AI 呼叫失敗：' + e.message; }
+      try { showAI(out, await DQ.ai.explain(key, rs, state.res, i, reconCtx())); } catch (e) { out.textContent = 'AI 呼叫失敗：' + e.message; }
     };
   }
 
@@ -346,10 +358,13 @@
     if (!state.decoded) decodeNow();
     if (!key && !DQ.ai.usesPlatform()) { out.textContent = '請先在「明細檢核」分頁的 AI 分析輸入 Anthropic API key。'; return; }
     out.className = 'ai-out'; out.textContent = 'Claude 正在解讀退件訊息…';
-    try { out.textContent = await DQ.ai.decode(key, $('#dec-text').value, state.decoded); out.className = 'ai-out done'; } catch (e) { out.textContent = 'AI 呼叫失敗：' + e.message; }
+    try { showAI(out, await DQ.ai.decode(key, $('#dec-text').value, state.decoded, state.res, reconCtx())); out.className = 'ai-out done'; } catch (e) { out.textContent = 'AI 呼叫失敗：' + e.message; }
   };
 
   // ---------- AI ----------
+  const reconCtx = () => ({ ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod });
+  // AI 回覆一律加上「AI 產出」標示
+  function showAI(out, text) { out.innerHTML = `<div class="ai-tag">${esc(DQ.ai.LABEL)}</div><div class="ai-text">${esc(text)}</div>`; }
   function apiKey() {
     const v = $('#api-key').value.trim();
     try { if (v) localStorage.setItem('dq-api-key', v); } catch (e) { /* 無法儲存時忽略 */ }
@@ -363,22 +378,24 @@
     if (!key && !DQ.ai.usesPlatform()) { out.textContent = '請輸入 Anthropic API key。金鑰只保存在你的瀏覽器，用來直接呼叫 Claude API。'; return; }
     $('#btn-ai').disabled = true; out.className = 'ai-out'; out.textContent = 'Claude 正在分析檢核與對帳結果…';
     try {
-      state.aiSummary = await DQ.ai.summarize(key, rs, state.res, { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod });
-      out.className = 'ai-out done'; out.textContent = state.aiSummary; renderReport();
+      state.aiSummary = await DQ.ai.summarize(key, rs, state.res, reconCtx());
+      out.className = 'ai-out done'; showAI(out, state.aiSummary); renderReport();
     } catch (e) { out.textContent = 'AI 呼叫失敗：' + e.message; }
     $('#btn-ai').disabled = false;
   };
 
   // ---------- 報告 / 規則 ----------
-  function reportHTML() { return DQ.report.toHTML(rs, state.res, { aiSummary: state.aiSummary, recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
+  function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
   function renderReport() { $('#report-frame').srcdoc = reportHTML(); }
   function renderRules() {
     const q = $('#r-q').value.trim().toLowerCase();
     const by = {};
     for (const i of state.res.issues.concat(state.extra || [])) by[i.ruleId] = (by[i.ruleId] || 0) + 1;
-    const cat = activeRules().catalog.concat(fin.catalog, DQ.master.catalog);
+    const cat = activeRules().catalog.concat(fin.catalog, DQ.master.catalog, DQ.anomaly.catalog);
+    const st = DQ.ruleStats.count();
     const list = cat.filter(r => !q || [r.id, r.name, r.level, r.ref].join(' ').toLowerCase().includes(q));
-    $('#rules-meta').textContent = `共 ${cat.length} 條檢核規則（資料類型、代碼、單筆、多筆、跨檔、邏輯合理性、跨系統對帳、期初期末結轉、財報勾稽）`;
+    const imported = cat.length - st.total;
+    $('#rules-meta').textContent = `內建 ${st.total} 條檢核規則：${st.cats.map(c => `${c.name} ${c.n}`).join('、')}${imported ? `；另有匯入規則 ${imported} 條` : ''}`;
     $('#rule-table tbody').innerHTML = list.map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.level)}</td><td>${esc(r.name)}</td><td>${esc(r.ref)}</td><td><span class="badge ${r.severity}">${SEV[r.severity]}</span></td><td class="num">${by[r.id] || ''}</td></tr>`).join('');
     $('#layout-table tbody').innerHTML = rs.layouts.L.fields.map(f => `<tr><td class="num">${f.no}</td><td>${esc(f.name)}</td><td class="num">${f.start}</td><td class="num">${f.start + f.len - 1}</td><td class="mono">${f.type}(${String(f.len).padStart(2, '0')})</td></tr>`).join('');
     $('#chart-table tbody').innerHTML = fin.chart.map(a => `<tr><td class="mono">${a.code}</td><td class="ind d${a.code.length <= 1 ? 0 : a.code.length <= 2 ? 1 : 2}">${esc(a.name)}</td><td>${a.until ? `<span class="badge warning">${a.until} 停用 → ${a.replacedBy}</span>` : ''}</td></tr>`).join('');

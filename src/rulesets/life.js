@@ -213,7 +213,7 @@
     if (f.typeRule) R(f.typeRule, `${f.name} 資料類型`, '資料類型', `給付欄 ${f.no}`);
     if (f.codeRule) R(f.codeRule, `${f.name} 代碼`, '代碼', `給付欄 ${f.no}；${f.codeTable}`);
   }
-  R('10400', '數字欄位資料類型', '資料類型', '欄位型態 9：數字、前補 0');
+  R('10400', '數字資料範圍錯誤', '資料類型', '肆、檢核程式項目及代碼表 104');
   R('20000', '代碼檢核', '代碼', '代碼表');
   // 承保 單筆
   R('L0422', '證件編號暫填 0000000000', '單筆', '承保欄 6', 'warning');
@@ -416,26 +416,28 @@
     if (['A', 'B', 'M', 'N', 'Y', 'X'].includes(r.dividendClass) && before) p({ ruleId: '25101_L1704', category: '單筆邏輯', fields: ['dividendClass', 'startDate'], value: `${r.dividendClass}/${r.startDate}`, message: `分紅類別 ${r.dividendClass} 僅適用民國 93 年(2004)起保之保單`, suggestion: '2004 年前起保：強制分紅 S/T、分紅 C/D、不分紅 P/Q' });
   });
   // 保險商品類別編號
-  function checkProductClass(pc, company, p, ids) {
+  // 承保檔依手冊分別回報：21001 基本編碼、21003 第 4/5 碼組合、21008 投資型/萬能第 9-10 碼、21011 第 4 碼=2 的第 9-10 碼；給付檔統一回報 D1601
+  function checkProductClass(pc, company, p, ids, sub) {
     const c = pc;
     if (c.trim().length !== 13) return;
-    const errs = [];
-    if (c[0] !== '2') errs.push('第 1 碼應為「2」(壽險業)');
+    const errs = { base: [], p45: [], inv: [], mix2: [] };
+    if (c[0] !== '2') errs.base.push('第 1 碼應為「2」(壽險業)');
     const alias = T.companyAlias[company] || [company];
-    if (!alias.includes(c.slice(1, 3))) errs.push(`第 2-3 碼「${c.slice(1, 3)}」應為公司代號 ${alias.join('/')}`);
-    if (!'1234'.includes(c[3])) errs.push(`第 4 碼險別大分類「${c[3]}」應為 1~4`);
-    else if (!P5_BY_P4[c[3]].includes(c[4])) errs.push(`第 4 碼=${c[3]} 時第 5 碼應為 ${P5_BY_P4[c[3]].split('').join('/')}`);
-    if (!'12'.includes(c[5])) errs.push(`第 6 碼「${c[5]}」應為 1(個人)或 2(連生)`);
-    if (!'MRA'.includes(c[6])) errs.push(`第 7 碼「${c[6]}」應為 M/R/A`);
-    if (!'1234'.includes(c[7])) errs.push(`第 8 碼「${c[7]}」應為 1~4`);
+    if (!alias.includes(c.slice(1, 3))) errs.base.push(`第 2-3 碼「${c.slice(1, 3)}」應為公司代號 ${alias.join('/')}`);
+    if (!'1234'.includes(c[3])) errs.base.push(`第 4 碼險別大分類「${c[3]}」應為 1~4`);
+    else if (!P5_BY_P4[c[3]].includes(c[4])) errs.p45.push(`第 4 碼=${c[3]} 時第 5 碼應為 ${P5_BY_P4[c[3]].split('').join('/')}`);
+    if (!'12'.includes(c[5])) errs.base.push(`第 6 碼「${c[5]}」應為 1(個人)或 2(連生)`);
+    if (!'MRA'.includes(c[6])) errs.base.push(`第 7 碼「${c[6]}」應為 M/R/A`);
+    if (!'1234'.includes(c[7])) errs.base.push(`第 8 碼「${c[7]}」應為 1~4`);
     const mix = c.slice(8, 10);
-    if (MIX_P4[c[3]] && !MIX_P4[c[3]].includes(mix)) errs.push(`第 4 碼=${c[3]} 時第 9-10 碼「${mix}」應為 ${MIX_P4[c[3]].join('/')}`);
-    if (['IA', 'IB'].includes(mix) && !(c[3] === '1' && c[7] === '3')) errs.push('第 9-10 碼=IA/IB(投資型)時第 4 碼應=1 且第 8 碼=3');
-    if (['UA', 'UB'].includes(mix) && !(c[3] === '1' && '12'.includes(c[7]))) errs.push('第 9-10 碼=UA/UB(萬能)時第 4 碼應=1 且第 8 碼=1 或 2');
-    if (c.slice(10, 13) === 'ETI' && c[4] !== '3') errs.push('第 11-13 碼=ETI(展期)時第 5 碼應=3(定期壽險)');
-    if (errs.length) p({ ruleId: ids, category: '單筆邏輯', fields: ['productClass'], value: c, message: '保險商品類別編號不符編碼原則：' + errs.join('；'), suggestion: '請依表 3．1．20 保險商品類別編號表重編' });
+    if (MIX_P4[c[3]] && !MIX_P4[c[3]].includes(mix)) errs[c[3] === '2' ? 'mix2' : 'base'].push(`第 4 碼=${c[3]} 時第 9-10 碼「${mix}」應為 ${MIX_P4[c[3]].join('/')}`);
+    if (['IA', 'IB'].includes(mix) && !(c[3] === '1' && c[7] === '3')) errs.inv.push('第 9-10 碼=IA/IB(投資型)時第 4 碼應=1 且第 8 碼=3');
+    if (['UA', 'UB'].includes(mix) && !(c[3] === '1' && '12'.includes(c[7]))) errs.inv.push('第 9-10 碼=UA/UB(萬能)時第 4 碼應=1 且第 8 碼=1 或 2');
+    if (c.slice(10, 13) === 'ETI' && c[4] !== '3') errs.base.push('第 11-13 碼=ETI(展期)時第 5 碼應=3(定期壽險)');
+    const groups = sub ? [[ids, errs.base], [sub.p45, errs.p45], [sub.inv, errs.inv], [sub.mix2, errs.mix2]] : [[ids, [].concat(errs.base, errs.p45, errs.inv, errs.mix2)]];
+    for (const [id, list] of groups) if (list.length) p({ ruleId: id, category: '單筆邏輯', fields: ['productClass'], value: c, message: '保險商品類別編號不符編碼原則：' + list.join('；'), suggestion: '請依表 3．1．20 保險商品類別編號表重編' });
   }
-  rl((r, p) => checkProductClass(r.productClass, r.company, p, '21001_L1803'));
+  rl((r, p) => checkProductClass(r.productClass, r.company, p, '21001_L1803', { p45: '21003_L1804', inv: '21008_L1805', mix2: '21011_L1806' }));
   // 起迄日
   rl((r, p) => {
     if (!dateOk(r.startDate)) return isZero(r.startDate) ? null : p({ ruleId: '23900_L1902', category: '格式', fields: ['startDate'], value: r.startDate, message: '保險期間起日不是合法日期', suggestion: '格式 YYYYMMDD (西元)' });
@@ -484,6 +486,7 @@
   // 微型保單
   rl((r, p) => {
     const micro = r.productClass[7] === '4';
+    if (micro && !T.econ.includes(r.econStatus)) p({ ruleId: '25502_L2804', category: '單筆邏輯', fields: ['econStatus', 'productClass'], value: r.econStatus, message: '微型保單 (商品類別第 8 碼=4) 的經濟弱勢者身分應為表 3．1．30 的代號', suggestion: '依經濟弱勢者身分代號表填寫' });
     if (r.econStatus !== '0' && T.econ.includes(r.econStatus) && !micro) p({ ruleId: '25501_L2803', category: '單筆邏輯', fields: ['econStatus', 'productClass'], value: r.econStatus, message: '經濟弱勢者身分僅適用微型保單 (商品類別第 8 碼=4)', suggestion: '非微型保單此欄應填 0', fix: { field: 'econStatus', value: '0' } });
     if (r.groupLink !== '0' && T.groupLink.includes(r.groupLink) && !micro) p({ ruleId: '25601_L2903', category: '單筆邏輯', fields: ['groupLink', 'productClass'], value: r.groupLink, message: '集體投保之連結關係僅適用微型保單 (第 8 碼=4)', suggestion: '非微型保單此欄應填 0', fix: { field: 'groupLink', value: '0' } });
     if (r.groupLink !== '0' && T.groupLink.includes(r.groupLink) && r.econStatus === '0') p({ ruleId: '25602_L2904', category: '單筆邏輯', fields: ['groupLink', 'econStatus'], value: `${r.groupLink}/${r.econStatus}`, message: '集體投保之連結關係≠0 時經濟弱勢身分不可為 0', suggestion: '補填經濟弱勢者身分代號' });

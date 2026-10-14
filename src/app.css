@@ -251,3 +251,15 @@ th { text-transform: none; letter-spacing: .02em; font-weight: 600; }
 }
 
 td.mono { white-space: nowrap; }
+
+/* AI 傳送提示與 AI 產出標示 */
+.ai-notice { margin: 6px 0 0; font-size: 12px; color: var(--mut); }
+.ai-notice::before { content: "↗ "; }
+.ai-tag { display: inline-block; font-size: 12px; font-weight: 600; line-height: 18px; padding: 0 7px; border: 1px solid #7c3aed; color: #6d28d9; border-radius: 4px; white-space: nowrap; }
+.ai-out .ai-tag, .ask .ai-tag { margin-bottom: 6px; }
+.ai-text { white-space: pre-wrap; }
+
+/* 疑似異常（需人工判斷）：不是錯誤，用虛線色條與青色區分 */
+.tile.suspect .v { color: #0e7490; }
+td.sev i.suspect { background: repeating-linear-gradient(#0e7490 0 4px, transparent 4px 7px); }
+.badge.suspect { background: #ecfeff; color: #0e7490; }

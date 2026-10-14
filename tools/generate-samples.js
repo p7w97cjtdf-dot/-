@@ -18,7 +18,7 @@ for (const [dir, inject] of [['clean', false], ['dirty', true]]) {
   fs.writeFileSync(path.join(d, g.names.statement), g.statement);
   fs.writeFileSync(path.join(d, g.names.products), g.products);
   fs.writeFileSync(path.join(d, g.names.customers), g.customers);
-  if (inject) fs.writeFileSync(path.join(d, 'answer-key.json'), JSON.stringify({ 明細檢核: g.key, 對帳與勾稽: g.reconKey, 匯入規則: g.ruleKey, 客戶與商品資料: g.masterKey }, null, 2) + '\n');
+  if (inject) fs.writeFileSync(path.join(d, 'answer-key.json'), JSON.stringify({ 明細檢核: g.key, 對帳與勾稽: g.reconKey, 匯入規則: g.ruleKey, 客戶與商品資料: g.masterKey, 疑似異常: g.anomalyKey }, null, 2) + '\n');
   // 另存 CSV 版本 (方便以 Excel 開啟展示)
   const parsed = C.parseFixedWidth(g.L, life.layouts.L).records.filter(r => r._raw.length === life.layouts.L.recordLength);
   fs.writeFileSync(path.join(d, g.names.L.replace('.txt', '.csv')), C.recordsToCSV(life.layouts.L, parsed));

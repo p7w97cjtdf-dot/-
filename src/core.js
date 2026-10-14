@@ -313,6 +313,7 @@
     return {
       errors: issues.filter(i => i.severity === 'error').length,
       warnings: issues.filter(i => i.severity === 'warning').length,
+      suspects: issues.filter(i => i.severity === 'suspect').length,
       byFile,
       byCategory: count('category'),
       byRule: count('ruleId'),

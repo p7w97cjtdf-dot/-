@@ -68,7 +68,14 @@ test('退件解碼：手冊編號、籠統代碼、行號都能定位到具體�
   const ctx = { res, extra: roll.issues.concat(ctl.issues, stmt.issues), catalogs: [life.catalog, fin.catalog] };
   const a = R.decode('退件原因：L0612、30212_L1305 檢核未通過', ctx);
   assert.ok(a.findings.find(f => f.clue === '30212_L1305').matches.length > 0);
-  const b = R.decode('Error 504: 欄位驗證失敗', ctx);
+  // 手冊「肆、檢核程式項目及代碼表」的錯誤代碼：只列該代碼的問題 (landing 範例：定位 5 處)
+  const m = R.decode('錯誤代碼 10400：數字資料範圍錯誤', ctx);
+  assert.strictEqual(m.findings[0].kind, '手冊錯誤代碼');
+  assert.ok(m.findings[0].matches.every(i => i.ruleId.startsWith('10400_')));
+  assert.strictEqual(m.located, 5);
+  assert.ok(m.findings[0].matches.some(i => i.ruleId === '10400_L0501' && i.line === 31 && i.fix.value === '000000000500000000'));
+  // 手冊沒有的自訂代碼：依關鍵字推定類別
+  const b = R.decode('Error E-0504: 欄位驗證失敗', ctx);
   assert.ok(b.findings[0].matches.length > 5, '籠統代碼應列出候選錯誤');
   assert.ok(b.findings[0].groups[0].items.length >= 1);
   const line = res.issues.find(i => i.line > 1 && i.file === 'L').line;

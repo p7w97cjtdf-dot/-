@@ -93,7 +93,7 @@ h1 .red { color: var(--red); }
 .sec-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 32px; }
 .sec-head h2 { font-size: clamp(28px, 3.4vw, 40px); font-weight: 900; letter-spacing: .02em; }
 .sec-head p { color: var(--grey); max-width: 30em; }
-.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 40px 20px; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 20px; }
 .card { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .card .img { background: var(--tile); aspect-ratio: 4 / 5; max-width: 100%; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; overflow: hidden; position: relative; }
 .card .no { font: 800 13px/1 var(--latin); letter-spacing: .12em; }
@@ -106,7 +106,6 @@ h1 .red { color: var(--red); }
 .card p { font-size: 14px; color: var(--grey); }
 .card .meta { font: 700 13px/1 var(--latin); letter-spacing: .04em; border-top: 1px solid var(--rule); padding-top: 12px; margin-top: auto; display: flex; justify-content: space-between; gap: 8px; }
 .card .meta span:last-child { color: var(--red); }
-@media (max-width: 1060px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 14px; } .card .glyph { font-size: 11px; } }
 @media (max-width: 420px) { .card .img { aspect-ratio: auto; min-height: 200px; } }
 
@@ -154,18 +153,18 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       </div>
       <div class="hero-visual" aria-label="退件解碼示範">
         <span class="tag en rise" style="--i:2">DECODE</span>
-        <p class="msg rise" style="--i:3">Error 504：欄位驗證失敗</p>
+        <p class="msg rise" style="--i:3">錯誤代碼 10400：數字資料範圍錯誤</p>
         <span class="arrow en rise" style="--i:4">↓ LOCATED</span>
         <dl class="out rise" style="--i:5">
-          <div class="out-row"><dt>位置</dt><dd>承保資料 第 1 行・保單 P250000001/A01</dd></div>
-          <div class="out-row"><dt>欄位</dt><dd>欄 10 出生日期（第 61–68 字元）</dd></div>
-          <div class="out-row"><dt>原始資料</dt><dd class="ruler">051│000000T010<mark>19910230</mark>1210NEW</dd></div>
-          <div class="out-row"><dt>修正</dt><dd>2 月沒有 30 日；依客戶資料更正為 <span class="fixed mono">19910623</span></dd></div>
+          <div class="out-row"><dt>位置</dt><dd>承保資料 第 31 行・保單 P250002201/A01（共定位 5 處）</dd></div>
+          <div class="out-row"><dt>欄位</dt><dd>欄 7 保險金額(原幣金額)（第 39–56 字元）</dd></div>
+          <div class="out-row"><dt>原始資料</dt><dd class="ruler">029│0000000000<mark>         500000000</mark>T030</dd></div>
+          <div class="out-row"><dt>修正</dt><dd>數字欄位須靠右、前補 0，改為 <span class="fixed mono">000000000500000000</span></dd></div>
         </dl>
       </div>
     </div>
     <div class="stats">
-      <div class="stat rise" style="--i:4"><b class="tnum">285</b><span>條檢核規則</span></div>
+      <div class="stat rise" style="--i:4"><b class="tnum" data-count="total">289</b><span>條檢核規則（明細 256・主檔 15・財報 9・結轉 4・合理性 4・對帳 1）</span></div>
       <div class="stat rise" style="--i:5"><b class="tnum">68/68</b><span>試用資料的刻意錯誤全數找到</span></div>
       <div class="stat rise" style="--i:6"><b class="tnum">0</b><span>正確資料上的誤報</span></div>
       <div class="stat rise" style="--i:7"><b class="tnum">7</b><span>種資料一次檢核</span></div>
@@ -187,7 +186,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <span class="cat">明細檢核</span>
         <h3>依填報手冊逐欄、逐筆檢核</h3>
         <p>承保檔 61 欄、給付檔 31 欄的格式、代碼、單筆與多筆邏輯，能推得正確值的一鍵修正。</p>
-        <div class="meta en"><span>RULES</span><span class="tnum">256</span></div>
+        <div class="meta en"><span>RULES</span><span class="tnum" data-count="detail">256</span></div>
       </article>
       <article class="card">
         <div class="img"><span class="no en">02</span><div class="glyph">理賠系統 2025-12
@@ -197,7 +196,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <span class="cat">跨系統對帳</span>
         <h3>與上游系統控制總數對帳</h3>
         <p>差異自動判定為時間差、口徑定義差或待查，並指出造成差額的那幾筆交易。</p>
-        <div class="meta en"><span>SYSTEMS</span><span class="tnum">3</span></div>
+        <div class="meta en"><span>RULES · 3 SYSTEMS</span><span class="tnum" data-count="recon">1</span></div>
       </article>
       <article class="card">
         <div class="img"><span class="no en">03</span><div class="glyph">2303 責任準備金
@@ -207,7 +206,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <span class="cat">財報勾稽</span>
         <h3>資產負債表加總與根因</h3>
         <p>結轉、上下層加總、資產 = 負債 + 權益；同一差額串成一個根因，停用科目給替代代號。</p>
-        <div class="meta en"><span>ROOT CAUSE</span><span>1 → 4</span></div>
+        <div class="meta en"><span>RULES · ROOT CAUSE 1 → 4</span><span class="tnum" data-count="stmt">9</span></div>
       </article>
       <article class="card">
         <div class="img"><span class="no en">04</span><div class="glyph">P24LOST0001/A01
@@ -217,7 +216,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <span class="cat">期初期末結轉</span>
         <h3>上年度期末 → 本年度期初</h3>
         <p>逐張保單勾稽，找出漏報、期初保額不符，以及保額變動卻沒有對應異動的保單。</p>
-        <div class="meta en"><span>ROLL-FORWARD</span><span>BY POLICY</span></div>
+        <div class="meta en"><span>RULES · BY POLICY</span><span class="tnum" data-count="roll">4</span></div>
       </article>
       <article class="card">
         <div class="img"><span class="no en">05</span><div class="glyph">J195366528
@@ -226,10 +225,20 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <span class="cat">客戶與商品資料</span>
         <h3>主檔交叉比對</h3>
         <p>身分證檢查碼、地址與郵遞區號、同一人資料一致；停售後仍用舊商品代號時給替代代號。</p>
-        <div class="meta en"><span>MASTER DATA</span><span class="tnum">15</span></div>
+        <div class="meta en"><span>RULES · MASTER DATA</span><span class="tnum" data-count="master">15</span></div>
       </article>
       <article class="card">
-        <div class="img"><span class="new en">AI</span><span class="no en">06</span><div class="glyph">「新契約保額超過
+        <div class="img"><span class="no en">06</span><div class="glyph">P250009001/A01
+<span class="dim">起保後</span> <span class="hit">45 天</span> <span class="dim">身故</span>
+疑似異常
+<span class="dim">需人工判斷</span></div></div>
+        <span class="cat">資料合理性</span>
+        <h3>合法但不合理的資料</h3>
+        <p>投保年齡過高、保額與保費比例離群、生效後短期理賠、同一人短期多次理賠。標為疑似異常，不計入錯誤，由人判斷。</p>
+        <div class="meta en"><span>RULES · SUSPECT</span><span class="tnum" data-count="anomaly">4</span></div>
+      </article>
+      <article class="card">
+        <div class="img"><span class="new en">AI</span><span class="no en">07</span><div class="glyph">「新契約保額超過
 3,000 萬元應體檢」
 <span class="dim">→</span> <span class="hit">U001</span> 可執行</div></div>
         <span class="cat">規則匯入</span>
@@ -238,16 +247,16 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <div class="meta en"><span>PDF / WORD</span><span>AI</span></div>
       </article>
       <article class="card">
-        <div class="img"><span class="new en">AI</span><span class="no en">07</span><div class="glyph">Error 504
-<span class="dim">→ 格式・代碼・缺漏</span>
-<span class="hit">定位 16 處</span></div></div>
+        <div class="img"><span class="new en">AI</span><span class="no en">08</span><div class="glyph">錯誤代碼 10400
+<span class="dim">→ 數字資料範圍錯誤</span>
+<span class="hit">定位 5 處</span></div></div>
         <span class="cat">退件解碼</span>
         <h3>籠統的退件代碼，還原成具體位置</h3>
         <p>貼上退件訊息，辨識檢核編號、行號與欄位名稱，列出每一筆的位置與修正值。</p>
         <div class="meta en"><span>DECODE</span><span>ROW · FIELD</span></div>
       </article>
       <article class="card">
-        <div class="img"><span class="no en">08</span><div class="glyph">檢核報告.html
+        <div class="img"><span class="no en">09</span><div class="glyph">檢核報告.html
 問題清單.csv
 不符資料.txt
 <span class="hit">AI 根因摘要</span></div></div>

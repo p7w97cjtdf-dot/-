@@ -82,7 +82,7 @@
     $('#imp-meta').textContent = `${label || `來源：${st.source || '貼上的文字'}`}。共 ${st.reviewed.length} 條規則${st.unconvertible.length ? `，${st.unconvertible.length} 條無法轉換` : ''}。${warn || ''}`;
     $('#imp-chips').innerHTML = ['可執行', '與內建相同', '疑似轉錯', '格式錯誤'].map(s => `<span class="st ${ST[s]}">${s} <b>${n(s)}</b></span>`).join('');
     renderCards();
-    note('#conv-note', `轉出 ${st.reviewed.length} 條規則，請檢查後勾選套用。`);
+    note('#conv-note', `轉出 ${st.reviewed.length} 條規則（AI 產出），請對照原文檢查後勾選套用。`);
     $('#imp-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function renderCards() {
@@ -98,6 +98,7 @@
         <div class="rc-head">
           <label class="rc-check"><input type="checkbox" data-k="${k}" ${r.enabled ? 'checked' : ''} ${r.errors.length ? 'disabled' : ''}> 套用</label>
           <span class="st ${ST[r.status]}">${r.status}</span>
+          <span class="ai-tag">AI 產出</span>
           <span class="mono">${esc(rule.id)}</span>
           <b>${esc(rule.name || '')}</b>
           <span class="hint">${FILE[rule.file] || rule.file}・${rule.scope === 'policy' ? '同保單多筆' : '單筆'}・${SEV[rule.severity] || '錯誤'}</span>
@@ -143,7 +144,7 @@
     $('#tc-import').textContent = rules.length || '';
     $('#applied-list').innerHTML = rules.length ? rules.map(r => {
       const d = dsl.describe(r, rs.layouts), hits = issues.filter(i => i.ruleId === r.id && i.imported);
-      return `<div class="applied-row"><span class="mono">${esc(r.id)}</span><span><b>${esc(r.name)}</b><span class="hint">${d.when ? `當 ${esc(d.when)}，` : ''}必須 ${esc(d.assert)}</span></span>
+      return `<div class="applied-row"><span class="mono">${esc(r.id)}</span><span><b>${esc(r.name)}</b> <span class="ai-tag">AI 產出</span><span class="hint">${d.when ? `當 ${esc(d.when)}，` : ''}必須 ${esc(d.assert)}</span></span>
         <span>${hits.length ? `<button class="chip jump" data-id="${hits[0].id}">${hits.length} 筆不通過</button>` : '<span class="hint">0 筆</span>'}</span>
         <button class="chip" data-remove="${esc(r.id)}">移除</button></div>`;
     }).join('') : '<p class="hint">尚未套用任何匯入規則。</p>';

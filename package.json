@@ -7,7 +7,8 @@
     "test": "node --test tests/*.test.js",
     "samples": "node tools/generate-samples.js",
     "validate": "node tools/validate.js",
-    "workbook": "node tools/export-workbook.js > /tmp/wb.json && python3 tools/build_workbook.py /tmp/wb.json samples/excel/試用資料_含錯誤.xlsx && node tools/export-workbook.js --clean > /tmp/wb-clean.json && python3 tools/build_workbook.py /tmp/wb-clean.json samples/excel/試用資料_正確.xlsx"
+    "workbook": "node tools/export-workbook.js > /tmp/wb.json && python3 tools/build_workbook.py /tmp/wb.json samples/excel/試用資料_含錯誤.xlsx && node tools/export-workbook.js --clean > /tmp/wb-clean.json && python3 tools/build_workbook.py /tmp/wb-clean.json samples/excel/試用資料_正確.xlsx",
+    "bench": "node tools/bench.js"
   },
   "engines": {
     "node": ">=18"

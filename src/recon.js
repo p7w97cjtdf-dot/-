@@ -334,6 +334,8 @@
   }
 
   // ---------- 4. 退件訊息解碼 ----------
+  // 填報手冊「肆、檢核程式項目及代碼表」的保發基本檢核錯誤代碼 (只有代碼、沒有欄位時用)
+  const MANUAL_CODES = { 10000: '檔案錯誤', 10100: '總長度(行數)錯誤', 10300: '資料型態錯誤', 10400: '數字資料範圍錯誤', 10500: '不可空白', 10600: '檔案是空的', 10700: '小數位數不足', 19900: '超過錯誤筆數上限' };
   const GENERIC = { '103': ['格式'], '104': ['格式', '缺漏'], '105': ['格式'], '2': ['代碼'], '3': ['多筆邏輯', '跨檔'] };
   const KEYWORDS = [
     [/欄位|格式|型態|長度|驗證|validation|field|format/i, ['格式', '代碼', '缺漏']],
@@ -367,6 +369,11 @@
     for (const m of t.matchAll(/(?:error|err|錯誤|代碼|code)\s*[:：#]?\s*(\d{3,5})(?!_)/gi)) {
       const n = m[1];
       if ([...codes].some(c => c.startsWith(n))) continue;
+      const exact = MANUAL_CODES[n] ? all.filter(i => i.ruleId === n || i.ruleId.startsWith(n + '_')) : [];
+      if (exact.length) {
+        add(m[0], '手冊錯誤代碼', `「${n}」是填報手冊「肆、檢核程式項目及代碼表」的錯誤代碼：${MANUAL_CODES[n]}（大項 ${n.slice(0, 3)}）。訊息沒有指出欄位與行號，以下依目前資料重新檢核，列出所有屬於此代碼 (${n}_欄位編號) 的具體位置。`, exact);
+        continue;
+      }
       const cats = GENERIC[n.slice(0, 3)] || GENERIC[n[0]];
       const kw = KEYWORDS.filter(([re]) => re.test(t)).flatMap(([, c]) => c);
       const want = new Set(cats && n.length === 5 ? cats : kw.length ? kw : ['格式', '代碼', '缺漏']);

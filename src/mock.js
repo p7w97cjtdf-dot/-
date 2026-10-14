@@ -92,7 +92,9 @@
         case 'new': add({ addType: 'NEW', addDate: start, exitType: 'XED' }); break;
         case 'keep': case 'usd': add({}); break;
         case 'lapse': {
-          const d1 = ev(), d2 = plus(d1, ri(30, 120)) > `${Y}1231` ? `${Y}1231` : plus(d1, ri(30, 120));
+          const d1 = ev(), cap = `${Y}1231` < end ? `${Y}1231` : end, a = plus(d1, ri(30, 120));
+          // 復效日不超過年底與滿期日 (亂數消耗次數與原本相同，避免試用資料位移)
+          let d2 = cap; if (a <= `${Y}1231`) { const b = plus(d1, ri(30, 120)); d2 = b > cap ? cap : b; } else if (a < cap) d2 = a;
           const pm = monthsBetween(start, d1);
           add({ txnSeq: '00001', exitType: 'LNN', exitDate: d1, paidMonths: String(Math.min(pm, 999)).padStart(3, '0'), lapseReason: 'S' });
           add({ txnSeq: '00002', addType: 'RNN', addDate: d2, exitType: 'XED' });
@@ -202,7 +204,8 @@
       key.push({ file: 'L', policy: dup.policyNo.trim() + '/' + dup.policySeq.trim(), ruleId: '30202_L0302', desc: '同一筆資料重複填送 (主鍵重複)' });
       const shortRec = take(single);
       shortRec._truncate = true;
-      key.push({ file: 'L', policy: '', ruleId: '10300', desc: '資料長度不足 (少一個欄位)' });
+      const sp = shortRec.policyNo.trim() + '/' + shortRec.policySeq.trim();
+      key.push({ file: 'L', policy: '', ruleId: '10300', affects: [`C007 ${sp}`], desc: `資料長度不足 (少一個欄位)；該筆 (${sp}) 無法拆欄，客戶資料會連帶出現 C007「保單不在承保檔」` });
       key.push({ file: 'L', policy: '', ruleId: 'F003', desc: '檔案中間有空白行' });
     }
 
@@ -214,7 +217,7 @@
       const old = Ls.find(r => single(r) && r.termType === 'Y' && r.addType !== 'NEW');
       if (old) { old.birthDate = String(+old.startDate.slice(0, 4) - 78) + old.startDate.slice(4, 6) + '01'; ruleKey.push({ ruleId: 'U002', policy: old.policyNo.trim() + '/' + old.policySeq.trim(), desc: '投保年齡 78 歲承保終身壽險' }); reserved.add(old.policyNo); }
       const big = Ls.find(r => single(r) && r.addType === 'NEW' && r.currency === 'NTD');
-      if (big) { for (const k of ['sumInsuredOrig', 'sumInsuredTwd', 'illnessDeathOrig', 'illnessDeathTwd']) big[k] = '4000000000'; ruleKey.push({ ruleId: 'U001', policy: big.policyNo.trim() + '/' + big.policySeq.trim(), desc: '新契約保額 4,000 萬元未體檢' }); reserved.add(big.policyNo); }
+      if (big) { const f = 4000000000n / BigInt(big.sumInsuredOrig); for (const k of ['totalPremOrig', 'totalPremTwd']) big[k] = String(BigInt(big[k]) * f); for (const k of ['sumInsuredOrig', 'sumInsuredTwd', 'illnessDeathOrig', 'illnessDeathTwd']) big[k] = '4000000000'; ruleKey.push({ ruleId: 'U001', policy: big.policyNo.trim() + '/' + big.policySeq.trim(), desc: '新契約保額 4,000 萬元未體檢' }); reserved.add(big.policyNo); }
       const slow = Ds.find(d => d.claimType === '1' && !reserved.has(d.policyNo) && !key.some(k => k.policy.startsWith(d.policyNo.trim())) && Ds.filter(x => x.policyNo === d.policyNo).length === 1);
       if (slow) { slow.payDate = plus(slow.eventDate, 120); ruleKey.push({ ruleId: 'U007', policy: slow.policyNo.trim() + '/' + slow.policySeq.trim(), desc: '死亡給付在事故後 120 天才給付' }); reserved.add(slow.policyNo); }
     }
@@ -229,6 +232,52 @@
       if (b) { const c = b.productCode; b.productCode = c.slice(0, 9) + c[10] + c[9] + c.slice(11); reserved.add(b.policyNo); masterKey.push({ ruleId: 'PM01', policy: b.policyNo.trim() + '/' + b.policySeq.trim(), suggest: c, desc: `商品代號第 10、11 碼對調（${b.productCode}）` }); }
     }
 
+    // 合理性情境：資料合法但不合理，應標為「疑似異常（需人工判斷）」而非錯誤
+    const anomalyKey = [], custPatch = [];
+    if (opts.inject) {
+      const busy = r => reserved.has(r.policyNo) || [key, ruleKey, masterKey].some(ks => ks.some(k => k.policy.startsWith(r.policyNo.trim())));
+      const fresh = r => r.addType === 'NEW' && r.exitType === 'XED' && r.currency === 'NTD' && !busy(r) && Ls.filter(x => x.policyNo === r.policyNo).length === 1;
+      const tag = (r, ruleId, desc) => { reserved.add(r.policyNo); anomalyKey.push({ ruleId, file: ruleId < 'A003' ? 'L' : 'D', policy: r.policyNo.trim() + '/' + r.policySeq.trim(), desc }); };
+      // A001 新契約被保險人 86 歲 (定期壽險，避免同時違反「75 歲以上不得承保終身壽險」範例規則)
+      const old = Ls.find(r => fresh(r) && r.termType === 'T');
+      if (old) {
+        old.birthDate = String(+old.startDate.slice(0, 4) - 86) + old.startDate.slice(4, 6) + '01';
+        custPatch.push([old.policyNo.trim(), old.birthDate]);
+        tag(old, 'A001', `新契約投保年齡 86 歲（出生 ${old.birthDate}）`);
+      }
+      // A002 總保費只有正常的 1/10 (疑似少一位數)
+      const cheap = Ls.find(r => fresh(r) && r.productCode !== (old && old.productCode) && Ls.filter(x => x.productCode === r.productCode).length >= 6);
+      if (cheap) { for (const k of ['totalPremOrig', 'totalPremTwd']) cheap[k] = String(BigInt(cheap[k]) / 10n); tag(cheap, 'A002', '應繳總保費合計只有同商品正常水準的 1/10'); }
+      // A003 生效後 45 天即疾病身故
+      const early = Ls.find(r => fresh(r) && r.startDate <= `${Y}0901`);
+      const tpl = Ds.find(d => d.claimType === '1');
+      if (early && tpl) {
+        const ev = plus(early.startDate, 45);
+        early.exitType = 'DEA'; early.exitDate = ev;
+        const f = ['company', 'policyNo', 'policySeq', 'termType', 'term', 'birthDate', 'sex', 'medExam', 'examClass', 'substdReason', 'startDate', 'productClass', 'currency', 'occClass', 'companyPlanCode'];
+        const d = Object.assign({}, tpl, Object.fromEntries(f.map(k => [k, early[k]])), { claimType: '1', eventDate: ev, payDate: plus(ev, 20), causeIcd: 'C349 ', diffReason: '0', disabilityItem: '00000000',
+          dueAmtOrig: early.illnessDeathOrig, paidAmtOrig: early.illnessDeathOrig, dueAmtTwd: early.illnessDeathTwd, paidAmtTwd: early.illnessDeathTwd });
+        Ds.push(d);
+        tag(early, 'A003', `${early.startDate} 起保，45 天後（${ev}）疾病身故`);
+      }
+      // A004 同一被保險人兩張保單：乙保單領生命末期提前給付，60 天後甲保單身故
+      const mkClaim = (l, type, ev, icd) => Object.assign({}, tpl, Object.fromEntries(['company', 'policyNo', 'policySeq', 'termType', 'term', 'birthDate', 'sex', 'medExam', 'examClass', 'substdReason', 'startDate', 'productClass', 'currency', 'occClass', 'companyPlanCode'].map(k => [k, l[k]])),
+        { claimType: type, eventDate: ev, payDate: plus(ev, 20), causeIcd: icd, diffReason: '0', disabilityItem: '00000000', dueAmtOrig: l.illnessDeathOrig, paidAmtOrig: l.illnessDeathOrig, dueAmtTwd: l.illnessDeathTwd, paidAmtTwd: l.illnessDeathTwd });
+      for (const x of Ds.filter(d => d.claimType === '1' && !/^[V-Y]/.test(d.causeIcd) && d.currency === 'NTD' && !busy({ policyNo: d.policyNo }) && Ds.filter(z => z.policyNo === d.policyNo).length === 1)) {
+        const ev = plus(x.eventDate, -60);
+        const y = Ls.find(r => !r._truncate && r.txnSeq === '00000' && r.exitType === 'EOY' && r.currency === 'NTD' && !busy(r) && r.policyNo !== x.policyNo && Ls.filter(z => z.policyNo === r.policyNo).length === 1 && r.startDate <= plus(ev, -365));
+        if (!y || !tpl) continue;
+        const xl = Ls.find(r => r.policyNo === x.policyNo);
+        y.birthDate = xl.birthDate; y.sex = xl.sex;
+        y.exitType = 'ABD'; y.exitDate = ev;
+        Ds.push(mkClaim(y, '3', ev, x.causeIcd));
+        custPatch.push([y.policyNo.trim(), null, x.policyNo.trim()]);
+        reserved.add(y.policyNo);
+        tag(x, 'A004', `與保單 ${y.policyNo.trim()} 為同一被保險人：${ev} 先領生命末期提前給付，60 天後（${x.eventDate}）身故給付`);
+        break;
+      }
+    }
+
     // 結轉情境：復效時保額被改動但未以 INN/DNN 申報
     const reconKey = [];
     if (opts.inject) {
@@ -238,6 +287,33 @@
         reconKey.push({ module: 'roll', ruleId: 'P004', policy: rnn.policyNo.trim() + '/' + rnn.policySeq.trim(), desc: '復效(RNN)時保額變動，未以保額增加(INN)申報' });
       }
     }
+    // 預設含錯誤情境使用試用客戶資料 (sample-data.js)：依合理性情境同步，並修正試用資料中非刻意的不一致，
+    // 讓「錯誤解答」以外不會多出客戶資料問題
+    const useTrial = opts.inject && opts.seed === 20251014 && opts.policies === 120 && CO === '01' && Y === 2025;
+    let trialCsv = null;
+    if (useTrial) {
+      const rows = sample.CUSTOMER_CSV.trimEnd().split('\n').map(l => l.split(','));
+      const get = (p, role) => rows.find(z => z[0] === p && z[2] === role);
+      const keep = new Set(CUSTOMER_KEY.map(k => k.policy.split('/')[0]));
+      custPatch.push(['P250006201', '19431101']);            // 試用資料被保險人生日與承保檔不同
+      for (const [p, birth, from] of custPatch) {
+        const ins = get(p, '2'), own = get(p, '1');
+        if (!ins) continue;
+        const same = own && own[3] === ins[3];
+        const person = birth ? ins.slice(3, 5).concat([birth], ins.slice(6)) : get(from, '2').slice(3);
+        ins.splice(3, ins.length - 3, ...person);
+        if (same) own.splice(3, own.length - 3, ...person);
+      }
+      // 被保險人身份 (承保檔) 與客戶資料的年齡關係一致：子女應較年輕、父母應較年長
+      for (const r of Ls) {
+        const pno = r.policyNo.trim(), own = get(pno, '1'), ins = get(pno, '2');
+        if (!own || !ins || keep.has(pno) || own[3] === ins[3]) continue;
+        const gap = +own[5].slice(0, 4) - +ins[5].slice(0, 4);          // > 0：被保險人較年長
+        const bad = r.insuredRelation === '1' || (r.insuredRelation === '3' && gap >= 0) || (r.insuredRelation === '4' && gap <= 0);
+        if (bad) r.insuredRelation = gap >= 15 ? '4' : gap <= -15 ? '3' : '2';
+      }
+      trialCsv = rows.map(c => c.join(',')).join('\n') + '\n';
+    }
     for (const e of extraL) Ls.splice(Ls.indexOf(e.after) + 1, 0, e.rec);
     const lines = Ls.map(r => {
       let s = buildLine(L, r);
@@ -246,12 +322,12 @@
     });
     if (opts.inject) lines.splice(Math.floor(lines.length / 2), 0, '');
     const dLines = Ds.map(r => buildLine(D, r));
-    const out = { L: lines.join('\n') + '\n', D: dLines.join('\n') + '\n', key, reconKey, ruleKey, masterKey,
+    const out = { L: lines.join('\n') + '\n', D: dLines.join('\n') + '\n', key, reconKey, ruleKey, masterKey, anomalyKey,
       names: { L: `LFL${CO}_${Y}.txt`, D: `LFD${CO}_${Y}.txt`, prior: `LFL${CO}_${Y - 1}.txt`, control: `控制總數_${Y}.csv`, statement: `資產負債表_${Y}.csv`, products: `商品資料_${Y}.csv`, customers: `客戶資料_${Y}.csv` } };
     out.products = sample.PRODUCT_CSV;
     // 含錯誤的預設情境使用試用的客戶資料 (假設資料，內含刻意的錯誤)；其他情境產生與保單一致的客戶資料
-    if (opts.inject && opts.seed === 20251014 && opts.policies === 120 && CO === '01' && Y === 2025) {
-      out.customers = sample.CUSTOMER_CSV;
+    if (useTrial) {
+      out.customers = trialCsv;
       masterKey.push(...CUSTOMER_KEY);
     } else out.customers = customersFor(Ls, opts.seed);
     Object.assign(out, reconInputs(out, truthL, { Y, CO, inject: opts.inject, rand, ri, juneClaim, yearEndClaim, reconKey }));

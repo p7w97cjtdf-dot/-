@@ -23,6 +23,7 @@ const rowOf = (sheet, policy) => {
 const keyRows = [];
 for (const k of g.key) keyRows.push(['明細檢核', k.ruleId, k.file === 'D' ? '給付資料' : '承保資料', k.policy, rowOf(k.file === 'D' ? { rows: D.rows.map(r => [r[0], r[2], r[3]]) } : L, k.policy), k.desc]);
 for (const k of g.masterKey) keyRows.push([k.ruleId.startsWith('PM') ? '商品資料' : '客戶資料', k.ruleId, k.ruleId.startsWith('PM') || k.ruleId === 'C008' || k.ruleId === 'C009' || k.ruleId === 'C006' ? '承保資料' : '客戶資料', k.policy, k.ruleId.startsWith('PM') || ['C006', 'C008', 'C009'].includes(k.ruleId) ? rowOf(L, k.policy) : '', k.desc + (k.fix ? `（修正值 ${k.fix}）` : '') + (k.suggest ? `（正確代號 ${k.suggest}）` : '')]);
+for (const k of g.anomalyKey) keyRows.push(['疑似異常（需人工判斷）', k.ruleId, k.file === 'D' ? '給付資料' : '承保資料', k.policy, rowOf(k.file === 'D' ? { rows: D.rows.map(r => [r[0], r[2], r[3]]) } : L, k.policy), k.desc + '（不是錯誤：結果應標為疑似異常，由人工判斷）']);
 for (const k of g.ruleKey) keyRows.push(['匯入規則', k.ruleId, '承保資料／給付資料', k.policy, '', k.desc + '（需先在「規則匯入」套用公司內部核保規則）']);
 for (const k of g.reconKey) keyRows.push([{ control: '跨系統對帳', roll: '期初期末結轉', stmt: '財報勾稽' }[k.module], k.ruleId || 'R001', { control: '控制總數', roll: '上年度承保資料', stmt: '資產負債表' }[k.module], k.policy || k.code || `${k.item} ${k.period}`, '', k.desc + (k.status ? `（應判定為：${k.status}）` : '')]);
 
@@ -40,5 +41,6 @@ console.log(JSON.stringify({
     資產負債表: { header: st.header, rows: st.rows.map(r => [r[0], r[1], ...r.slice(2).map(Number)]), children },
   },
   key: keyRows,
-  skipped: inject ? ['承保資料檔中「長度不足」的一筆與「空白行」無法以 Excel 儲存格表示，請使用 samples/dirty/LFL01_2025.txt 測試這兩項。'] : [],
+  skipped: inject ? ['承保資料檔中「長度不足」的一筆與「空白行」無法以 Excel 儲存格表示，請使用 samples/dirty/LFL01_2025.txt 測試這兩項。' +
+    `長度不足的那筆 (${(g.key.find(k => k.ruleId === '10300').affects || [''])[0].split(' ')[1] || ''}) 因此不在本檔「承保資料」，客戶資料會連帶出現 1 項 C007。`] : [],
 }));

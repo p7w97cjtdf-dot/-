@@ -57,6 +57,7 @@
           <button id="btn-ai" class="btn cta">產生 AI 分析摘要</button>
         </div>
       </div>
+      <p class="ai-notice">此功能會將內容傳送至 Claude API（姓名、證號、地址已先遮罩）</p>
       <div id="ai-out" class="ai-out"></div>
     </div>
 
@@ -126,17 +127,18 @@
   <section id="view-decode" class="view" hidden>
     <div class="block">
       <h2>退件解碼</h2>
-      <p class="hint">貼上主管機關或申報系統的退件訊息，即使只有「Error 504：欄位驗證失敗」這種籠統代碼，也會依目前資料重新檢核，定位到具體的檔案、行號、欄位與修正值。</p>
-      <textarea id="dec-text" rows="4" placeholder="例：Error 504: 欄位驗證失敗"></textarea>
+      <p class="hint">貼上主管機關或申報系統的退件訊息，即使只有「錯誤代碼 10400：數字資料範圍錯誤」這種只有代碼、沒有欄位與行號的訊息（代碼依填報手冊「肆、檢核程式項目及代碼表」），也會依目前資料重新檢核，定位到具體的檔案、行號、欄位與修正值。</p>
+      <textarea id="dec-text" rows="4" placeholder="例：錯誤代碼 10400：數字資料範圍錯誤"></textarea>
       <div class="actions">
         <button id="btn-decode" class="btn">解碼並定位</button>
         <button id="btn-decode-ai" class="btn ghost">請 AI 解讀並擬定修正計畫</button>
         <span class="label">試試看</span>
-        <button class="chip ex">Error 504: 欄位驗證失敗</button>
+        <button class="chip ex">錯誤代碼 10400：數字資料範圍錯誤</button>
         <button class="chip ex">退件原因：30212_L1305、L0612</button>
         <button class="chip ex">資產負債表不平，期初期末兜不攏</button>
         <button class="chip ex">第 37 行資料有誤，保單分紅類別錯誤</button>
       </div>
+      <p class="ai-notice">此功能會將內容傳送至 Claude API（退件訊息與定位結果；姓名、證號、地址已先遮罩）</p>
       <div class="ai-out" id="dec-ai"></div>
     </div>
     <div id="dec-out" class="findings"></div>
@@ -169,6 +171,7 @@
         <button class="btn ghost" id="btn-preconverted">載入預先轉換結果（不需 AI）</button>
         <span class="hint" id="conv-note"></span>
       </div>
+      <p class="ai-notice">「用 AI 轉換成規則」會將內容傳送至 Claude API（規則文件文字與欄位字典；文件中的證號會先遮罩）。「載入預先轉換結果」不會連線。</p>
     </div>
 
     <div class="block" id="imp-result" hidden>
@@ -234,10 +237,13 @@
 <script src="src/recon.js"></script>
 <script src="src/sample-data.js"></script>
 <script src="src/master.js"></script>
+<script src="src/anomaly.js"></script>
+<script src="src/rule-stats.js"></script>
 <script src="src/mock.js"></script>
 <script src="src/rules-dsl.js"></script>
 <script src="src/rule-import.js"></script>
 <script src="src/rule-samples.js"></script>
+<script src="src/ai-payload.js"></script>
 <script src="src/ai.js"></script>
 <script src="src/app.js"></script>
 <script src="src/app-import.js"></script>
