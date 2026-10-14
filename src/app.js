@@ -87,25 +87,6 @@
   document.addEventListener('dragover', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
   document.addEventListener('drop', e => { if (!e.dataTransfer || !e.dataTransfer.files.length) return; e.preventDefault(); if (!e.target.closest('.drop')) readMany([...e.dataTransfer.files]); });
 
-  // 空白範本：7 張工作表只有標題列，外部使用者照著填入自己的資料
-  $('#btn-template').onclick = () => {
-    if (!window.XLSX) { $('#sample-note').textContent = '讀取 Excel 的元件沒有載入成功，請確認網路後重新整理頁面。'; return; }
-    const sh = DQ.workbook.sheets(DQ.mock.generate({ inject: false })), wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['填寫說明'], ['1. 每張工作表的第一列是欄位名稱，請不要修改；從第二列開始每列填一筆資料。'],
-      ['2. 至少要有「保單資料」或「理賠資料」其中一張，其他工作表沒有可以留空或刪除。'],
-      ['3. 代號、日期、保單號碼等欄位請設為「文字」格式，以免開頭的 0 被 Excel 去掉。'],
-      ['4. 日期格式為西元年月日 8 碼，例如 20250131。'],
-      ['5. 填好後把整個檔案拖進檢核工具即可，資料只在你的電腦上處理。'],
-    ]), '說明');
-    for (const [name, t] of Object.entries(sh)) {
-      const ws = XLSX.utils.aoa_to_sheet([t.header]);
-      ws['!cols'] = t.header.map(h => ({ wch: Math.max(8, String(h).length * 2 + 2) }));
-      XLSX.utils.book_append_sheet(wb, ws, name);
-    }
-    download('blank_template.xlsx', new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  };
-
   // ---------- 執行 ----------
   const SLOT_NAME = { L: '保單資料', D: '理賠資料', prior: '去年保單資料', control: '系統總數', statement: '資產負債表', products: '商品資料', customers: '客戶資料' };
   function run() {
@@ -506,6 +487,6 @@
   $('#btn-list').onclick = () => { const on = document.body.classList.toggle('show-list'); $('#btn-list').setAttribute('aria-expanded', on); $('#btn-list').textContent = on ? '收起清單' : '看全部清單'; };
   // 打開時不載入任何資料：只顯示拖放框
   document.body.classList.add('no-data');
-  $('#sample-note').textContent = '還沒有資料。把 Excel 拖到上方的框；不確定格式的話，先下載空白範本照著填。';
+  $('#sample-note').textContent = '還沒有資料。把申報文字檔或 Excel 拖到上方的框。';
   if (['check', 'recon', 'decode', 'report', 'rules'].includes(hash)) showTab(hash);
 })();
