@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>申報資料檢核助手</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant:wght@500;600;700&family=Montserrat:wght@400;500;600&family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&family=Fira+Code:wght@400&display=swap">
+<link rel="stylesheet" href="src/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>申報資料檢核助手</h1>
+    <p class="sub">把要申報的保單、理賠等資料放進來，自動找出錯誤並告訴你怎麼改。資料只在你的電腦上處理，不會上傳。</p>
+  </div>
+</header>
+
+<main>
+  <section class="imports" aria-label="放入資料">
+    <label class="drop big" id="drop-book" for="file-book">
+      <span class="drop-k"><span class="on-desk">把 Excel 檔拖到這裡，或點這裡選擇檔案</span><span class="on-phone">點這裡選擇 Excel 檔</span></span>
+      <span class="drop-h">工作表名稱含「保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數、資產負債表」就會自動分好；也可以一次放入多個文字檔或 CSV。</span>
+      <input type="file" id="file-book" accept=".xlsx,.xls,.xlsm,.ods,.txt,.csv" multiple>
+    </label>
+    <div class="samples">
+      <span class="label">先看範例</span>
+      <button id="btn-dirty" class="btn">範例資料（有錯誤）</button>
+      <button id="btn-clean" class="btn ghost">範例資料（全部正確）</button>
+      <span class="hint" id="sample-note"></span>
+    </div>
+    <details class="more">
+      <summary>分別放入各份資料（進階）</summary>
+      <div class="upload">
+        <label class="drop" id="drop-L" for="file-L"><span class="drop-k">保單資料</span><span class="drop-n" id="name-L">尚未放入</span><span class="drop-h">每張保單的申報資料</span><input type="file" id="file-L" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop" id="drop-D" for="file-D"><span class="drop-k">理賠資料</span><span class="drop-n" id="name-D">尚未放入</span><span class="drop-h">每筆理賠給付的申報資料</span><input type="file" id="file-D" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-prior" for="file-prior"><span class="drop-k">去年保單資料</span><span class="drop-n" id="name-prior">尚未放入</span><span class="drop-h">確認去年底和今年初接得上</span><input type="file" id="file-prior" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-control" for="file-control"><span class="drop-k">系統總數</span><span class="drop-n" id="name-control">尚未放入</span><span class="drop-h">各系統的筆數與金額總數</span><input type="file" id="file-control" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-statement" for="file-statement"><span class="drop-k">資產負債表</span><span class="drop-n" id="name-statement">尚未放入</span><span class="drop-h">檢查報表加總</span><input type="file" id="file-statement" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-products" for="file-products"><span class="drop-k">商品資料</span><span class="drop-n" id="name-products">尚未放入</span><span class="drop-h">商品代號、停售日</span><input type="file" id="file-products" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-customers" for="file-customers"><span class="drop-k">客戶資料</span><span class="drop-n" id="name-customers">尚未放入</span><span class="drop-h">要保人、被保險人</span><input type="file" id="file-customers" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
+      </div>
+    </details>
+  </section>
+
+
+  <!-- ================= 明細檢核 ================= -->
+  <section id="view-check" class="view">
+    <div class="summary" id="summary"></div>
+    <p class="summary-note hint" id="summary-note"></p>
+    <div class="review-start">
+      <button id="btn-review" class="btn cta">逐筆確認問題</button>
+      <span class="hint">一次看一個問題，決定要不要改；手機上最好用。</span>
+      <button id="btn-list" class="btn ghost list-toggle" aria-expanded="false">看全部清單</button>
+    </div>
+
+    <div class="ai" id="ai-box" hidden>
+      <div id="ai-out" class="ai-out"></div>
+    </div>
+
+    <div class="issues">
+      <div class="filters">
+        <h2>找到的問題 <span id="issue-count" class="count"></span></h2>
+        <div class="filter-row">
+          <select id="f-sev" aria-label="狀況"><option value="">全部狀況</option><option value="error">必須修改</option><option value="warning">建議確認</option><option value="suspect">請人工判斷</option></select>
+          <select id="f-file" aria-label="資料"><option value="">全部資料</option><option>保單資料</option><option>理賠資料</option><option>客戶資料</option><option>商品資料</option><option>去年保單資料</option><option>系統總數</option><option>資產負債表</option></select>
+          <select id="f-cat" aria-label="問題類型" hidden><option value="">全部問題類型</option></select>
+          <input id="f-q" type="search" placeholder="搜尋保單號碼、欄位或文字…">
+        </div>
+        <div class="actions">
+          <button id="btn-fix" class="btn cta">一鍵修改所有可修的地方</button>
+          <button id="btn-dl-csv" class="btn ghost">下載問題清單</button>
+          <button id="btn-dl-report" class="btn ghost">下載報告</button>
+          <button id="btn-dl-fixed" class="btn ghost">下載改好的保單資料</button>
+          <button id="btn-dl-reject" class="btn ghost" hidden>下載有問題的資料列</button>
+          <button id="btn-ai" class="btn ghost ai-btn" title="會把檢查結果送給 AI（Claude）整理；姓名、身分證號和地址會先遮住">請 AI 整理重點</button>
+          <span class="hint" id="action-note"></span>
+        </div>
+        <p class="ai-notice">按「請 AI 整理重點」會把檢查結果送給 AI（Claude）；姓名、身分證號和地址會先遮住。</p>
+      </div>
+      <div class="split">
+        <div class="table-wrap">
+          <table id="issue-table">
+            <thead><tr><th></th><th>位置</th><th>保單號碼</th><th>欄位</th><th>目前的值</th><th>問題</th><th>建議改成</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <aside class="detail" id="detail" aria-live="polite"></aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 跨系統對帳 ================= -->
+  <section id="view-recon" class="view" hidden>
+    <div class="block">
+      <div class="block-head">
+        <div><h2>和各系統的總數核對</h2><p class="hint">把申報資料加總，和新契約、理賠、保單系統各自的總數比較。對不上時會說明原因：是兩邊結帳日不同、計算方式不同，還是真的有缺漏需要追查。</p></div>
+        <label class="toggle"><input type="checkbox" id="ctl-diff-only" checked> 只看對不上的</label>
+      </div>
+      <div class="chips" id="ctl-chips"></div>
+      <div class="table-wrap"><table id="ctl-table"><thead><tr><th>系統</th><th>項目</th><th>期間</th><th class="num">系統的總數</th><th class="num">申報資料加總</th><th class="num">差多少</th><th>原因</th><th>說明</th></tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><div><h2>去年底和今年初是否接得上</h2><p class="hint">逐張比對去年申報的有效保單和今年的資料：有沒有漏報、保額是否相同，今年的保額變動是否都有對應的異動。金額為保額（新臺幣）。</p></div></div>
+      <div class="roll">
+        <div class="table-wrap"><table id="roll-table"><thead><tr><th>項目</th><th class="num">件數</th><th class="num">保額（元）</th></tr></thead><tbody></tbody></table></div>
+        <div class="table-wrap"><table id="roll-issues"><thead><tr><th>狀況</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><div><h2>客戶資料與商品資料</h2><p class="hint">檢查身分證號是否正確、地址和郵遞區號是否相符、同一個人在不同保單的資料是否一致，並和保單資料比對生日與性別；保單資料填錯時，會用客戶資料當作建議的值。商品方面檢查商品代號是否存在、已停售的商品是否還在使用。</p></div></div>
+      <div class="chips" id="mst-chips"></div>
+      <div class="table-wrap"><table id="mst-table"><thead><tr><th>狀況</th><th>位置</th><th>保單號碼</th><th>問題</th><th>建議怎麼改</th></tr></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><div><h2>資產負債表加總檢查</h2><p class="hint">檢查每個科目的期初加減後是否等於期末、小計是否等於細項加總、資產是否等於負債加權益，以及科目代號是否打錯或已停用。</p></div></div>
+      <div id="stmt-banner"></div>
+      <div id="stmt-chains" class="chains"></div>
+      <div class="table-wrap"><table id="stmt-table"><thead><tr><th>科目代號</th><th>科目名稱</th><th class="num">期初餘額</th><th class="num">本期增加</th><th class="num">本期減少</th><th class="num">期末餘額</th><th>結果</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ================= 退件解碼 ================= -->
+  <section id="view-decode" class="view" hidden>
+    <div class="block">
+      <h2>看懂退件通知</h2>
+      <p class="hint">把退件通知的內容貼上來。就算通知只寫了錯誤代碼、沒說是哪一行，也會幫你找出是哪幾筆資料、哪個欄位，以及該怎麼改。</p>
+      <textarea id="dec-text" rows="4" placeholder="例：錯誤代碼 10400：數字資料範圍錯誤"></textarea>
+      <div class="actions">
+        <button id="btn-decode" class="btn">幫我找出問題</button>
+        <button id="btn-decode-ai" class="btn ghost ai-btn">請 AI 說明怎麼改</button>
+        <span class="label">範例</span>
+        <button class="chip ex">錯誤代碼 10400：數字資料範圍錯誤</button>
+        <button class="chip ex">退件原因：30212_L1305、L0612</button>
+        <button class="chip ex">資產負債表不平，期初期末兜不攏</button>
+        <button class="chip ex">第 37 行資料有誤，保單分紅類別錯誤</button>
+      </div>
+      <p class="ai-notice">按下「請 AI 說明怎麼改」會把退件通知和找到的問題送給 AI（Claude）；姓名、身分證號和地址會先遮住。</p>
+      <div class="ai-out" id="dec-ai"></div>
+    </div>
+    <div id="dec-out" class="findings"></div>
+  </section>
+
+  <!-- ================= 規則匯入 ================= -->
+  <section id="view-import" class="view" hidden>
+    <div class="block">
+      <div class="block-head">
+        <div><h2>新增檢查規則</h2>
+          <p class="hint">把寫著規則的文件（PDF、Word、文字檔）放進來，AI 會把文字規則轉成工具可以執行的檢查。轉好的規則會先在「全部正確」的範例資料上試跑：如果在正確資料上也報錯，多半是轉錯了，會標出來讓你確認。你勾選確認後才會使用。</p></div>
+      </div>
+      <div class="imp-src">
+        <label class="drop" id="drop-rule" for="file-rule"><span class="drop-k">規則文件</span><span class="drop-n" id="name-rule">PDF、Word 或文字檔</span><span class="drop-h">在你的電腦上讀取，不會上傳</span><input type="file" id="file-rule" accept=".pdf,.docx,.txt,.md,.csv"></label>
+        <div class="imp-pages" id="imp-pages" hidden>
+          <span class="label">要轉換的頁數</span>
+          <input id="pg-from" type="number" min="1" aria-label="起始頁"> – <input id="pg-to" type="number" min="1" aria-label="結束頁">
+          <button class="btn ghost small" id="btn-pages">讀取這些頁</button>
+          <span class="hint" id="pg-note"></span>
+        </div>
+        <div class="actions">
+          <span class="label">範例文件</span>
+          <button class="chip" id="ex-company">公司內部規則（範例）</button>
+          <button class="chip" id="ex-manual">填報手冊條文（範例）</button>
+        </div>
+      </div>
+      <textarea id="rule-text" rows="9" placeholder="放入文件後，文字會出現在這裡；也可以直接貼上規則。"></textarea>
+      <div class="actions">
+        <button class="btn cta ai-btn" id="btn-convert">用 AI 轉換</button>
+        <button class="btn ghost" id="btn-preconverted">使用範例的轉換結果（不需 AI）</button>
+        <span class="hint" id="conv-note"></span>
+      </div>
+      <p class="ai-notice">按下「用 AI 轉換」會把文件的文字送給 AI（Claude）；文件中的身分證號會先遮住。「使用範例的轉換結果」不會連網。</p>
+    </div>
+
+    <div class="block" id="imp-result" hidden>
+      <div class="block-head">
+        <div><h2>轉換結果</h2><p class="hint" id="imp-meta"></p></div>
+        <div class="actions">
+          <button class="btn" id="btn-apply">使用勾選的規則</button>
+          <button class="btn ghost" id="btn-dl-rules">備份這些規則</button>
+        </div>
+      </div>
+      <div class="chips" id="imp-chips"></div>
+      <div id="imp-cards" class="rule-cards"></div>
+      <div id="imp-unconv"></div>
+    </div>
+
+    <div class="block">
+      <div class="block-head">
+        <div><h2>使用中的自訂規則 <span class="count" id="applied-count"></span></h2><p class="hint">這些規則會和原本的檢查一起執行，結果出現在「檢查結果」，問題類型為「自訂規則」。規則會保存在這個瀏覽器。</p></div>
+        <div class="actions">
+          <label class="btn ghost" for="file-rules-json">載入備份的規則<input type="file" id="file-rules-json" accept=".json" hidden></label>
+          <button class="btn ghost" id="btn-clear-rules">全部移除</button>
+        </div>
+      </div>
+      <div id="applied-list" class="applied"></div>
+    </div>
+  </section>
+
+  <!-- ================= 報告 ================= -->
+  <section id="view-report" class="view" hidden>
+    <div class="report-bar">
+      <p>整理好的檢查報告，可以下載寄給同事或存檔（用瀏覽器開啟）。</p>
+    </div>
+    <iframe id="report-frame" title="檢查報告" sandbox=""></iframe>
+  </section>
+
+  <!-- ================= 規則 ================= -->
+  <section id="view-rules" class="view" hidden>
+    <div class="rules-head">
+      <h2>檢查項目一覽</h2>
+      <p id="rules-meta" class="hint"></p>
+      <input id="r-q" type="search" placeholder="搜尋檢查項目…">
+    </div>
+    <div class="table-wrap"><table id="rule-table"><thead><tr><th>編號</th><th>類型</th><th>檢查內容</th><th>手冊出處</th><th>狀況</th><th class="num">這次發現</th></tr></thead><tbody></tbody></table></div>
+    <h2 class="mt">保單資料每個欄位的位置</h2>
+    <div class="table-wrap"><table id="layout-table"><thead><tr><th class="num">第幾欄</th><th>欄位名稱</th><th class="num">從第幾個字</th><th class="num">到第幾個字</th><th>格式</th></tr></thead><tbody></tbody></table></div>
+    <h2 class="mt">會計科目（示範用）</h2>
+    <div class="table-wrap"><table id="chart-table"><thead><tr><th>科目代號</th><th>科目名稱</th><th>狀態</th></tr></thead><tbody></tbody></table></div>
+  </section>
+  <nav class="tabs advanced" aria-label="進階功能">
+    <span class="label">進階功能</span>
+    <button id="tab-check" aria-selected="true" data-view="check">檢查結果 <span class="tc" id="tc-check"></span></button>
+    <button id="tab-recon" aria-selected="false" data-view="recon">數字核對明細 <span class="tc" id="tc-recon"></span></button>
+    <button id="tab-decode" aria-selected="false" data-view="decode">看懂退件通知</button>
+    <button id="tab-import" aria-selected="false" data-view="import">新增檢查規則 <span class="tc ok" id="tc-import"></span></button>
+    <button id="tab-report" aria-selected="false" data-view="report">預覽報告</button>
+    <button id="tab-rules" aria-selected="false" data-view="rules">檢查項目一覽</button>
+  </nav>
+  <section id="review" class="review" hidden aria-label="逐筆確認"></section>
+</main>
+
+<footer class="foot">檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 年）；會計科目為示範用的簡化版。所有檢查都在你的電腦上進行，資料不會上傳。AI 說明只在線上版提供。</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>window.XLSX || document.write('<script src="vendor/xlsx.full.min.js"><\/script>');</script>
+<script src="rules/rules.js"></script>
+<script src="src/labels.js"></script>
+<script src="src/core.js"></script>
+<script src="src/rulesets/life.js"></script>
+<script src="src/rulesets/finance.js"></script>
+<script src="src/report.js"></script>
+<script src="src/recon.js"></script>
+<script src="src/sample-data.js"></script>
+<script src="src/master.js"></script>
+<script src="src/workbook.js"></script>
+<script src="src/anomaly.js"></script>
+<script src="src/rule-stats.js"></script>
+<script src="src/mock.js"></script>
+<script src="src/rules-dsl.js"></script>
+<script src="src/rule-import.js"></script>
+<script src="src/rule-samples.js"></script>
+<script src="src/ai-payload.js"></script>
+<script src="src/ai.js"></script>
+<script src="src/app.js"></script>
+<script src="src/app-import.js"></script>
+<script src="src/review.js"></script>
+<script>
+// 找不到程式檔時 (例如直接在壓縮檔裡開啟 index.html，或只複製了這一個檔案)，畫面會出現但按鈕沒有反應：在頁首說明原因
+if (!window.DQ || !window.DQ.app) {
+  var d = document.createElement('div');
+  d.setAttribute('role', 'alert');
+  d.style.cssText = 'margin:16px;padding:14px 16px;border:2px solid #B91C1C;background:#FEF2F2;color:#7F1D1D;font:15px/1.6 system-ui,"Microsoft JhengHei",sans-serif';
+  d.innerHTML = '<b>工具沒有完整開啟，所以放入資料後不會有反應。</b><br>找不到程式檔（src、rules 資料夾）。請先把整個資料夾<b>解壓縮</b>，再開啟資料夾裡的 index.html；index.html 必須和 src、rules、vendor 資料夾放在同一個資料夾裡。';
+  document.body.insertBefore(d, document.body.firstChild);
+}
+</script>
+</body>
+</html>

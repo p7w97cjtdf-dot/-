@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>申報資料檢核助手</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: retail-catalog grid — white ground, black type, one red accent; Hero → Features grid (tiles like product cards) → CTA band. Motion only on load. */
+:root {
+  color-scheme: light;
+  --white: #ffffff;
+  --ink: #111111;
+  --grey: #6b6b6b;
+  --rule: #e2e2e2;
+  --tile: #f4f4f4;
+  --red: #e60012;
+  --body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --latin: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--white); color: var(--ink); font: 15px/1.7 var(--body); -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+p { margin: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; }
+.en { font-family: var(--latin); letter-spacing: .04em; }
+.mono { font-family: var(--mono); }
+.tnum { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+/* header */
+header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--white); border-bottom: 1px solid var(--rule); }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 64px; }
+.mark { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.mark i { width: 40px; height: 40px; background: var(--red); color: #fff; display: grid; place-items: center; font: 800 13px/1 var(--latin); font-style: normal; letter-spacing: .02em; }
+.mark b { font-weight: 900; font-size: 16px; letter-spacing: .04em; }
+nav.links { display: flex; gap: 28px; font-size: 14px; font-weight: 500; }
+nav.links a { text-decoration: none; }
+nav.links a:hover { text-decoration: underline; text-underline-offset: 4px; }
+@media (max-width: 760px) { nav.links { display: none; } .mark b { font-size: 14px; } }
+
+/* buttons: square, solid or outlined */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 0 28px; font: 700 14px/1 var(--body); letter-spacing: .08em; text-decoration: none; border: 1px solid var(--ink); white-space: nowrap; }
+.btn.solid { background: var(--ink); color: #fff; }
+.btn.line { background: transparent; color: var(--ink); }
+.btn.inv { background: #fff; color: var(--ink); border-color: #fff; }
+.btn.ghost-inv { background: transparent; color: #fff; border-color: #fff; }
+.btn:hover { text-decoration: underline; text-underline-offset: 4px; }
+header .btn { min-height: 40px; padding: 0 18px; }
+
+/* hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--rule); }
+.hero-copy { padding: 72px 48px 72px 0; display: flex; flex-direction: column; gap: 28px; justify-content: center; }
+.kicker { font: 700 12px/1 var(--latin); letter-spacing: .24em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+.kicker::before { content: ""; width: 24px; height: 3px; background: var(--red); }
+h1 { font-size: clamp(40px, 5.4vw, 72px); font-weight: 900; line-height: 1.12; letter-spacing: .02em; }
+h1 .red { color: var(--red); }
+.lede { font-size: 17px; color: var(--grey); max-width: 34em; }
+.ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+.hero-visual { background: var(--tile); display: flex; flex-direction: column; justify-content: center; gap: 18px; padding: 56px 48px; min-width: 0; }
+.hero-visual .tag { align-self: flex-start; font: 700 11px/1 var(--latin); letter-spacing: .2em; background: var(--red); color: #fff; padding: 6px 10px; }
+.msg { font: 500 22px/1.4 var(--mono); }
+.arrow { font: 700 12px/1 var(--latin); letter-spacing: .2em; color: var(--grey); }
+.out { background: var(--white); border: 1px solid var(--rule); margin: 0; }
+.out-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--rule); font-size: 14px; }
+.out-row:last-child { border-bottom: 0; }
+.out-row dt { color: var(--grey); font-size: 12px; letter-spacing: .08em; padding-top: 2px; }
+.out-row dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+.ruler { font: 13px/1.6 var(--mono); white-space: pre; overflow-x: auto; color: var(--grey); }
+.ruler mark { background: var(--ink); color: #fff; padding: 0 2px; }
+.fixed { color: var(--red); font-weight: 700; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--rule); }
+.stat { padding: 24px 20px; border-right: 1px solid var(--rule); display: flex; flex-direction: column; gap: 2px; }
+.stat:last-child { border-right: 0; }
+.stat b { font: 800 34px/1.1 var(--latin); }
+.stat span { font-size: 13px; color: var(--grey); }
+@media (max-width: 900px) {
+  .hero { grid-template-columns: minmax(0, 1fr); }
+  .hero-copy { padding: 48px 0 40px; }
+  .hero-visual { padding: 32px 20px; margin-inline: -20px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat:nth-child(2) { border-right: 0; }
+  .stat:nth-child(-n+2) { border-bottom: 1px solid var(--rule); }
+}
+
+/* features: catalog grid */
+.features { padding-block: 80px 96px; }
+.sec-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 32px; }
+.sec-head h2 { font-size: clamp(28px, 3.4vw, 40px); font-weight: 900; letter-spacing: .02em; }
+.sec-head p { color: var(--grey); max-width: 30em; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 20px; }
+.card { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card .img { background: var(--tile); aspect-ratio: 4 / 5; max-width: 100%; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; overflow: hidden; position: relative; }
+.card .no { font: 800 13px/1 var(--latin); letter-spacing: .12em; }
+.card .new { position: absolute; top: 18px; right: 18px; font: 700 10px/1 var(--latin); letter-spacing: .18em; color: #fff; background: var(--red); padding: 5px 7px; }
+.card .glyph { font: 500 12.5px/1.65 var(--mono); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.card .glyph .hit { color: var(--red); }
+.card .glyph .dim { color: var(--grey); }
+.card .cat { font-size: 12px; color: var(--grey); letter-spacing: .08em; }
+.card h3 { font-size: 17px; font-weight: 700; line-height: 1.45; }
+.card p { font-size: 14px; color: var(--grey); }
+.card .meta { font: 700 13px/1 var(--latin); letter-spacing: .04em; border-top: 1px solid var(--rule); padding-top: 12px; margin-top: auto; display: flex; justify-content: space-between; gap: 8px; }
+.card .meta span:last-child { color: var(--red); }
+@media (max-width: 760px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 14px; } .card .glyph { font-size: 11px; } }
+@media (max-width: 420px) { .card .img { aspect-ratio: auto; min-height: 200px; } }
+
+/* cta */
+.cta { background: var(--ink); color: #fff; }
+.cta .wrap { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: 40px; padding-block: 80px; align-items: center; }
+.cta h2 { font-size: clamp(30px, 4vw, 48px); font-weight: 900; line-height: 1.25; }
+.cta h2 .red { color: var(--red); }
+.cta p { color: #c9c9c9; margin-top: 16px; max-width: 34em; }
+.cta .ctas { margin-top: 28px; }
+.files { border-top: 1px solid #3a3a3a; }
+.files div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #3a3a3a; font-size: 14px; }
+.files span:last-child { color: #a8a8a8; text-align: right; }
+@media (max-width: 860px) { .cta .wrap { grid-template-columns: minmax(0, 1fr); padding-block: 56px; } }
+
+footer { padding-block: 28px 40px; font-size: 12px; color: var(--grey); }
+footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+
+/* load-only motion: one staggered reveal when the page opens, nothing on scroll or hover */
+@media (prefers-reduced-motion: no-preference) {
+  .rise { animation: rise .7s cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 70ms); }
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="mark" href="#top"><i>DQ</i><b>申報資料檢核助手</b></a>
+    <nav class="links" aria-label="主選單"><a href="#features">功能</a><a href="#start">開始使用</a></nav>
+    <a class="btn solid" href="../index.html">開啟工具</a>
+  </div>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="wrap">
+    <div class="hero">
+      <div class="hero-copy">
+        <span class="kicker en rise" style="--i:0">Data Quality &amp; Validation</span>
+        <h1 class="rise" style="--i:1">申報之前，<br>每一列<span class="red">都對過</span>。</h1>
+        <p class="lede rise" style="--i:2">依填報手冊與檢核規則，自動驗證保單、理賠、客戶與商品資料，與上游系統對帳、勾稽財報。被退件時，把籠統的錯誤代碼還原成具體的行號、欄位與修正值。</p>
+        <div class="ctas rise" style="--i:3"><a class="btn solid" href="../index.html">開啟檢核工具</a><a class="btn line" href="#features">查看功能</a></div>
+      </div>
+      <div class="hero-visual" aria-label="退件解碼示範">
+        <span class="tag en rise" style="--i:2">DECODE</span>
+        <p class="msg rise" style="--i:3">錯誤代碼 10400：數字資料範圍錯誤</p>
+        <span class="arrow en rise" style="--i:4">↓ LOCATED</span>
+        <dl class="out rise" style="--i:5">
+          <div class="out-row"><dt>位置</dt><dd>承保資料 第 31 行・保單 P250002201/A01（共定位 5 處）</dd></div>
+          <div class="out-row"><dt>欄位</dt><dd>欄 7 保險金額(原幣金額)（第 39–56 字元）</dd></div>
+          <div class="out-row"><dt>原始資料</dt><dd class="ruler">029│0000000000<mark>         500000000</mark>T030</dd></div>
+          <div class="out-row"><dt>修正</dt><dd>數字欄位須靠右、前補 0，改為 <span class="fixed mono">000000000500000000</span></dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat rise" style="--i:4"><b class="tnum" data-count="total">289</b><span>條檢核規則（明細 256・主檔 15・財報 9・結轉 4・合理性 4・對帳 1）</span></div>
+      <div class="stat rise" style="--i:5"><b class="tnum">68/68</b><span>試用資料的刻意錯誤全數找到</span></div>
+      <div class="stat rise" style="--i:6"><b class="tnum">0</b><span>正確資料上的誤報</span></div>
+      <div class="stat rise" style="--i:7"><b class="tnum">7</b><span>種資料一次檢核</span></div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features wrap" id="features">
+    <div class="sec-head">
+      <h2>功能</h2>
+      <p>從一筆明細到整張報表。以下畫面取自工具內附試用資料的實際檢核結果。</p>
+    </div>
+    <div class="grid">
+      <article class="card">
+        <div class="img"><span class="no en">01</span><div class="glyph">25204_L2005
+<span class="dim">保險期間迄日</span>
+<span class="hit">20311117</span>
+→ 20321117</div></div>
+        <span class="cat">明細檢核</span>
+        <h3>依填報手冊逐欄、逐筆檢核</h3>
+        <p>承保檔 61 欄、給付檔 31 欄的格式、代碼、單筆與多筆邏輯，能推得正確值的一鍵修正。</p>
+        <div class="meta en"><span>RULES</span><span class="tnum" data-count="detail">256</span></div>
+      </article>
+      <article class="card">
+        <div class="img"><span class="no en">02</span><div class="glyph">理賠系統 2025-12
+<span class="hit">−2,000,000</span>
+<span class="dim">= 12/30 給付</span>
+時間差</div></div>
+        <span class="cat">跨系統對帳</span>
+        <h3>與上游系統控制總數對帳</h3>
+        <p>差異自動判定為時間差、口徑定義差或待查，並指出造成差額的那幾筆交易。</p>
+        <div class="meta en"><span>RULES · 3 SYSTEMS</span><span class="tnum" data-count="recon">1</span></div>
+      </article>
+      <article class="card">
+        <div class="img"><span class="no en">03</span><div class="glyph">2303 責任準備金
+<span class="hit">2,612,795,000</span>
+<span class="dim">應為</span> 2,621,795,000
+<span class="dim">連帶 3 項</span></div></div>
+        <span class="cat">財報勾稽</span>
+        <h3>資產負債表加總與根因</h3>
+        <p>結轉、上下層加總、資產 = 負債 + 權益；同一差額串成一個根因，停用科目給替代代號。</p>
+        <div class="meta en"><span>RULES · ROOT CAUSE 1 → 4</span><span class="tnum" data-count="stmt">9</span></div>
+      </article>
+      <article class="card">
+        <div class="img"><span class="no en">04</span><div class="glyph">P24LOST0001/A01
+<span class="dim">上年度期末有效</span>
+<span class="hit">本年度無資料</span>
+漏報</div></div>
+        <span class="cat">期初期末結轉</span>
+        <h3>上年度期末 → 本年度期初</h3>
+        <p>逐張保單勾稽，找出漏報、期初保額不符，以及保額變動卻沒有對應異動的保單。</p>
+        <div class="meta en"><span>RULES · BY POLICY</span><span class="tnum" data-count="roll">4</span></div>
+      </article>
+      <article class="card">
+        <div class="img"><span class="no en">05</span><div class="glyph">J195366528
+<span class="dim">檢查碼應為</span> <span class="hit">7</span>
+813 <span class="dim">≠</span> 臺北市中正區</div></div>
+        <span class="cat">客戶與商品資料</span>
+        <h3>主檔交叉比對</h3>
+        <p>身分證檢查碼、地址與郵遞區號、同一人資料一致；停售後仍用舊商品代號時給替代代號。</p>
+        <div class="meta en"><span>RULES · MASTER DATA</span><span class="tnum" data-count="master">15</span></div>
+      </article>
+      <article class="card">
+        <div class="img"><span class="no en">06</span><div class="glyph">P250009001/A01
+<span class="dim">起保後</span> <span class="hit">45 天</span> <span class="dim">身故</span>
+疑似異常
+<span class="dim">需人工判斷</span></div></div>
+        <span class="cat">資料合理性</span>
+        <h3>合法但不合理的資料</h3>
+        <p>投保年齡過高、保額與保費比例離群、生效後短期理賠、同一人短期多次理賠。標為疑似異常，不計入錯誤，由人判斷。</p>
+        <div class="meta en"><span>RULES · SUSPECT</span><span class="tnum" data-count="anomaly">4</span></div>
+      </article>
+      <article class="card">
+        <div class="img"><span class="new en">AI</span><span class="no en">07</span><div class="glyph">「新契約保額超過
+3,000 萬元應體檢」
+<span class="dim">→</span> <span class="hit">U001</span> 可執行</div></div>
+        <span class="cat">規則匯入</span>
+        <h3>規則文件轉成可執行規則</h3>
+        <p>上傳 PDF 或 Word，Claude 轉成規則；先在正確資料上試跑，疑似轉錯的會標出來再由人確認。</p>
+        <div class="meta en"><span>PDF / WORD</span><span>AI</span></div>
+      </article>
+      <article class="card">
+        <div class="img"><span class="new en">AI</span><span class="no en">08</span><div class="glyph">錯誤代碼 10400
+<span class="dim">→ 數字資料範圍錯誤</span>
+<span class="hit">定位 5 處</span></div></div>
+        <span class="cat">退件解碼</span>
+        <h3>籠統的退件代碼，還原成具體位置</h3>
+        <p>貼上退件訊息，辨識檢核編號、行號與欄位名稱，列出每一筆的位置與修正值。</p>
+        <div class="meta en"><span>DECODE</span><span>ROW · FIELD</span></div>
+      </article>
+      <article class="card">
+        <div class="img"><span class="no en">09</span><div class="glyph">檢核報告.html
+問題清單.csv
+不符資料.txt
+<span class="hit">AI 根因摘要</span></div></div>
+        <span class="cat">檢核報告</span>
+        <h3>一鍵產出報告</h3>
+        <p>HTML 報告、問題清單 CSV、不符資料檔，加上 Claude 歸納的根因與修正優先順序。</p>
+        <div class="meta en"><span>REPORT</span><span>3 FORMATS</span></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta" id="start">
+    <div class="wrap">
+      <div>
+        <h2>打開就有<span class="red">試用資料</span>。<br>拖進 Excel 就能檢核。</h2>
+        <p>工具開啟時已載入含錯誤的模擬資料；也可以把試用 Excel 整本拖進去，依工作表自動分配。檢核在瀏覽器內執行，資料不會上傳。</p>
+        <div class="ctas"><a class="btn inv" href="../index.html">開啟檢核工具</a><a class="btn ghost-inv" href="../samples/excel/試用資料_含錯誤.xlsx">下載試用 Excel</a></div>
+      </div>
+      <div class="files" aria-label="試用 Excel 內的工作表">
+        <div><span>承保資料</span><span>保單・61 欄</span></div>
+        <div><span>給付資料</span><span>理賠・31 欄</span></div>
+        <div><span>客戶資料</span><span>要保人・被保險人</span></div>
+        <div><span>商品資料</span><span>起售・停售・替代代號</span></div>
+        <div><span>上年度承保資料</span><span>期初期末結轉</span></div>
+        <div><span>控制總數・資產負債表</span><span>對帳・財報勾稽</span></div>
+        <div><span>錯誤解答</span><span>68 項刻意錯誤</span></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>THEME 6 · Finance, Actuarial &amp; Data Management · 6-2 資料品質與檢核助手</span>
+    <span>規則依據：個人壽險填報手冊（2025 填報年度）；會計科目表為示範版</span>
+  </div>
+</footer>
+</body>
+</html>

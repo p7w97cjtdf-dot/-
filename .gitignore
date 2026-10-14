@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.log
+dist/
+
+# 主辦單位填報手冊：本機放在 rules/source/，不進版控
+rules/source/*.pdf
+rules/source/*.docx
