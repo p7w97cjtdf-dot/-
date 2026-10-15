@@ -42,7 +42,7 @@ async function fetchText(url, opts) {
   if (opts.jar) {
     const out = require('child_process').execFileSync('curl', ['-sSL', '--max-time', '30', '-A', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36', '-H', 'Accept-Language: zh-TW', '-c', opts.jar, '-b', opts.jar, '-w', '\n@@URL@@%{url_effective}'].concat(opts.insecureTLS ? ['-k'] : [], opts.referer ? ['-e', opts.referer] : [], [url]), { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
     const i = out.lastIndexOf('\n@@URL@@');
-    opts.finalUrl = out.slice(i + 9).trim() || url;
+    opts.finalUrl = out.slice(i + '\n@@URL@@'.length).trim() || url;
     return out.slice(0, i);
   }
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
