@@ -46,8 +46,8 @@
     const has = (...k) => k.every(x => h.has(x));
     if (has('承保範圍代號', '暴露數')) return 'CL';
     if (has('罹患癌症種類(ICD-10)', '給付項目')) return 'CD';
-    if (all.layouts.AL && has(all.layouts.AL.fields[12].name, all.layouts.AL.fields[32].name)) return 'AL';
-    if (all.layouts.AD && has(all.layouts.AD.fields[3].name, all.layouts.AD.fields[5].name) && !has('給付類別')) return 'AD';
+    if (has('契約變更型態代號', '意外死亡保險金額')) return 'AL';
+    if (has('給付類別代號', '事故原因代號')) return 'AD';
     if (has('給付類別', '保單編號')) return 'D';
     if (has('加保別', '退保別', '保單編號')) return 'L';
     if (has('角色', '姓名', '證件編號')) return 'customers';

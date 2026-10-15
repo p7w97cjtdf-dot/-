@@ -190,6 +190,11 @@
     return state.all.filter(i => (!sev || i.severity === sev) && (!sheet || i.sheet === sheet) && (!cat || i.category === cat) &&
       (!q || [i.policy, i.ruleId, i.ruleName, i.message, DQ.report.fieldLabel(rs, i), i.value].join(' ').toLowerCase().includes(q)));
   }
+  // 表格的「欄位」只列前兩個，其餘在右側說明中看
+  function shortFields(i) {
+    const names = DQ.report.fieldLabel(rs, i).replace(/欄\d+ /g, '').split('、').filter(Boolean);
+    return names.length > 2 ? `${names.slice(0, 2).join('、')} 等 ${names.length} 欄` : names.join('、');
+  }
   function renderTable() {
     const list = filtered();
     $('#issue-count').textContent = `${list.length} / ${state.all.length}`;
@@ -198,7 +203,7 @@
         <td class="sev"><i class="${i.severity}" title="${SEV[i.severity]}"></i></td>
         <td class="where">${esc(i.sheet || '')} <span class="num">${rowLabel(i)}</span></td>
         <td class="mono">${esc((i.policy || i.code || '').trim())}</td>
-        <td>${esc(DQ.report.fieldLabel(rs, i).replace(/欄\d+ /g, ''))}</td>
+        <td>${esc(shortFields(i))}</td>
         <td class="mono val">${esc(String(i.value == null ? '' : i.value).replace(/ /g, '·'))}</td>
         <td>${esc(i.message)}</td>
         <td class="mono">${i.fix ? `${esc(i.fix.value)}${state.res.issues.includes(i) ? '<span class="pill">可一鍵修改</span>' : ''}` : ''}</td>
