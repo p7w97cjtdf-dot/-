@@ -36,7 +36,7 @@
     if (!lay) errs.push(`file 應為 ${Object.keys(layouts).join('/')}`);
     if (!rule.id || typeof rule.id !== 'string') errs.push('缺少 id');
     if (rule.scope && !['record', 'policy'].includes(rule.scope)) errs.push('scope 應為 record 或 policy');
-    if (rule.scope === 'policy' && rule.file !== 'L') errs.push('policy 範圍只適用承保檔');
+    if (rule.scope === 'policy' && !['L', 'CL', 'AL'].includes(rule.file)) errs.push('policy 範圍只適用保單資料 (承保檔)');
     if (rule.severity && !['error', 'warning'].includes(rule.severity)) errs.push('severity 應為 error 或 warning');
     if (!rule.assert) errs.push('缺少 assert');
     const fieldOk = f => {
@@ -152,18 +152,19 @@
       if (rule.when && evalCond(rule.when, ctx) !== true) return;
       if (evalCond(rule.assert, ctx) !== false) return;
       const fields = fieldsOf(rule).filter(k => base.layouts[rule.file].field(k));
-      push({ ruleId: rule.id, severity: rule.severity || 'error', category: '匯入規則', fields, value: fields.map(k => String(rec[k]).trim()).join(' / '),
+      push({ ruleId: rule.id, severity: rule.severity || 'error', category: rule.category || '匯入規則', fields, value: fields.map(k => String(rec[k]).trim()).join(' / '),
         message: rule.message || rule.name, suggestion: rule.suggestion || '請依規則文件確認', imported: true });
     };
     for (const rule of ok) {
       if (rule.scope === 'policy') {
-        groupRules.L.push((recs, push) => {
-          const s = recs.slice().sort((a, b) => a.txnSeq.localeCompare(b.txnSeq) || a._line - b._line);
+        groupRules[rule.file].push((recs, push) => {
+          const seq = r => r.txnSeq || r.seq || '';
+          const s = recs.slice().sort((a, b) => seq(a).localeCompare(seq(b)) || a._line - b._line);
           s.forEach((rec, i) => fire(rule, rec, i ? s[i - 1] : null, iss => push(rec, iss)));
         });
       } else recordRules[rule.file].push((rec, push) => fire(rule, rec, null, push));
     }
-    const catalog = base.catalog.filter(c => !ok.some(r => r.id === c.id)).concat(ok.map(r => ({ id: r.id, name: r.name, level: '匯入規則', ref: r.ref || '規則文件', severity: r.severity || 'error' })));
+    const catalog = base.catalog.filter(c => !ok.some(r => r.id === c.id)).concat(ok.map(r => ({ id: r.id, name: r.name, level: r.level || '匯入規則', ref: r.ref || '規則文件', severity: r.severity || 'error', pack: r.pack })));
     return Object.assign({}, base, { catalog, recordRules, groupRules });
   }
 

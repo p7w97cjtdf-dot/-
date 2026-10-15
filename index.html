@@ -158,7 +158,7 @@
   <section id="view-import" class="view" hidden>
     <div class="block">
       <div class="block-head">
-        <div><h2>新增檢查規則</h2>
+        <div><h2>用 AI 轉換規則文件</h2>
           <p class="hint">把寫著規則的文件（PDF、Word、文字檔）放進來，AI 會把文字規則轉成工具可以執行的檢查。轉好的規則會先在「全部正確」的範例資料上試跑：如果在正確資料上也報錯，多半是轉錯了，會標出來讓你確認。你勾選確認後才會使用。</p></div>
       </div>
       <div class="imp-src">
@@ -209,6 +209,76 @@
     </div>
   </section>
 
+  <!-- ================= 法規更新 ================= -->
+  <section id="view-updates" class="view" hidden>
+    <div class="block">
+      <div class="block-head">
+        <div><h2>法規更新</h2>
+          <p class="hint">主管機關調整申報格式或新增檢核時，不必等系統改版：匯入法遵或主管單位發布的「規則更新包」，或直接在下面新增檢查。更新會立刻套用到檢查結果，只存在這台電腦的瀏覽器；可以下載成檔案發給同事，大家用同一套規則。</p></div>
+      </div>
+      <div class="actions">
+        <label class="btn cta" for="file-pack">匯入規則更新包<input type="file" id="file-pack" accept=".json,application/json" hidden></label>
+        <button class="btn ghost" type="button" id="btn-pack-export">把本機的更新存成檔案</button>
+        <span class="hint" id="pack-note" role="status"></span>
+      </div>
+      <div id="pack-list" class="pack-list"></div>
+    </div>
+
+    <div class="block">
+      <h2>新增一條檢查</h2>
+      <p class="hint">不需要 AI，也不需要改程式。選資料和欄位、設定條件，按「加入」後馬上重新檢查。</p>
+      <div class="form-grid">
+        <label>資料<select id="nr-file"></select></label>
+        <label>欄位<select id="nr-field"></select></label>
+        <label>必須<select id="nr-op"></select></label>
+        <label>值<input id="nr-value" placeholder="多個值用逗號分隔"></label>
+      </div>
+      <details class="more"><summary>只檢查符合條件的資料（選填）</summary>
+        <div class="form-grid">
+          <label>當欄位<select id="nr-wfield"></select></label>
+          <label>條件<select id="nr-wop"></select></label>
+          <label>值<input id="nr-wvalue" placeholder="例如 NEW"></label>
+        </div>
+        <div class="form-grid">
+          <label>適用起日：日期欄位<select id="nr-efield"></select></label>
+          <label>在這天以後才檢查<input id="nr-efrom" type="date"></label>
+        </div>
+      </details>
+      <div class="form-grid">
+        <label>不符合時<select id="nr-sev"><option value="error">必須修改</option><option value="warning">建議確認</option></select></label>
+        <label class="wide">要顯示的說明<input id="nr-msg" placeholder="例如：2026 年起新契約須填數位投保註記"></label>
+        <label class="wide">依據（函令文號、手冊頁碼）<input id="nr-basis" placeholder="例如：保發中心 115 年 1 月 5 日函"></label>
+      </div>
+      <p class="rule-preview" id="nr-preview"></p>
+      <div class="actions"><button class="btn cta" type="button" id="btn-nr-add">加入並重新檢查</button><span class="hint" id="nr-note" role="status"></span></div>
+    </div>
+
+    <div class="block">
+      <h2>新增欄位</h2>
+      <p class="hint">申報格式新增欄位、使用原本的保留欄位時，在這裡定義位置，之後就能在上面的表單檢查這個欄位。每筆資料的總長度改變時，仍需要更新程式。</p>
+      <div class="form-grid">
+        <label>資料<select id="nf-file"></select></label>
+        <label>欄位名稱<input id="nf-name" placeholder="例如：數位投保註記"></label>
+        <label>從第幾個字<input id="nf-start" type="number" min="1"></label>
+        <label>長度<input id="nf-len" type="number" min="1" value="1"></label>
+        <label>型態<select id="nf-type"><option value="X">英數字</option><option value="9">數字</option></select></label>
+        <label>允許的值（選填）<input id="nf-values" placeholder="例如：Y,N"></label>
+      </div>
+      <div class="actions"><button class="btn ghost" type="button" id="btn-nf-add">新增欄位</button><span class="hint" id="nf-note" role="status"></span></div>
+    </div>
+
+    <div class="block">
+      <h2>停用內建檢查</h2>
+      <p class="hint">法規放寬或改變、原本的檢查不再適用時，輸入檢核編號停用。停用的問題不會出現在結果與報告，隨時可以恢復。</p>
+      <div class="form-grid">
+        <label>檢核編號<input id="dis-id" list="dis-ids" placeholder="例如：L6101"></label>
+        <label class="wide">原因<input id="dis-why" placeholder="例如：保留欄位第 1 碼改為數位投保註記"></label>
+      </div>
+      <datalist id="dis-ids"></datalist>
+      <div class="actions"><button class="btn ghost" type="button" id="btn-dis-add">停用</button><span class="hint" id="dis-note" role="status"></span></div>
+    </div>
+  </section>
+
   <!-- ================= 報告 ================= -->
   <section id="view-report" class="view" hidden>
     <div class="report-bar">
@@ -235,7 +305,8 @@
     <button id="tab-check" aria-selected="true" data-view="check">檢查結果 <span class="tc" id="tc-check"></span></button>
     <button id="tab-recon" aria-selected="false" data-view="recon">數字核對明細 <span class="tc" id="tc-recon"></span></button>
     <button id="tab-decode" aria-selected="false" data-view="decode">看懂退件通知</button>
-    <button id="tab-import" aria-selected="false" data-view="import">新增檢查規則 <span class="tc ok" id="tc-import"></span></button>
+    <button id="tab-updates" aria-selected="false" data-view="updates">法規更新 <span class="tc ok" id="tc-updates"></span></button>
+    <button id="tab-import" aria-selected="false" data-view="import">用 AI 轉換規則文件 <span class="tc ok" id="tc-import"></span></button>
     <button id="tab-report" aria-selected="false" data-view="report">預覽報告</button>
     <button id="tab-rules" aria-selected="false" data-view="rules">檢查項目一覽</button>
   </nav>
@@ -245,7 +316,7 @@
 <footer class="foot">
   <p class="disclaimer"><b>使用說明：</b>本工具供申報前自我檢查使用，檢查結果不代表保發中心或主管機關的正式審核；通過檢查不保證不會被退件。規則依下列手冊整理，可能與主辦單位最新版本有出入，請以正式手冊與退件通知為準。</p>
   <p id="rule-version">檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度）。</p>
-  <p>所有檢查都在你的電腦上進行，資料不會上傳。會計科目為示範用的簡化版。AI 說明只在線上版提供。<a href="docs/limits.html">限制與風險說明</a></p>
+  <p>所有檢查都在你的電腦上進行，資料不會上傳。會計科目為示範用的簡化版。AI 說明只在線上版提供。<a href="#updates" id="link-updates">法規更新</a>・<a href="docs/limits.html">限制與風險說明</a></p>
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -272,12 +343,14 @@
 <script src="src/rule-stats.js"></script>
 <script src="src/mock.js"></script>
 <script src="src/rules-dsl.js"></script>
+<script src="src/rule-packs.js"></script>
 <script src="src/rule-import.js"></script>
 <script src="src/rule-samples.js"></script>
 <script src="src/ai-payload.js"></script>
 <script src="src/ai.js"></script>
 <script src="src/app.js"></script>
 <script src="src/app-import.js"></script>
+<script src="src/app-packs.js"></script>
 <script src="src/review.js"></script>
 <script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 <script>

@@ -2,7 +2,9 @@
 (function () {
   'use strict';
   const { DQ } = window;
-  const rs = DQ.rulesets.all, fin = DQ.rulesets.finance, R = DQ.recon;
+  // BASE：內建規則；rs：加上自訂規則與法規更新包之後實際使用的規則 (每次檢查前重算)
+  const BASE = DQ.rulesets.all, fin = DQ.rulesets.finance, R = DQ.recon;
+  let rs = BASE;
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const LB = DQ.labels, SEV = LB.SEV, SHEET = LB.SHEET;
@@ -11,8 +13,16 @@
 
   const state = { files: {}, res: null, sel: null, cat: '', customRules: [] };
   // 匯入並套用的規則與內建規則合併
-  function activeRules() { return state.customRules.length ? DQ.dsl.extend(rs, state.customRules) : rs; }
-  try { const saved = JSON.parse(localStorage.getItem('dq-custom-rules') || '[]'); if (Array.isArray(saved)) state.customRules = saved.filter(r => !DQ.dsl.validateRule(r, rs.layouts).length); } catch (e) { /* 無法讀取時忽略 */ }
+  function activeRules() {
+    const base = state.customRules.length ? DQ.dsl.extend(BASE, state.customRules) : BASE;
+    const out = DQ.rulePacks.apply(base, state.packs.filter(x => x.on).map(x => x.pack));
+    state.disabled = out.disabled;
+    return (rs = out.ruleset);
+  }
+  // 法規更新包 (src/rule-packs.js)：存在這台電腦的瀏覽器
+  state.packs = [];
+  try { const saved = JSON.parse(localStorage.getItem('dq-rule-packs') || '[]'); if (Array.isArray(saved)) state.packs = saved.filter(x => x && x.pack).map(x => ({ pack: DQ.rulePacks.normalize(x.pack), on: x.on !== false })); } catch (e) { /* 無法讀取時忽略 */ }
+  try { const saved = JSON.parse(localStorage.getItem('dq-custom-rules') || '[]'); if (Array.isArray(saved)) state.customRules = saved.filter(r => !DQ.dsl.validateRule(r, BASE.layouts).length); } catch (e) { /* 無法讀取時忽略 */ }
 
   // ---------- 檔案 ----------
   const SLOTS = ['L', 'D', 'prior', 'control', 'statement', 'products', 'customers', 'CL', 'CD', 'AL', 'AD'];
@@ -127,6 +137,9 @@
       const d = DQ.anomaly.catalog.find(c => c.id === i.ruleId);
       state.res.issues.push(Object.assign(i, { id: ++nextId, ref: d ? d.ref : '' }));
     }
+    state.disabledCount = {};
+    const drop = list => list.filter(i => { if (!state.disabled.has(i.ruleId)) return true; state.disabledCount[i.ruleId] = (state.disabledCount[i.ruleId] || 0) + 1; return false; });
+    state.res.issues = drop(state.res.issues);
     state.res.summary = DQ.summarize(rs, state.res.issues, state.res.meta);
     state.roll = f.L ? R.rollForward(state.res, f.prior && f.prior.text) : null;
     state.ctl = f.control ? R.controlRecon(state.res, f.control.text, state.roll ? state.roll.issues : []) : null;
@@ -134,6 +147,7 @@
     state.elapsed = performance.now() - t0;
     console.info(`[檢核耗時] ${(state.elapsed / 1000).toFixed(3)} 秒：承保 ${(f.L && state.res.meta.L) ? state.res.meta.L.count : 0} 筆、給付 ${(f.D && state.res.meta.D) ? state.res.meta.D.count : 0} 筆，${Object.values(f).filter(Boolean).length} 個檔案`);
     state.extra = [].concat(state.roll ? state.roll.issues : [], state.ctl ? state.ctl.issues : [], state.stmt ? state.stmt.issues : [], mst.filter(i => i.file !== 'L'));
+    state.extra = drop(state.extra);
     // 全部工作表的問題併成一張結果表 (明細、客戶、商品、上年度、控制總數、資產負債表)
     for (const i of state.res.issues) i.sheet = SHEET[i.file];
     for (const i of state.roll ? state.roll.issues : []) i.sheet = i.line ? SHEET.L : SHEET.prior;
@@ -456,13 +470,15 @@
   };
 
   // ---------- 報告 / 規則 ----------
-  function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
+  function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
   function renderReport() { $('#report-frame').srcdoc = reportHTML(); }
   // 手冊頁碼 (rules/rules.js)：PDF 頁碼與頁面上印的頁碼
   const SRCDOC = { rules: '檢核規則手冊', manual: '填報手冊' };
   function pageOf(id) {
     const src = window.DQ.ruleSource, r = src && src.rules.concat(src.toolRules).find(x => x.id === id);
     if (!r) {
+      const pk = rs.catalog.find(x => x.id === id && x.pack);
+      if (pk) return `<span>法規更新：${esc(pk.ref || '')}</span>`;
       const own = rs.catalog.find(x => x.id === id && x.product), prod = own && rs.products.find(p => p.id === own.product);
       return own ? `<span>${esc(prod.name)}填報手冊 ${esc(own.ref)}</span>` : '<span class="hint">自訂規則</span>';
     }
@@ -477,8 +493,8 @@
     const cat = activeRules().catalog.concat(fin.catalog, DQ.master.catalog, DQ.anomaly.catalog);
     const st = DQ.ruleStats.count();
     const list = cat.filter(r => !q || [r.id, r.name, r.level, r.ref].join(' ').toLowerCase().includes(q));
-    const imported = cat.length - st.total - st.extTotal;
-    $('#rules-meta').textContent = `個人壽險共 ${st.total} 條檢查規則：${st.cats.map(c => `${c.name} ${c.n}`).join('、')}${st.ext.map(e => `；${e.name} ${e.n} 條`).join('')}${imported > 0 ? `；另有自訂規則 ${imported} 條` : ''}`;
+    const packN = cat.filter(c => c.pack).length, imported = cat.length - st.total - st.extTotal - packN;
+    $('#rules-meta').textContent = `個人壽險共 ${st.total} 條檢查規則：${st.cats.map(c => `${c.name} ${c.n}`).join('、')}${st.ext.map(e => `；${e.name} ${e.n} 條`).join('')}${packN ? `；法規更新 ${packN} 條` : ''}${imported > 0 ? `；另有自訂規則 ${imported} 條` : ''}`;
     $('#rule-table tbody').innerHTML = list.map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(LB.level(r.level))}</td><td>${esc(r.name)}</td><td>${pageOf(r.id)}</td><td><span class="badge ${r.severity}">${SEV[r.severity]}</span></td><td class="num">${by[r.id] || ''}</td></tr>`).join('');
     $('#layout-table tbody').innerHTML = rs.layouts.L.fields.map(f => `<tr><td class="num">${f.no}</td><td>${esc(f.name)}</td><td class="num">${f.start}</td><td class="num">${f.start + f.len - 1}</td><td>${f.type === '9' ? '數字' : '英數字'}，${f.len} 個字</td></tr>`).join('');
     $('#chart-table tbody').innerHTML = fin.chart.map(a => `<tr><td class="mono">${a.code}</td><td class="ind d${a.code.length <= 1 ? 0 : a.code.length <= 2 ? 1 : 2}">${esc(a.name)}</td><td>${a.until ? `<span class="badge warning">${a.until} 起停用，改用 ${a.replacedBy}</span>` : ''}</td></tr>`).join('');
@@ -508,19 +524,25 @@
   // 提供給規則匯入分頁使用
   DQ.app = {
     state, run, showTab, select, download, applyFix, rowLabel,
+    setPacks(list) { state.packs = list; try { localStorage.setItem('dq-rule-packs', JSON.stringify(list)); } catch (e) { /* ignore */ } if (state.res) run(); else activeRules(); renderVersion(); },
+    activeRules, base: BASE,
     setCustomRules(rules) { state.customRules = rules; try { localStorage.setItem('dq-custom-rules', JSON.stringify(rules)); } catch (e) { /* ignore */ } run(); },
   };
 
   // 手機上清單預設收起 (主要用逐筆確認)，按「看全部清單」展開
   $('#btn-list').onclick = () => { const on = document.body.classList.toggle('show-list'); $('#btn-list').setAttribute('aria-expanded', on); $('#btn-list').textContent = on ? '收起清單' : '看全部清單'; };
   // 頁尾：各險種規則的版本與條數
-  (() => {
+  function renderVersion() {
     const st = DQ.ruleStats.count(), MANUAL = { cancer: '個人癌症保險填報手冊', accident: '新式傷害保險填報手冊' };
+    const on = state.packs.filter(x => x.on);
     $('#rule-version').textContent = `檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度，${st.total} 條）` +
-      st.ext.map(e => `、${MANUAL[e.key] || e.name}（${e.version} 年版，${e.n} 條）`).join('') + '。';
-  })();
+      st.ext.map(e => `、${MANUAL[e.key] || e.name}（${e.version} 年版，${e.n} 條）`).join('') + '。' +
+      (on.length ? `另套用法規更新：${on.map(x => x.pack.name + (x.pack.version ? ` 第 ${x.pack.version} 版` : '')).join('、')}。` : '');
+  }
+  activeRules(); renderVersion();
+  $('#link-updates').onclick = e => { e.preventDefault(); showTab('updates'); };
   // 打開時不載入任何資料：只顯示拖放框
   document.body.classList.add('no-data');
   $('#sample-note').textContent = '還沒有資料。把申報文字檔或 Excel 拖到上方的框。';
-  if (['check', 'recon', 'decode', 'report', 'rules'].includes(hash)) showTab(hash);
+  if (['check', 'recon', 'decode', 'report', 'rules', 'updates'].includes(hash)) showTab(hash);
 })();
