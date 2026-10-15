@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使用說明｜申報資料檢核助手</title>
+<meta name="description" content="申報資料檢核助手的完整使用說明：準備資料、開始檢查、看懂結果、修改與下載、法規更新、手機使用與常見問題。">
+<link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #FAF6EF; --panel: #FFFDF9; --ink: #2B2520; --grey: #74695E; --rule: #E4DACC; --tile: #F4ECDF; --accent: #B4532E;
+  --err: #B3261E; --err-soft: #FBEAE5; --warn: #8F5A00; --warn-soft: #FBF0D9; --sus: #5E6670; --sus-soft: #EEF0F2;
+  --body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.8 var(--body); -webkit-font-smoothing: antialiased; }
+main { max-width: 860px; margin: 0 auto; padding: 40px 16px 72px; }
+a { color: var(--accent); }
+.back { font-size: 14px; color: var(--grey); text-decoration: none; }
+.back:hover { color: var(--ink); }
+h1 { font-size: clamp(28px, 5vw, 38px); line-height: 1.25; margin: 18px 0 8px; }
+.lede { color: var(--grey); margin: 0 0 24px; }
+h2 { font-size: 22px; margin: 48px 0 12px; padding-top: 16px; border-top: 1px solid var(--rule); scroll-margin-top: 16px; }
+h3 { font-size: 17px; margin: 26px 0 6px; }
+p, li { margin: 0 0 10px; }
+ul, ol { padding-left: 1.3em; }
+.toc { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 16px 18px; }
+.toc b { display: block; margin-bottom: 6px; }
+.toc ol { columns: 2 240px; column-gap: 28px; margin: 0; }
+.toc li { margin: 0 0 4px; break-inside: avoid; }
+.toc a { color: var(--ink); text-decoration: none; }
+.toc a:hover { color: var(--accent); text-decoration: underline; }
+.steps { counter-reset: s; list-style: none; padding: 0; }
+.steps > li { counter-increment: s; position: relative; padding-left: 44px; margin-bottom: 16px; }
+.steps > li::before { content: counter(s); position: absolute; left: 0; top: 2px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 15px; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+.note { background: var(--tile); border-radius: 10px; padding: 12px 14px; margin: 14px 0; }
+.table-wrap { overflow-x: auto; margin: 12px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; background: var(--panel); min-width: 520px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--rule); }
+th { background: var(--tile); font-weight: 700; white-space: nowrap; }
+.sev { display: inline-block; font-size: 13px; font-weight: 700; padding: 1px 8px; border-radius: 6px; white-space: nowrap; }
+.sev.e { background: var(--err-soft); color: var(--err); }
+.sev.w { background: var(--warn-soft); color: var(--warn); }
+.sev.s { background: var(--sus-soft); color: var(--sus); }
+.mono, code { font-family: var(--mono); font-size: .92em; }
+code { background: var(--tile); border-radius: 4px; padding: 0 4px; }
+kbd { font-family: var(--body); font-size: .9em; border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 6px; padding: 0 6px; background: var(--panel); white-space: nowrap; }
+.btnlike { display: inline-block; font-size: .92em; border-radius: 6px; padding: 0 8px; background: var(--accent); color: #fff; white-space: nowrap; }
+details { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 14px; margin: 10px 0; }
+summary { cursor: pointer; font-weight: 700; min-height: 32px; }
+details[open] summary { margin-bottom: 6px; }
+.top { position: fixed; right: 16px; bottom: 16px; background: var(--panel); border: 1px solid var(--rule); border-radius: 999px; padding: 6px 14px; font-size: 14px; color: var(--ink); text-decoration: none; box-shadow: 0 2px 8px rgba(80, 55, 30, .12); }
+@media print { .top, .back { display: none; } body { background: #fff; } }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="../index.html">← 回到檢核工具</a>
+  <h1>使用說明</h1>
+  <p class="lede">申報資料檢核助手會依填報手冊的規則，找出保單、理賠等申報資料中的錯誤，告訴你錯在哪一筆、哪個欄位、應該改成什麼。所有檢查都在你的電腦或手機上進行，資料不會上傳。</p>
+
+  <nav class="toc" aria-label="目錄">
+    <b>目錄</b>
+    <ol>
+      <li><a href="#quick">三步驟快速上手</a></li>
+      <li><a href="#data">準備資料</a></li>
+      <li><a href="#start">開始檢查</a></li>
+      <li><a href="#read">看懂檢查結果</a></li>
+      <li><a href="#fix">修改資料</a></li>
+      <li><a href="#download">下載報告與檔案</a></li>
+      <li><a href="#phone">在手機上使用</a></li>
+      <li><a href="#advanced">進階功能</a></li>
+      <li><a href="#updates">法規更新</a></li>
+      <li><a href="#privacy">資料安全</a></li>
+      <li><a href="#faq">常見問題</a></li>
+      <li><a href="#scope">支援範圍與限制</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="quick">三步驟快速上手</h2>
+  <ol class="steps">
+    <li><b>放入資料</b>：把申報用的文字檔（例如 <code>LFL01_2025.txt</code>）或 Excel 檔拖進工具上方的大框，手機上點大框選擇檔案。</li>
+    <li><b>看結果</b>：放進去就會自動檢查。上方四個數字告訴你有幾個問題必須修改、幾個建議確認；下方清單點任一列，右側會說明錯在哪裡、建議怎麼改。</li>
+    <li><b>修改並下載</b>：按 <span class="btnlike">一鍵修改所有可修的地方</span> 或逐筆確認，再下載改好的檔案與檢查報告。</li>
+  </ol>
+  <div class="note">想先試試看？下載試用資料（模擬資料，刻意放了錯誤）：
+    <a href="../samples/excel/試用資料_含錯誤.xlsx" download>個人壽險</a>、
+    <a href="../samples/excel/試用資料_癌症險_含錯誤.xlsx" download>癌症險</a>、
+    <a href="../samples/excel/試用資料_傷害險_含錯誤.xlsx" download>傷害險</a>。
+    每個檔案的「錯誤解答」工作表列出放了哪些錯誤，可以和工具找到的結果對照；另有「正確」版本，檢查結果應該是 0 個問題（<a href="https://github.com/p7w97cjtdf-dot/-/tree/main/samples/excel">全部試用檔</a>）。</div>
+
+  <h2 id="data">準備資料</h2>
+  <h3>支援的險種</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>險種</th><th>保單資料（承保檔）</th><th>理賠資料（給付檔）</th><th>依據</th></tr></thead>
+    <tbody>
+      <tr><td>個人壽險</td><td><code>LFL</code> 開頭，每筆 425 字</td><td><code>LFD</code> 開頭，每筆 225 字</td><td>個人壽險填報手冊與檢核規則（2025 填報年度）</td></tr>
+      <tr><td>個人癌症保險</td><td><code>CRL</code> 開頭，每筆 282 字</td><td><code>CRD</code> 開頭，每筆 115 字</td><td>個人癌症保險填報手冊（2024 年版）</td></tr>
+      <tr><td>個人傷害保險</td><td><code>PAL</code> 開頭，每筆 457 字</td><td><code>PAD</code> 開頭，每筆 287 字</td><td>新式傷害保險填報手冊</td></tr>
+    </tbody>
+  </table></div>
+  <p>個人壽險另外可以放入<b>客戶資料、商品資料、去年保單資料、系統總數、資產負債表</b>，工具會一併做交叉比對（例如身分證號、商品停售日、去年底和今年初是否接得上、和各系統總數是否相符）。這些都是選填。</p>
+
+  <h3>可以放哪些檔案</h3>
+  <ul>
+    <li><b>申報文字檔（.txt）</b>：就是要上傳到保發中心的檔案，直接放入即可。工具依檔名開頭判斷是哪一種；檔名不一樣時，會依每筆的長度判斷。</li>
+    <li><b>Excel（.xlsx、.xls、.xlsm、.ods）</b>：一個活頁簿可以放多張工作表，工作表名稱含「保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數、資產負債表」會自動分好；癌症險、傷害險請在名稱前加上「癌症險」「傷害險」，例如「癌症險保單資料」。工作表名稱是 Sheet1 之類時，會看第一列的欄位名稱判斷。</li>
+    <li><b>CSV</b>：第一列為欄位名稱。Windows 的 Excel 另存的 CSV（Big5 編碼）也能讀。</li>
+  </ul>
+  <div class="note"><b>用 Excel 整理資料時：</b>代號、日期、保單號碼等欄位請設為「文字」格式，否則 Excel 會把開頭的 0 去掉（例如 <code>01</code> 變成 <code>1</code>），檢查時會被判為格式錯誤。只有標題列、沒有資料的工作表會被當成沒有資料。</div>
+
+  <h2 id="start">開始檢查</h2>
+  <ol>
+    <li>打開檢核工具，把檔案拖進上方的大框（也可以一次拖入多個檔案，或點大框選擇檔案）。</li>
+    <li>檔案讀進來後立刻檢查，通常不到 1 秒。大框下方會顯示讀到了哪些資料。</li>
+    <li>如果工具認不出某個檔案，展開「分別放入各份資料（進階）」，把檔案放進對應的格子。</li>
+  </ol>
+  <p>只放了客戶或商品資料、沒有保單或理賠資料時，工具會提示還缺什麼，不會顯示「0 個問題」。</p>
+
+  <h2 id="read">看懂檢查結果</h2>
+  <h3>四個重點數字</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>數字</th><th>意思</th><th>建議處理方式</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sev e">必須修改</span></td><td>違反填報規定，不改會被退件</td><td>送出前一定要改</td></tr>
+      <tr><td><span class="sev w">建議確認</span></td><td>可能有誤，例如手冊文字有歧義、或數字不太合理</td><td>確認後再決定要不要改</td></tr>
+      <tr><td><span class="sev s">請人工判斷</span></td><td>沒有違反規定，但看起來不太合理（例如投保年齡 86 歲、生效後很快就理賠）</td><td>不算錯誤，供人工複核</td></tr>
+      <tr><td>可以一鍵修改</td><td>工具能確定正確值的問題（例如依起日推算迄日、數字補前置 0）</td><td>可以直接套用</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>問題清單</h3>
+  <ul>
+    <li>每一列是一個問題：位置（哪份資料第幾列）、保單號碼、欄位、目前的值、問題說明、建議改成什麼。</li>
+    <li>上方可以依狀況（必須修改／建議確認／請人工判斷）、依資料篩選，也可以搜尋保單號碼或文字。</li>
+    <li><b>點任一列</b>，右側會顯示完整說明：檢查的是哪條規則、依據手冊第幾頁、為什麼錯、建議怎麼改。能自動修正的會有 <span class="btnlike">改成建議的值</span> 按鈕。</li>
+    <li>「顯示原始資料」可以看到那一筆申報資料的原始內容，出問題的欄位會標成黃色、並標出第幾個字到第幾個字（空白以「·」表示），方便到原始檔案裡找。</li>
+  </ul>
+
+  <h2 id="fix">修改資料</h2>
+  <h3>方式一：一鍵修改</h3>
+  <p>按 <span class="btnlike">一鍵修改所有可修的地方</span>，工具會套用所有能確定正確值的修改，並重新檢查。畫面會顯示改了幾個地方、問題從幾個減為幾個。</p>
+  <h3>方式二：逐筆確認</h3>
+  <p>按 <span class="btnlike">逐筆確認問題</span>，一次看一個問題：大卡片顯示有問題的值，下方用大按鈕選擇「改成建議的值」或「先不改」（沒有建議值的問題可以選「記下來，稍後處理」）。上方進度條顯示看到第幾個。全部看完後按「套用」，只會修改你選擇要改的項目。按 <kbd>Esc</kbd> 或「← 結束」可以隨時離開。</p>
+  <h3>方式三：自己改原始檔案</h3>
+  <p>依清單上的位置與建議，到原本的系統或檔案修改後，再放進工具重新檢查一次。</p>
+  <div class="note">工具不會修改你電腦上的原始檔案；修改只發生在工具裡，要按「下載改好的保單資料」才會存成新檔案。</div>
+
+  <h2 id="download">下載報告與檔案</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>按鈕</th><th>內容</th><th>檔名</th></tr></thead>
+    <tbody>
+      <tr><td>下載問題清單</td><td>所有問題的 Excel 表，可篩選、分派給同事處理</td><td><code>issues_list.xlsx</code></td></tr>
+      <tr><td>下載報告</td><td>完整的檢查報告（摘要、各類問題、對帳結果、使用的規則版本），用瀏覽器開啟，可列印或存成 PDF</td><td><code>check_report.html</code></td></tr>
+      <tr><td>下載改好的保單資料</td><td>套用修改後的申報檔，格式和原檔相同</td><td>和原檔同名，例如 <code>LFL01_2025.txt</code></td></tr>
+    </tbody>
+  </table></div>
+  <p>檔名一律使用英數字，避免有些瀏覽器把中文檔名存成亂碼。</p>
+
+  <h2 id="phone">在手機上使用</h2>
+  <ul>
+    <li>用手機瀏覽器打開同一個網址即可，畫面會自動調整：檢查完會先顯示四個重點數字和「逐筆確認問題」大按鈕，完整清單收在「看全部清單」裡。</li>
+    <li><b>加入主畫面</b>：iPhone 用 Safari 打開 → 下方「分享」→「加入主畫面」；Android 用 Chrome 打開 → 右上「⋮」→「安裝應用程式」或「加到主畫面」。之後點圖示就會全螢幕開啟，像 App 一樣。</li>
+    <li><b>離線使用</b>：透過網址開啟過一次後，沒有網路也能檢查。</li>
+  </ul>
+
+  <h2 id="advanced">進階功能</h2>
+  <p>放入資料後，頁面最下方的「進階功能」有這些分頁：</p>
+  <details><summary>數字核對明細</summary>
+    <p>需要放入系統總數、去年保單資料或資產負債表。會把申報資料加總後，和新契約、理賠、保單系統各自的總數比較；對不上時說明原因是「結帳日不同」「算法不同」，還是「需要追查」。也會逐張比對去年底和今年初的保單是否接得上，以及資產負債表的加總與平衡。</p></details>
+  <details><summary>看懂退件通知</summary>
+    <p>把保發中心的退件通知貼上來（例如「錯誤代碼 10400：數字資料範圍錯誤」或「退件原因：30212_L1305」）。就算通知沒寫是哪一行，工具也會依目前的資料找出是哪幾筆、哪個欄位、該怎麼改。</p></details>
+  <details><summary>法規更新</summary>
+    <p>法規或申報格式改變時，不用等系統改版就能調整檢查。詳見下一節。</p></details>
+  <details><summary>用 AI 轉換規則文件（只有 claude.ai 線上版）</summary>
+    <p>上傳規則文件（PDF、Word、文字檔），由 AI 轉成工具可以執行的檢查。轉好的規則會先在正確資料上試跑，可能轉錯的會標出來、預設不使用，要你確認勾選後才會套用。送給 AI 前，文件中的身分證號會先遮住。</p></details>
+  <details><summary>預覽報告</summary><p>在畫面上先看報告內容，再決定是否下載。</p></details>
+  <details><summary>檢查項目一覽</summary><p>列出所有檢查規則：檢核編號、檢查內容、依據手冊第幾頁、嚴重程度，以及目前資料有幾個問題。可以搜尋編號或文字。</p></details>
+
+  <h2 id="updates">法規更新</h2>
+  <p>主管機關調整申報格式或新增檢核時，常常系統還來不及改。「法規更新」頁讓法遵或主管單位不用寫程式、也不需要 AI，就能讓檢查跟上新規定。從頁尾的「法規更新」連結或進階功能分頁進入，沒有放資料時也能開啟。</p>
+  <h3>可以做的事</h3>
+  <ul>
+    <li><b>新增一條檢查</b>：選資料、欄位、條件（例如「通路別必須是 1 或 2」），可以加上前提條件（例如「只檢查新契約」）與<b>適用起日</b>（例如「只檢查 2026/1/1 以後生效的保單」），按「加入並重新檢查」馬上生效。</li>
+    <li><b>新增欄位</b>：申報格式新增欄位、或把保留欄位改作新用途時，定義它在每筆資料的第幾個字、長度與允許的值，之後就能檢查這個欄位。</li>
+    <li><b>停用內建檢查</b>：法規放寬、原本的檢查不再適用時，輸入檢核編號停用，可以隨時恢復。</li>
+  </ul>
+  <h3>和同事使用同一套規則</h3>
+  <ol>
+    <li>在「法規更新」頁做好調整後，按「把本機的更新存成檔案」，會下載一個<b>規則更新包</b>（.json）。</li>
+    <li>把更新包發給同事，同事按「匯入規則更新包」即可套用；每個更新包都可以開關、移除。</li>
+    <li>要讓<b>所有人自動套用</b>：由管理者把更新包發布到工具的網站（放進 <code>rules/updates/</code> 並登記在 <code>index.json</code>），之後大家打開工具時會自動取得最新版，畫面會提示一次。</li>
+  </ol>
+  <h3>自動監看法規網站</h3>
+  <p>系統每天早上自動檢查全國法規資料庫的保險法、金管會保險局的「最新法令函釋」「重要公告」，以及保發中心的公告與法規草案預告。有新公告時會在 GitHub 開一張待辦單，列出新增的內容與處理步驟，通知法遵人員確認。為避免未經確認的錯誤規則上線，<b>系統只通知、不會自動修改規則</b>。</p>
+  <p>結果頁頁尾與檢查報告都會註明目前套用了哪些法規更新與依據，方便日後查核。</p>
+
+  <h2 id="privacy">資料安全</h2>
+  <ul>
+    <li><b>資料不會上傳</b>：所有檢查都在你的瀏覽器裡進行，申報資料不會傳到任何伺服器。</li>
+    <li>工具不會把你的申報資料存在電腦或手機上；關掉頁面資料就消失。只有你自己設定的法規更新會存在這台電腦的瀏覽器。</li>
+    <li><b>AI 功能</b>只在 claude.ai 線上版提供，而且要你按下按鈕才會使用；送出前會先遮住姓名、身分證號與地址，畫面上會說明會送出什麼。</li>
+    <li>依填報手冊規定，證件號碼應填 0，工具也會檢查。</li>
+  </ul>
+
+  <h2 id="faq">常見問題</h2>
+  <details><summary>放入檔案後沒有反應？</summary>
+    <ul>
+      <li>畫面上方出現紅框「工具沒有完整開啟」：表示工具的資料夾不完整，常見原因是直接在壓縮檔裡點開。請先解壓縮整個資料夾，或改用網址開啟。</li>
+      <li>讀不了 Excel：讀 Excel 需要一個元件，被公司防火牆擋住時工具會自動改用內建的備用檔；仍不行時請改放文字檔，或請 IT 開放 cdnjs.cloudflare.com。</li>
+      <li>檔案沒有拖進框內也沒關係，拖到頁面任何地方都會讀取。</li>
+    </ul></details>
+  <details><summary>Excel 的資料檢查出很多格式錯誤？</summary>
+    <p>多半是 Excel 把開頭的 0 去掉了（例如公司代號 01 變成 1、日期變成日期格式）。請把這些欄位設為「文字」格式後重新輸入，或直接用申報文字檔檢查。</p></details>
+  <details><summary>檢查通過，送出後還是被退件？</summary>
+    <p>本工具依填報手冊整理規則，供申報前自我檢查使用，結果不代表保發中心的正式審核。可以把退件通知貼到「看懂退件通知」找出問題；如果是新的規定，可以在「法規更新」補上檢查，避免下次再發生。</p></details>
+  <details><summary>「請人工判斷」的項目要改嗎？</summary>
+    <p>不一定。這些資料沒有違反規定，只是看起來不太合理（例如年齡偏高、生效後很快就理賠）。請確認資料正確即可，不需要為了消除提示而修改。</p></details>
+  <details><summary>下載的檔案打開是亂碼？</summary>
+    <p>工具下載的檔名都是英數字，內容使用 UTF-8。如果用 Windows 的記事本打開申報文字檔看到亂碼，通常是編碼顯示問題，檔案內容本身沒有錯。問題清單請用 Excel 開啟 <code>issues_list.xlsx</code>。</p></details>
+  <details><summary>可以同時檢查好幾種險種嗎？</summary>
+    <p>可以。把壽險、癌症險、傷害險的檔案一起放進去，問題會列在同一張表，可以用「資料」篩選只看某一種。</p></details>
+  <details><summary>AI 按鈕不見了？</summary>
+    <p>AI 功能只在 claude.ai 的線上版提供。用一般網址開啟時會自動隱藏 AI 按鈕，其他檢查功能完全不受影響。</p></details>
+
+  <h2 id="scope">支援範圍與限制</h2>
+  <ul>
+    <li>目前支援個人壽險、個人癌症保險、個人傷害保險的年度填報；旅行平安保險、填報對象檔、彙送管制檔、修改歷史資料流程尚未支援。</li>
+    <li>需要前一年度資料的部分檢查（癌症險、傷害險）、需要公司自訂保額上限的檢查未實作。</li>
+    <li>每筆資料的總長度改變（整個申報格式改版）時，需要更新工具程式。</li>
+  </ul>
+  <p>完整的展示範圍、驗證結果與風險對策請見 <a href="limits.html">限制與風險評估</a>。</p>
+  <p><a class="back" href="../index.html">← 回到檢核工具</a></p>
+</main>
+<a class="top" href="#">回到頂端 ↑</a>
+</body>
+</html>

@@ -23,6 +23,7 @@
     <h1>申報資料檢核助手</h1>
     <p class="sub">把要申報的保單、理賠等資料放進來，自動找出錯誤並告訴你怎麼改。資料只在你的電腦上處理，不會上傳。</p>
   </div>
+  <a class="help-link" href="docs/guide.html">使用說明</a>
 </header>
 
 <main>
@@ -52,6 +53,19 @@
         <label class="drop opt" id="drop-AD" for="file-AD"><span class="drop-k">傷害險理賠資料</span><span class="drop-n" id="name-AD">尚未放入</span><span class="drop-h">PAD 開頭的給付檔</span><input type="file" id="file-AD" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
       </div>
     </details>
+    <section class="guide-block" aria-label="使用說明">
+      <ol class="guide-steps">
+        <li><b>放入資料</b><span>申報文字檔或 Excel，拖進上方的框</span></li>
+        <li><b>看結果</b><span>錯在哪一筆、哪個欄位、建議怎麼改</span></li>
+        <li><b>修改並下載</b><span>一鍵修改或逐筆確認，下載改好的檔案與報告</span></li>
+      </ol>
+      <a class="guide-card" href="docs/guide.html">
+        <span class="g-k">第一次使用？</span>
+        <span class="g-t">完整使用說明</span>
+        <span class="g-d">準備資料、看懂結果、修改與下載、手機使用、法規更新、常見問題，以及可以下載的試用資料。</span>
+        <span class="g-go">打開說明 →</span>
+      </a>
+    </section>
   </section>
 
 
@@ -318,7 +332,7 @@
 <footer class="foot">
   <p class="disclaimer"><b>使用說明：</b>本工具供申報前自我檢查使用，檢查結果不代表保發中心或主管機關的正式審核；通過檢查不保證不會被退件。規則依下列手冊整理，可能與主辦單位最新版本有出入，請以正式手冊與退件通知為準。</p>
   <p id="rule-version">檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度）。</p>
-  <p>所有檢查都在你的電腦上進行，資料不會上傳。會計科目為示範用的簡化版。AI 說明只在線上版提供。<a href="#updates" id="link-updates">法規更新</a>・<a href="docs/limits.html">限制與風險說明</a></p>
+  <p>所有檢查都在你的電腦上進行，資料不會上傳。會計科目為示範用的簡化版。AI 說明只在線上版提供。<a href="docs/guide.html">使用說明</a>・<a href="#updates" id="link-updates">法規更新</a>・<a href="docs/limits.html">限制與風險說明</a></p>
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>

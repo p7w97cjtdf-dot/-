@@ -15,8 +15,8 @@ const head = html.match(/<head>([\s\S]*?)<\/head>/)[1];
 // 只保留外部字型；manifest、圖示在單一 HTML 中沒有對應檔案
 const links = head.match(/<link[^>]+>/g).filter(l => /href="https:/.test(l)).join('\n');
 const styles = head.match(/<style>[\s\S]*?<\/style>/g).join('\n');
-// 頁尾的「限制與風險說明」改連到公開網站 (GitHub Pages)
-const body = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>')).replace('href="docs/limits.html"', 'href="https://p7w97cjtdf-dot.github.io/-/docs/limits.html" target="_blank" rel="noopener"');
+// 使用說明、限制與風險說明等 docs/ 頁面改連到公開網站 (GitHub Pages)
+const body = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>')).replace(/href="docs\/([\w.-]+\.html)"/g, 'href="https://p7w97cjtdf-dot.github.io/-/docs/$1" target="_blank" rel="noopener"');
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, `${title}\n${links}\n${styles}\n${body}`);
 console.log(`已輸出 ${out} (${(fs.statSync(out).size / 1024).toFixed(0)} KB)`);
