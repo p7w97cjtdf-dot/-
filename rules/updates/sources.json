@@ -1,5 +1,5 @@
 {
-  "note": "每日自動監看的法規來源 (.github/workflows/regulation-watch.yml)。keywords：只比對含這些字的段落，避免網頁其他部分 (日期、瀏覽人數) 變動就誤報。網址可隨時增修；連不上的來源會列在每次執行的摘要中。 follow：在主頁面上找文字含這些字的連結，一併監看連到的頁面 (公告清單常在首頁的下一層)。",
+  "note": "每日自動監看的法規來源 (.github/workflows/regulation-watch.yml)。keywords：只比對含這些字的段落，避免網頁其他部分 (日期、瀏覽人數) 變動就誤報。網址可隨時增修；連不上的來源會列在每次執行的摘要中。 follow：在主頁面上找文字含這些字的連結，一併監看連到的頁面 (公告清單常在首頁的下一層)。 insecureTLS：網站憑證鏈設定不完整時才開啟 (只讀取公開文字，內容仍由人工確認)。",
   "sources": [
     {
       "id": "insurance-act",
@@ -45,7 +45,8 @@
       "follow": [
         "最新消息",
         "公告"
-      ]
+      ],
+      "insecureTLS": true
     }
   ]
 }
