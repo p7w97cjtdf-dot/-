@@ -39,11 +39,17 @@ async function fetchText(url, opts) {
   opts = opts || {};
   if (url.startsWith('file:')) return fs.readFileSync(new URL(url), 'utf8');
   // cookies：有些政府網站第一次進入會先給一個「自動轉址」頁並設定 cookie，要帶著 cookie 再進一次才看得到內容
-  if (opts.jar) return require('child_process').execFileSync('curl', ['-sSL', '--max-time', '30', '-A', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36', '-H', 'Accept-Language: zh-TW', '-c', opts.jar, '-b', opts.jar].concat(opts.insecureTLS ? ['-k'] : [], opts.referer ? ['-e', opts.referer] : [], [url]), { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
+  if (opts.jar) {
+    const out = require('child_process').execFileSync('curl', ['-sSL', '--max-time', '30', '-A', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36', '-H', 'Accept-Language: zh-TW', '-c', opts.jar, '-b', opts.jar, '-w', '\n@@URL@@%{url_effective}'].concat(opts.insecureTLS ? ['-k'] : [], opts.referer ? ['-e', opts.referer] : [], [url]), { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
+    const i = out.lastIndexOf('\n@@URL@@');
+    opts.finalUrl = out.slice(i + 9).trim() || url;
+    return out.slice(0, i);
+  }
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
   try {
     const res = await fetch(url, { signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (regulation-watch; filing validation assistant)', 'Accept-Language': 'zh-TW' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    opts.finalUrl = res.url || url;
     return await res.text();
   } catch (e) {
     // Node 抓不到時 (例如網站憑證鏈不完整) 改用 curl 再試一次，並保留原因方便調整設定
@@ -63,20 +69,22 @@ function redirectTarget(html, base) {
 async function sourceLines(s, info) {
   const opts = { insecureTLS: s.insecureTLS, jar: s.cookies ? path.join(require('os').tmpdir(), `watch-${s.id}.cookies`) : null };
   const html = await fetchText(s.url, opts);
+  const home = opts.finalUrl || s.url;  // 首頁可能先轉址到子目錄：相對連結要以轉址後的網址為準
   info.sample = {};
   let lines = extract(html, s.keywords);
   for (const label of s.follow || []) {
-    const hit = links(html, s.url).find(l => l.text.includes(label));
+    const hit = links(html, home).find(l => l.text.includes(label));
     if (!hit) { lines.push(`(找不到「${label}」連結)`); continue; }
     try {
-      const o = Object.assign({}, opts, { referer: s.url });
+      const o = Object.assign({}, opts, { referer: home });
       let url = hit.url, page = await fetchText(url, o);
       const next = /自動轉址|redirect/i.test(page) && redirectTarget(page, url);
       if (next && next !== s.url) { url = next; page = await fetchText(url, o); }
       else if (/自動轉址/.test(page) && opts.jar) page = await fetchText(url, o);  // 已取得 cookie，再進一次
       info.followed[label] = url;
       info.sample[label] = textLines(page).slice(0, 40);  // 方便調整關鍵字：記錄這一頁的前 40 段
-      lines = lines.concat(extract(page, s.keywords).map(l => `[${label}] ${l}`));
+      // followKeywords：追蹤頁面 (公告清單) 用的關鍵字；空陣列表示整頁都監看 (公告標題用字不固定)
+      lines = lines.concat(extract(page, s.followKeywords || s.keywords).map(l => `[${label}] ${l}`));
     } catch (e) { lines.push(`(「${label}」${hit.url} 讀取失敗：${e.message})`); }
   }
   return [...new Set(lines)];
