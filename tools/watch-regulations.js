@@ -38,6 +38,8 @@ const diff = (prev, cur) => ({ added: cur.filter(l => !prev.includes(l)), remove
 async function fetchText(url, opts) {
   opts = opts || {};
   if (url.startsWith('file:')) return fs.readFileSync(new URL(url), 'utf8');
+  // cookies：有些政府網站第一次進入會先給一個「自動轉址」頁並設定 cookie，要帶著 cookie 再進一次才看得到內容
+  if (opts.jar) return require('child_process').execFileSync('curl', ['-sSL', '--max-time', '30', '-A', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36', '-H', 'Accept-Language: zh-TW', '-c', opts.jar, '-b', opts.jar].concat(opts.insecureTLS ? ['-k'] : [], opts.referer ? ['-e', opts.referer] : [], [url]), { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
   try {
     const res = await fetch(url, { signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (regulation-watch; filing validation assistant)', 'Accept-Language': 'zh-TW' } });
@@ -59,17 +61,21 @@ function redirectTarget(html, base) {
   return null;
 }
 async function sourceLines(s, info) {
-  const opts = { insecureTLS: s.insecureTLS };
+  const opts = { insecureTLS: s.insecureTLS, jar: s.cookies ? path.join(require('os').tmpdir(), `watch-${s.id}.cookies`) : null };
   const html = await fetchText(s.url, opts);
+  info.sample = {};
   let lines = extract(html, s.keywords);
   for (const label of s.follow || []) {
     const hit = links(html, s.url).find(l => l.text.includes(label));
     if (!hit) { lines.push(`(找不到「${label}」連結)`); continue; }
     try {
-      let url = hit.url, page = await fetchText(url, opts);
+      const o = Object.assign({}, opts, { referer: s.url });
+      let url = hit.url, page = await fetchText(url, o);
       const next = /自動轉址|redirect/i.test(page) && redirectTarget(page, url);
-      if (next && next !== s.url) { url = next; page = await fetchText(url, opts); }
+      if (next && next !== s.url) { url = next; page = await fetchText(url, o); }
+      else if (/自動轉址/.test(page) && opts.jar) page = await fetchText(url, o);  // 已取得 cookie，再進一次
       info.followed[label] = url;
+      info.sample[label] = textLines(page).slice(0, 40);  // 方便調整關鍵字：記錄這一頁的前 40 段
       lines = lines.concat(extract(page, s.keywords).map(l => `[${label}] ${l}`));
     } catch (e) { lines.push(`(「${label}」${hit.url} 讀取失敗：${e.message})`); }
   }
@@ -90,7 +96,7 @@ async function main(argv) {
       if (!lines.length) throw new Error('找不到含關鍵字的內容 (網頁改版或需要登入)');
       if (!prev.lines) baseline.push(s);
       else { const d = diff(prev.lines, lines); if (d.added.length || d.removed.length) changes.push({ s, d }); }
-      state[s.id] = { name: s.name, url: s.url, checkedAt: now, changedAt: !prev.lines || changes.some(c => c.s === s) ? now : prev.changedAt, failures: 0, followed: info.followed, lines };
+      state[s.id] = { name: s.name, url: s.url, checkedAt: now, changedAt: !prev.lines || changes.some(c => c.s === s) ? now : prev.changedAt, failures: 0, followed: info.followed, sample: info.sample, lines };
     } catch (e) {
       failures.push({ s, error: e.message });
       state[s.id] = Object.assign({}, prev, { name: s.name, url: s.url, checkedAt: now, failures: (prev.failures || 0) + 1, lastError: e.message });
