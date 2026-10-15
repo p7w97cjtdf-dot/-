@@ -472,3 +472,6 @@ body.no-data #view-updates:not([hidden]) { display: block; }
   .pack-head { grid-template-columns: minmax(0, 1fr); }
 }
 .pack-items .chip, .pack-acts .chip { white-space: nowrap; flex: none; }
+.update-notice { background: var(--accent-soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 0 0 14px; }
+.update-notice a { color: var(--cta); }
+.pack .official { display: inline-block; font-size: 12px; color: var(--cta); border: 1px solid var(--cta); border-radius: 6px; padding: 0 6px; margin-left: 6px; }

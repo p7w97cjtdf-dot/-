@@ -126,6 +126,8 @@
     const packs = app.state.packs, all = app.state.all || [], hidden = app.state.disabledCount || {};
     $('#tc-updates').textContent = packs.filter(x => x.on).length || '';
     $('#dis-ids').innerHTML = allCatalog().slice(0, 2000).map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
+    const ol = app.state.officialLoaded;
+    $('#pack-official').textContent = ol ? (ol.count ? `已從公開網站取得 ${ol.count} 個官方更新包，打開工具時會自動檢查有沒有新版。` : '已檢查公開網站：目前沒有官方發布的法規更新。') : '尚未取得官方更新（直接開啟檔案或沒有網路時不會自動更新）。';
     if (!packs.length) { $('#pack-list').innerHTML = '<p class="hint">目前沒有套用任何法規更新，使用內建規則檢查。</p>'; return; }
     const base = Object.assign({}, app.base, { catalog: allCatalog() });
     $('#pack-list').innerHTML = packs.map((x, k) => {
@@ -142,9 +144,9 @@
       return `<article class="pack${x.on ? '' : ' off'}">
         <div class="pack-head">
           <label class="switch"><input type="checkbox" data-on="${k}"${x.on ? ' checked' : ''}> 使用中</label>
-          <div><b>${esc(p.name)}</b>${p.version ? `<span class="hint">　第 ${esc(p.version)} 版</span>` : ''}
+          <div><b>${esc(p.name)}</b>${x.official ? '<span class="official">官方發布・自動套用</span>' : ''}${p.version ? `<span class="hint">　第 ${esc(p.version)} 版</span>` : ''}
             <div class="hint">${[p.issuedAt && `發布 ${p.issuedAt.replace(/^(\d{4})(\d\d)(\d\d)$/, '$1/$2/$3')}`, p.basis && `依據：${p.basis}`].filter(Boolean).map(esc).join('　')}</div></div>
-          <div class="pack-acts"><button class="chip" data-dl="${k}">下載</button><button class="chip" data-rm="${k}">移除</button></div>
+          <div class="pack-acts"><button class="chip" data-dl="${k}">下載</button>${x.official ? '' : `<button class="chip" data-rm="${k}">移除</button>`}</div>
         </div>
         <p>${esc(P.summary(p))}${x.on && app.state.res ? `　<span class="hint">目前的資料：新檢查找到 ${found} 個問題${p.disable.length ? `；停用的檢查隱藏了 ${hid} 個問題` : ''}</span>` : ''}</p>
         ${p.note ? `<p class="hint">${esc(p.note)}</p>` : ''}

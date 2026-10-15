@@ -22,6 +22,35 @@
   // 法規更新包 (src/rule-packs.js)：存在這台電腦的瀏覽器
   state.packs = [];
   try { const saved = JSON.parse(localStorage.getItem('dq-rule-packs') || '[]'); if (Array.isArray(saved)) state.packs = saved.filter(x => x && x.pack).map(x => ({ pack: DQ.rulePacks.normalize(x.pack), on: x.on !== false })); } catch (e) { /* 無法讀取時忽略 */ }
+  // 官方發布的更新包 (rules/updates/index.json)：打開工具時自動下載並套用，不存進瀏覽器；使用者可在本機關閉
+  const officialOff = () => { try { return new Set(JSON.parse(localStorage.getItem('dq-official-off') || '[]')); } catch (e) { return new Set(); } };
+  const offKey = p => `${p.id}@${p.version || ''}`;
+  async function loadOfficial() {
+    const bases = location.protocol.startsWith('http') ? [''] : [];
+    bases.push('https://p7w97cjtdf-dot.github.io/-/');  // 單一檔案的線上版：改從公開網站讀取
+    for (const b of bases) {
+      try {
+        const idx = await (await fetch(b + 'rules/updates/index.json', { cache: 'no-cache' })).json();
+        const packs = [];
+        for (const f of idx.packs || []) {
+          try { packs.push(DQ.rulePacks.normalize(await (await fetch(b + 'rules/updates/' + encodeURIComponent(f), { cache: 'no-cache' })).json(), f)); } catch (e) { /* 單一檔案讀不到就略過 */ }
+        }
+        const off = officialOff();
+        state.packs = packs.map(p => ({ pack: p, on: !off.has(offKey(p)), official: true })).concat(state.packs.filter(x => !x.official && !packs.some(p => p.id === x.pack.id)));
+        state.officialLoaded = { at: new Date(), count: packs.length };
+        // 第一次看到某版官方更新時提示一次
+        let seen; try { seen = new Set(JSON.parse(localStorage.getItem('dq-official-seen') || '[]')); } catch (e) { seen = new Set(); }
+        const fresh = packs.filter(p => !seen.has(offKey(p)));
+        if (fresh.length) {
+          $('#update-notice').hidden = false;
+          $('#update-notice').innerHTML = `已自動套用最新法規更新：${fresh.map(p => esc(p.name + (p.version ? ` 第 ${p.version} 版` : '') + (p.basis ? `（${p.basis}）` : ''))).join('、')}。<a href="#updates" data-goto="updates">查看內容</a>`;
+          try { localStorage.setItem('dq-official-seen', JSON.stringify([...seen, ...fresh.map(offKey)])); } catch (e) { /* ignore */ }
+        }
+        if (DQ.app && DQ.app.setPacks) DQ.app.setPacks(state.packs);
+        return;
+      } catch (e) { /* 這個位置讀不到，換下一個 */ }
+    }
+  }
   try { const saved = JSON.parse(localStorage.getItem('dq-custom-rules') || '[]'); if (Array.isArray(saved)) state.customRules = saved.filter(r => !DQ.dsl.validateRule(r, BASE.layouts).length); } catch (e) { /* 無法讀取時忽略 */ }
 
   // ---------- 檔案 ----------
@@ -524,7 +553,15 @@
   // 提供給規則匯入分頁使用
   DQ.app = {
     state, run, showTab, select, download, applyFix, rowLabel,
-    setPacks(list) { state.packs = list; try { localStorage.setItem('dq-rule-packs', JSON.stringify(list)); } catch (e) { /* ignore */ } if (state.res) run(); else activeRules(); renderVersion(); },
+    setPacks(list) {
+      state.packs = list;
+      try {
+        localStorage.setItem('dq-rule-packs', JSON.stringify(list.filter(x => !x.official)));
+        localStorage.setItem('dq-official-off', JSON.stringify(list.filter(x => x.official && !x.on).map(x => offKey(x.pack))));
+      } catch (e) { /* ignore */ }
+      if (state.res) run(); else activeRules(); renderVersion();
+    },
+    loadOfficial,
     activeRules, base: BASE,
     setCustomRules(rules) { state.customRules = rules; try { localStorage.setItem('dq-custom-rules', JSON.stringify(rules)); } catch (e) { /* ignore */ } run(); },
   };
@@ -541,6 +578,7 @@
   }
   activeRules(); renderVersion();
   $('#link-updates').onclick = e => { e.preventDefault(); showTab('updates'); };
+  document.addEventListener('click', e => { const a = e.target.closest('[data-goto]'); if (a) { e.preventDefault(); showTab(a.dataset.goto); } });
   // 打開時不載入任何資料：只顯示拖放框
   document.body.classList.add('no-data');
   $('#sample-note').textContent = '還沒有資料。把申報文字檔或 Excel 拖到上方的框。';

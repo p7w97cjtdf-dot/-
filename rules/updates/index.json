@@ -1,0 +1,4 @@
+{
+  "note": "官方發布的法規更新包清單。這裡列出的更新包，所有人打開檢核工具時都會自動套用。新增方式：把更新包 JSON 放在 rules/updates/，在 packs 加上檔名，經法遵確認後併入 main。示範檔 example-2026-format-change.json 為虛構情境，不列入。",
+  "packs": []
+}
