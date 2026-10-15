@@ -1,48 +1,33 @@
-/* 配色：UI UX Pro Max「E-commerce Luxury」(uupm.cc 精品電商示範同一套資料)
-   石墨黑主色 #1C1917、金色點綴 #A16207、米白底 #FAFAF9、細邊框 #D6D3D1；標題 Cormorant＋思源宋體，內文 Montserrat＋思源黑體 */
+/* 配色：暖色淺底 (像紙張的米白底、暖墨色文字、磚紅色主要按鈕)；只有淺色，電腦與手機同一套。
+   字體一律用思源黑體，不用裝飾性襯線字與寬字距，看起來像一般辦公工具。 */
 :root {
-  --bg: #FAFAF9;
-  --panel: #FFFFFF;
-  --fg: #0C0A09;
-  --mut: #57534E;
-  --line: #D6D3D1;
-  --line-soft: #E7E5E4;
-  --accent: #1C1917;
+  color-scheme: light;
+  --bg: #FAF6EF;
+  --panel: #FFFDF9;
+  --fg: #2B2520;
+  --mut: #74695E;
+  --line: #E4DACC;
+  --line-soft: #EFE7DB;
+  --accent: #2B2520;
   --accent-ink: #FFFFFF;
-  --accent-soft: #F5F5F4;
-  --cta: #A16207;
+  --accent-soft: #F4ECDF;
+  --cta: #B4532E;
   --cta-ink: #FFFFFF;
-  --gold: #A16207;
-  --err: #B91C1C;
-  --err-soft: #FEF2F2;
-  --warn: #92400E;
-  --warn-soft: #FEF6E7;
-  --suspect: #475569;
-  --suspect-soft: #F1F5F9;
-  --hl: #F6E9C8;
-  --info: #44403C;
-  --info-soft: #F5F5F4;
-  --radius: 2px;
-  --shadow-sm: none;
-  --font-display: "Cormorant", "Noto Serif TC", "Songti TC", "PMingLiU", serif;
-  --font-body: "Montserrat", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
-  --font-mono: "Fira Code", "Noto Sans TC", ui-monospace, Menlo, Consolas, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0C0A09; --panel: #1C1917; --fg: #FAFAF9; --mut: #A8A29E; --line: #44403C; --line-soft: #292524;
-    --accent: #FAFAF9; --accent-ink: #0C0A09; --accent-soft: #292524; --cta: #CA8A04; --cta-ink: #0C0A09; --gold: #D6A73A;
-    --err: #F87171; --err-soft: #2A1212; --warn: #FBBF24; --warn-soft: #2A2110; --suspect: #94A3B8; --suspect-soft: #1E2530;
-    --hl: #4A3A12; --info: #D6D3D1; --info-soft: #292524;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0C0A09; --panel: #1C1917; --fg: #FAFAF9; --mut: #A8A29E; --line: #44403C; --line-soft: #292524;
-  --accent: #FAFAF9; --accent-ink: #0C0A09; --accent-soft: #292524; --cta: #CA8A04; --cta-ink: #0C0A09; --gold: #D6A73A;
-  --err: #F87171; --err-soft: #2A1212; --warn: #FBBF24; --warn-soft: #2A2110; --suspect: #94A3B8; --suspect-soft: #1E2530;
-  --hl: #4A3A12; --info: #D6D3D1; --info-soft: #292524;
-  color-scheme: dark;
+  --gold: #A0522D;
+  --err: #B3261E;
+  --err-soft: #FBEAE5;
+  --warn: #8F5A00;
+  --warn-soft: #FBF0D9;
+  --suspect: #5E6670;
+  --suspect-soft: #EEF0F2;
+  --hl: #FBE3B8;
+  --info: #4A4038;
+  --info-soft: #F4ECDF;
+  --radius: 10px;
+  --shadow-sm: 0 1px 2px rgba(80, 55, 30, .06);
+  --font-display: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans TC", monospace;
 }
 
 * { box-sizing: border-box; }
@@ -282,7 +267,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 /* 在電腦上直接開啟時沒有 AI：按鈕變淡，按下會說明原因 */
 body.no-ai .ai-btn, body.no-ai .ai-notice { display: none; }
 
-/* ===== 精品風格 (E-commerce Luxury)：細線、方角、襯線標題、寬字距小標、金色重點 ===== */
+/* ===== 版面細節 ===== */
 body { font-size: 15px; letter-spacing: .01em; }
 .top { padding-block: 40px 20px; border-bottom: 1px solid var(--line); margin-bottom: 20px; align-items: flex-end; }
 .brand h1 { font-family: var(--font-display); font-weight: 600; font-size: 40px; letter-spacing: .02em; line-height: 1.1; }
@@ -365,20 +350,16 @@ details.raw > summary::-webkit-details-marker { display: none; }
 details.raw > summary::before { content: "▸"; color: var(--gold); width: 1em; }
 details.raw[open] > summary::before { content: "▾"; }
 
-/* ===== 逐筆確認 (手機主要操作；配色參考學習卡片 App：暖米白底、白色圓角卡片、薄荷綠進度) ===== */
+/* ===== 逐筆確認 (手機主要操作；白色圓角卡片、大按鈕，配色與整體相同) ===== */
 .review {
-  --rv-bg: #F5F4F0; --rv-card: #FFFFFF; --rv-line: #E3E1DB; --rv-fg: #1C1B19; --rv-mut: #8A877F;
-  --rv-green: #74C2A0; --rv-track: #E8E6E0; --rv-pill-bg: #E6F0E1; --rv-pill-fg: #2F5E3F;
-  --rv-err-bg: #FBE9E7; --rv-err-fg: #A12A1F; --rv-warn-bg: #FBF0DC; --rv-warn-fg: #8A5300; --rv-sus-bg: #EAEFF5; --rv-sus-fg: #3F4F63;
+  --rv-bg: var(--bg); --rv-card: var(--panel); --rv-line: var(--line); --rv-fg: var(--fg); --rv-mut: var(--mut);
+  --rv-green: var(--cta); --rv-track: #EADFD0; --rv-pill-bg: var(--accent-soft); --rv-pill-fg: var(--gold);
+  --rv-err-bg: var(--err-soft); --rv-err-fg: var(--err); --rv-warn-bg: var(--warn-soft); --rv-warn-fg: var(--warn); --rv-sus-bg: var(--suspect-soft); --rv-sus-fg: var(--suspect);
   position: fixed; inset: 0; z-index: 50; overflow-y: auto; background: var(--rv-bg); color: var(--rv-fg);
   padding: max(20px, env(safe-area-inset-top)) 20px max(28px, env(safe-area-inset-bottom));
   display: flex; flex-direction: column; gap: 18px; font-family: var(--font-body);
 }
 .review > * { width: 100%; max-width: 560px; margin-inline: auto; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .review { --rv-bg: #151412; --rv-card: #1F1E1B; --rv-line: #34322E; --rv-fg: #F2F1EC; --rv-mut: #A29F97; --rv-track: #34322E; --rv-pill-bg: #1F3328; --rv-pill-fg: #A8DCC0; --rv-err-bg: #3A1814; --rv-err-fg: #F4A59B; --rv-warn-bg: #3A2C12; --rv-warn-fg: #F2C879; --rv-sus-bg: #232B36; --rv-sus-fg: #B6C3D4; }
-}
-:root[data-theme="dark"] .review { --rv-bg: #151412; --rv-card: #1F1E1B; --rv-line: #34322E; --rv-fg: #F2F1EC; --rv-mut: #A29F97; --rv-track: #34322E; --rv-pill-bg: #1F3328; --rv-pill-fg: #A8DCC0; --rv-err-bg: #3A1814; --rv-err-fg: #F4A59B; --rv-warn-bg: #3A2C12; --rv-warn-fg: #F2C879; --rv-sus-bg: #232B36; --rv-sus-fg: #B6C3D4; }
 body.reviewing { overflow: hidden; }
 .rv-top { display: flex; align-items: center; gap: 12px; margin-top: 8vh; }
 .rv-quit, .rv-back { background: none; border: 0; color: var(--rv-mut); font-size: 16px; padding: 10px 0; min-height: 44px; white-space: nowrap; cursor: pointer; }
@@ -406,17 +387,13 @@ body.reviewing { overflow: hidden; }
 .rv-choice b { font-weight: 600; overflow-wrap: anywhere; }
 .rv-choice:hover { border-color: var(--rv-green); }
 .rv-choice:active { background: var(--rv-pill-bg); }
-.rv-choice.primary { background: var(--rv-green); border-color: var(--rv-green); color: #0F2A1E; font-weight: 600; }
+.rv-choice.primary { background: var(--cta); border-color: var(--cta); color: var(--cta-ink); font-weight: 600; }
 .rv-done .rv-big { color: var(--rv-pill-fg); }
 .review-start { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
 .list-toggle { display: none; }
 
-/* ===== 手機版 (720px 以下)：跟逐筆確認同一套暖米白配色；清單預設收起，主要用逐筆確認 ===== */
+/* ===== 手機版 (720px 以下)：清單預設收起，主要用逐筆確認 ===== */
 @media (max-width: 720px) {
-  :root:not([data-theme="dark"]) body:not(.force-dark) {
-    --bg: #F5F4F0; --panel: #FFFFFF; --line: #E3E1DB; --line-soft: #ECEAE5; --fg: #1C1B19; --mut: #7A776F;
-    --accent: #1C1B19; --accent-soft: #EEF4EC; --cta: #74C2A0; --cta-ink: #0F2A1E; --gold: #2F5E3F; --hl: #FDF1C7;
-  }
   .top { padding-block: 24px 14px; }
   .brand h1 { font-size: 30px; }
   .drop.big { border-radius: 20px; border-color: var(--line); padding: 28px 16px; }
@@ -438,6 +415,35 @@ body.reviewing { overflow: hidden; }
 @media (max-width: 720px) {
   .on-desk { display: none; }
   .on-phone { display: inline; }
-  .samples .btn:not(.ghost), .review-start .btn.cta { background: #74C2A0; border-color: #74C2A0; color: #0F2A1E; }
   .summary { scroll-margin-top: 16px; }
 }
+
+/* ===== 一般辦公工具的樣子：不用寬字距、全大寫小標與花體數字；圓角卡片 ===== */
+body { letter-spacing: 0; }
+.brand h1 { font-weight: 700; font-size: 30px; letter-spacing: 0; }
+.brand h1::after { display: none; }
+h2 { font-weight: 700; font-size: 19px; letter-spacing: 0; }
+.label, .tile .k, th, details.more > summary, details.raw > summary, .back, .badge, .ai-tag, td .pill { text-transform: none; letter-spacing: 0; }
+.label, .tile .k { font-size: 13px; }
+th { font-size: 13px; color: var(--mut); border-bottom: 1px solid var(--line); }
+.btn { border-radius: 8px; letter-spacing: 0; font-size: 14px; padding: 9px 16px; }
+.btn.small { letter-spacing: 0; }
+.btn.cta:hover { filter: none; background: #9E4625; border-color: #9E4625; }
+.drop, .drop.big { border-radius: 12px; border: 1.5px dashed #D6C6B0; background: var(--panel); }
+.drop.big:hover, .drop.over { border-color: var(--cta); background: #FFF8EF; }
+.drop.big .drop-k { font-weight: 700; font-size: 20px; letter-spacing: 0; }
+.summary { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.tile .v, .stat b, .rv-big, .detail h3 { font-family: var(--font-body); letter-spacing: 0; }
+.tile .v { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.detail h3 { font-size: 18px; font-weight: 700; }
+.rv-big { font-weight: 700; }
+.table-wrap, .detail, .block, .finding { border-radius: 12px; }
+td .pill { border-radius: 6px; }
+.badge { border-radius: 6px; }
+#issue-table tbody tr.sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--cta); }
+.rv-pill { letter-spacing: 0; }
+@media (max-width: 720px) {
+  .brand h1 { font-size: 24px; }
+  .tile .v { font-size: 30px; }
+}
+select, input[type="search"], input[type="number"], textarea { border-radius: 8px; border-color: var(--line); background: var(--panel); }
