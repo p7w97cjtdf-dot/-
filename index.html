@@ -7,6 +7,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant:wght@500;600;700&family=Montserrat:wght@400;500;600&family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&family=Fira+Code:wght@400&display=swap">
 <link rel="stylesheet" href="src/app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1C1917">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="檢核助手">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<meta name="description" content="保險申報資料檢核：個人壽險、癌症險、傷害險。自動找出錯誤、說明怎麼改，資料只在你的裝置上處理。">
 </head>
 <body>
 <header class="top">
@@ -20,11 +29,10 @@
   <section class="imports" aria-label="放入資料">
     <label class="drop big" id="drop-book" for="file-book">
       <span class="drop-k"><span class="on-desk">把 Excel 檔拖到這裡，或點這裡選擇檔案</span><span class="on-phone">點這裡選擇 Excel 檔</span></span>
-      <span class="drop-h">工作表名稱含「保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數、資產負債表」就會自動分好；也可以一次放入多個文字檔或 CSV。</span>
+      <span class="drop-h">支援個人壽險、癌症險、傷害險。可以直接放入申報用的文字檔（.txt，例如 LFL、CRL、PAL 開頭的檔案），或 Excel 檔（工作表名稱含「保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數、資產負債表」會自動分好；癌症險、傷害險請在名稱前加「癌症險」「傷害險」），一次放多個檔案也可以。</span>
       <input type="file" id="file-book" accept=".xlsx,.xls,.xlsm,.ods,.txt,.csv" multiple>
     </label>
     <div class="samples">
-      <button id="btn-template" class="btn ghost">下載空白範本（Excel）</button>
       <span class="hint" id="sample-note"></span>
     </div>
     <details class="more">
@@ -37,6 +45,10 @@
         <label class="drop opt" id="drop-statement" for="file-statement"><span class="drop-k">資產負債表</span><span class="drop-n" id="name-statement">尚未放入</span><span class="drop-h">檢查報表加總</span><input type="file" id="file-statement" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
         <label class="drop opt" id="drop-products" for="file-products"><span class="drop-k">商品資料</span><span class="drop-n" id="name-products">尚未放入</span><span class="drop-h">商品代號、停售日</span><input type="file" id="file-products" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
         <label class="drop opt" id="drop-customers" for="file-customers"><span class="drop-k">客戶資料</span><span class="drop-n" id="name-customers">尚未放入</span><span class="drop-h">要保人、被保險人</span><input type="file" id="file-customers" accept=".csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-CL" for="file-CL"><span class="drop-k">癌症險保單資料</span><span class="drop-n" id="name-CL">尚未放入</span><span class="drop-h">CRL 開頭的承保檔</span><input type="file" id="file-CL" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-CD" for="file-CD"><span class="drop-k">癌症險理賠資料</span><span class="drop-n" id="name-CD">尚未放入</span><span class="drop-h">CRD 開頭的給付檔</span><input type="file" id="file-CD" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-AL" for="file-AL"><span class="drop-k">傷害險保單資料</span><span class="drop-n" id="name-AL">尚未放入</span><span class="drop-h">PAL 開頭的承保檔</span><input type="file" id="file-AL" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
+        <label class="drop opt" id="drop-AD" for="file-AD"><span class="drop-k">傷害險理賠資料</span><span class="drop-n" id="name-AD">尚未放入</span><span class="drop-h">PAD 開頭的給付檔</span><input type="file" id="file-AD" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
       </div>
     </details>
   </section>
@@ -230,7 +242,11 @@
   <section id="review" class="review" hidden aria-label="逐筆確認"></section>
 </main>
 
-<footer class="foot">檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 年）；會計科目為示範用的簡化版。所有檢查都在你的電腦上進行，資料不會上傳。AI 說明只在線上版提供。</footer>
+<footer class="foot">
+  <p class="disclaimer"><b>使用說明：</b>本工具供申報前自我檢查使用，檢查結果不代表保發中心或主管機關的正式審核；通過檢查不保證不會被退件。規則依下列手冊整理，可能與主辦單位最新版本有出入，請以正式手冊與退件通知為準。</p>
+  <p id="rule-version">檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度）。</p>
+  <p>所有檢查都在你的電腦上進行，資料不會上傳。會計科目為示範用的簡化版。AI 說明只在線上版提供。<a href="docs/limits.html">限制與風險說明</a></p>
+</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
@@ -241,6 +257,11 @@
 <script src="src/labels.js"></script>
 <script src="src/core.js"></script>
 <script src="src/rulesets/life.js"></script>
+<script src="src/rulesets/occupation.js"></script>
+<script src="src/rulesets/ext-common.js"></script>
+<script src="src/rulesets/cancer.js"></script>
+<script src="src/rulesets/accident.js"></script>
+<script src="src/rulesets/index.js"></script>
 <script src="src/rulesets/finance.js"></script>
 <script src="src/report.js"></script>
 <script src="src/recon.js"></script>
@@ -258,6 +279,7 @@
 <script src="src/app.js"></script>
 <script src="src/app-import.js"></script>
 <script src="src/review.js"></script>
+<script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
 <script>
 // 找不到程式檔時 (例如直接在壓縮檔裡開啟 index.html，或只複製了這一個檔案)，畫面會出現但按鈕沒有反應：在頁首說明原因
 if (!window.DQ || !window.DQ.app) {

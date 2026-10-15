@@ -6,7 +6,7 @@
 (function () {
   'use strict';
   const { DQ } = window;
-  const app = DQ.app, LB = DQ.labels, rs = DQ.rulesets.life;
+  const app = DQ.app, LB = DQ.labels, rs = DQ.rulesets.all;
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const ORDER = { error: 0, warning: 1, suspect: 2 };

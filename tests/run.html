@@ -45,6 +45,11 @@
 <script src="../rules/rules.js"></script>
 <script src="../src/core.js"></script>
 <script src="../src/rulesets/life.js"></script>
+<script src="../src/rulesets/occupation.js"></script>
+<script src="../src/rulesets/ext-common.js"></script>
+<script src="../src/rulesets/cancer.js"></script>
+<script src="../src/rulesets/accident.js"></script>
+<script src="../src/rulesets/index.js"></script>
 <script src="../src/rulesets/finance.js"></script>
 <script src="../src/recon.js"></script>
 <script src="../src/sample-data.js"></script>
@@ -56,6 +61,7 @@
 <script src="../src/rules-dsl.js"></script>
 <script src="../src/rule-samples.js"></script>
 <script src="../src/selftest.js"></script>
+<script src="../src/mock-ext.js"></script>
 <script>
 (function () {
   'use strict';
@@ -123,6 +129,31 @@
     dirtyRows('rows', '含錯誤版（1000 張保單）', T.checkDirty(DQ.mock.generate(Object.assign({ inject: true }, big)), T.full(T.filesOf(DQ.mock.generate(Object.assign({ inject: true }, big))))), false);
     cleanRow('rows', '正確版（1000 張保單）', T.checkClean(T.full(T.filesOf(DQ.mock.generate(big)))));
   });
+  // 癌症保險、傷害保險
+  const EXT = [['cancer', '癌症險', ['CL', 'CD']], ['accident', '傷害險', ['AL', 'AD']]].filter(([k]) => DQ.rulesets[k]);
+  const extRows = (target, label, g, res) => {
+    const c = DQ.mockExt.check(g, res);
+    row(target, `${label}：刻意錯誤全部找到`, `${c.found} / ${c.total}`, c.found === c.total && c.total > 0 ? 'PASS' : 'FAIL', list('未找到', c.missed.map(k => `${k.rules.join('+')} ${k.policy}：${k.what}`)));
+    row(target, `${label}：沒有落在解答以外的問題`, `${c.stray.length} 項`, c.stray.length ? 'FAIL' : 'PASS', list('解答以外的問題', c.stray.map(i => `${i.ruleId} ${i.policy} ${i.message}`)));
+  };
+  const viaExcelExt = g => {
+    const wb = XLSX.utils.book_new();
+    for (const [name, s] of Object.entries(W.extSheets(g))) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([s.header].concat(s.rows)), name);
+    const { got } = W.slots(XLSX, XLSX.read(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }), { type: 'array' }));
+    return W.files(got);
+  };
+  for (const [k, name, P] of EXT) {
+    safe('rows', name, () => {
+      const r = DQ.mockExt.run(k, { inject: true }, DQ.rulesets.all);
+      extRows('rows', `${name}含錯誤版（文字檔）`, r.g, r.res);
+      const clean = [undefined, 3, 11].flatMap(seed => DQ.mockExt.run(k, seed ? { seed, policies: 300 } : {}, DQ.rulesets.all).res.issues.map(i => `種子 ${seed || '預設'}：${i.ruleId} ${i.policy} ${i.message}`));
+      cleanRow('rows', `${name}正確版（文字檔，3 組亂數種子）`, clean);
+      if (window.XLSX) {
+        extRows('rows', `${name}含錯誤版（Excel 往返）`, r.g, DQ.validate(DQ.rulesets.all, viaExcelExt(r.g)));
+        cleanRow('rows', `${name}正確版（Excel 往返）`, DQ.validate(DQ.rulesets.all, viaExcelExt(DQ.mockExt.run(k, {}).g)).issues.map(i => `${i.ruleId} ${i.message}`));
+      }
+    });
+  }
   const ms = performance.now() - t0;
 
   function finish() {
@@ -142,7 +173,15 @@
     async function safeAsync(f) {
       try {
         const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
-        const { got } = W.slots(XLSX, wb), r = T.full(W.files(got));
+        const { got } = W.slots(XLSX, wb);
+        const ext = EXT.find(([, , P]) => got[P[0]] || got[P[1]]);
+        if (ext) {
+          const res = DQ.validate(DQ.rulesets.all, W.files(got));
+          if (wb.SheetNames.includes('錯誤解答')) extRows('rows-file', f.name, DQ.mockExt.run(ext[0], { inject: true }).g, res);
+          else cleanRow('rows-file', f.name, res.issues.map(i => `${i.ruleId} ${i.message}`));
+          return finish();
+        }
+        const r = T.full(W.files(got));
         // 說明工作表記有資料組 (seed、policies)，用同一組參數重建錯誤解答來對照；沒有時視為預設試用資料
         const note = wb.Sheets['說明'] ? XLSX.utils.sheet_to_csv(wb.Sheets['說明']) : '';
         const m = note.match(/seed=(\d+), policies=(\d+)/);

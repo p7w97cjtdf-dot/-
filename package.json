@@ -10,7 +10,8 @@
     "workbook": "node tools/export-workbook.js > /tmp/wb.json && python3 tools/build_workbook.py /tmp/wb.json samples/excel/試用資料_含錯誤.xlsx && node tools/export-workbook.js --clean > /tmp/wb-clean.json && python3 tools/build_workbook.py /tmp/wb-clean.json samples/excel/試用資料_正確.xlsx && node tools/recalc-workbook.js samples/excel/試用資料_含錯誤.xlsx samples/excel/試用資料_正確.xlsx",
     "bench": "node tools/bench.js",
     "rules": "node tools/build-rules.js",
-    "workbook:large": "node tools/export-workbook.js --seed 2026 --policies 1000 > /tmp/wbL.json && python3 tools/build_workbook.py /tmp/wbL.json samples/excel/試用資料_1000張_含錯誤.xlsx && node tools/export-workbook.js --clean --seed 2026 --policies 1000 > /tmp/wbLc.json && python3 tools/build_workbook.py /tmp/wbLc.json samples/excel/試用資料_1000張_正確.xlsx && node tools/recalc-workbook.js samples/excel/試用資料_1000張_含錯誤.xlsx samples/excel/試用資料_1000張_正確.xlsx"
+    "workbook:large": "node tools/export-workbook.js --seed 2026 --policies 1000 > /tmp/wbL.json && python3 tools/build_workbook.py /tmp/wbL.json samples/excel/試用資料_1000張_含錯誤.xlsx && node tools/export-workbook.js --clean --seed 2026 --policies 1000 > /tmp/wbLc.json && python3 tools/build_workbook.py /tmp/wbLc.json samples/excel/試用資料_1000張_正確.xlsx && node tools/recalc-workbook.js samples/excel/試用資料_1000張_含錯誤.xlsx samples/excel/試用資料_1000張_正確.xlsx",
+    "samples:ext": "node tools/build-ext-samples.js cancer && python3 tools/build_ext_workbook.py /tmp/ext-cancer-dirty.json samples/excel/試用資料_癌症險_含錯誤.xlsx && python3 tools/build_ext_workbook.py /tmp/ext-cancer-clean.json samples/excel/試用資料_癌症險_正確.xlsx && node tools/build-ext-samples.js accident && python3 tools/build_ext_workbook.py /tmp/ext-accident-dirty.json samples/excel/試用資料_傷害險_含錯誤.xlsx && python3 tools/build_ext_workbook.py /tmp/ext-accident-clean.json samples/excel/試用資料_傷害險_正確.xlsx"
   },
   "engines": {
     "node": ">=18"

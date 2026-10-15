@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const { DQ } = window;
-  const rs = DQ.rulesets.life, fin = DQ.rulesets.finance, R = DQ.recon;
+  const rs = DQ.rulesets.all, fin = DQ.rulesets.finance, R = DQ.recon;
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const LB = DQ.labels, SEV = LB.SEV, SHEET = LB.SHEET;
@@ -15,13 +15,18 @@
   try { const saved = JSON.parse(localStorage.getItem('dq-custom-rules') || '[]'); if (Array.isArray(saved)) state.customRules = saved.filter(r => !DQ.dsl.validateRule(r, rs.layouts).length); } catch (e) { /* 無法讀取時忽略 */ }
 
   // ---------- 檔案 ----------
-  const SLOTS = ['L', 'D', 'prior', 'control', 'statement', 'products', 'customers'];
+  const SLOTS = ['L', 'D', 'prior', 'control', 'statement', 'products', 'customers', 'CL', 'CD', 'AL', 'AD'];
+  const DETAIL = ['L', 'D', 'CL', 'CD', 'AL', 'AD'];  // 固定長度的明細檔 (依規則集檢查)
   function setFile(fid, name, text, fromSheet) {
-    if ((fid === 'L' || fid === 'D') && /\.csv$/i.test(name)) { text = DQ.csvToFixedWidth(text, rs.layouts[fid]); name = name.replace(/\.csv$/i, '.txt'); }
+    if (DETAIL.includes(fid) && /\.csv$/i.test(name)) { text = DQ.csvToFixedWidth(text, rs.layouts[fid]); name = name.replace(/\.csv$/i, '.txt'); }
     state.files[fid] = { name, text, fromSheet: !!fromSheet };
     $('#name-' + fid).textContent = name;
   }
   function guessSlot(name, fallback) {
+    if (/^CRL/i.test(name) || /癌症.*(保單|承保)/.test(name)) return 'CL';
+    if (/^CRD/i.test(name) || /癌症.*(理賠|給付)/.test(name)) return 'CD';
+    if (/^PAL/i.test(name) || /傷害.*(保單|承保)/.test(name)) return 'AL';
+    if (/^PAD/i.test(name) || /傷害.*(理賠|給付)/.test(name)) return 'AD';
     if (/^LFD/i.test(name) || /理賠|給付|claim/i.test(name)) return 'D';
     if (/去年|上年度|prior/i.test(name)) return 'prior';
     if (/^LFL/i.test(name)) { const y = name.match(/_(\d{4})/), cur = state.files.L && state.files.L.name.match(/_(\d{4})/); return y && cur && +y[1] < +cur[1] ? 'prior' : 'L'; }
@@ -66,11 +71,18 @@
     drop.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove('over'); for (const f of e.dataTransfer.files) readFile(guessSlot(f.name, fid), f); });
   }
   // 上方的大框：Excel 依工作表名稱分配；文字檔、CSV 依檔名判斷是哪一份資料
-  function readMany(files) {
+  // 檔名看不出來時，依第一行的長度判斷是哪一種申報檔
+  const BY_LENGTH = Object.fromEntries(DETAIL.filter(k => rs.layouts[k]).map(k => [rs.layouts[k].recordLength, k]));
+  async function readMany(files) {
     const unknown = [];
     for (const f of files) {
       if (BOOK.test(f.name)) { readWorkbook(f); continue; }
-      const slot = guessSlot(f.name, null);
+      let slot = guessSlot(f.name, null);
+      if (!slot && /\.txt$/i.test(f.name)) {
+        const text = decodeText(await f.arrayBuffer()), first = text.split(/\r?\n/)[0];
+        slot = BY_LENGTH[first.length] || null;
+        if (slot) { setFile(slot, f.name, text); run(); continue; }
+      }
       if (slot) readFile(slot, f); else unknown.push(f.name);
     }
     if (unknown.length) {
@@ -87,38 +99,19 @@
   document.addEventListener('dragover', e => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
   document.addEventListener('drop', e => { if (!e.dataTransfer || !e.dataTransfer.files.length) return; e.preventDefault(); if (!e.target.closest('.drop')) readMany([...e.dataTransfer.files]); });
 
-  // 空白範本：7 張工作表只有標題列，外部使用者照著填入自己的資料
-  $('#btn-template').onclick = () => {
-    if (!window.XLSX) { $('#sample-note').textContent = '讀取 Excel 的元件沒有載入成功，請確認網路後重新整理頁面。'; return; }
-    const sh = DQ.workbook.sheets(DQ.mock.generate({ inject: false })), wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ['填寫說明'], ['1. 每張工作表的第一列是欄位名稱，請不要修改；從第二列開始每列填一筆資料。'],
-      ['2. 至少要有「保單資料」或「理賠資料」其中一張，其他工作表沒有可以留空或刪除。'],
-      ['3. 代號、日期、保單號碼等欄位請設為「文字」格式，以免開頭的 0 被 Excel 去掉。'],
-      ['4. 日期格式為西元年月日 8 碼，例如 20250131。'],
-      ['5. 填好後把整個檔案拖進檢核工具即可，資料只在你的電腦上處理。'],
-    ]), '說明');
-    for (const [name, t] of Object.entries(sh)) {
-      const ws = XLSX.utils.aoa_to_sheet([t.header]);
-      ws['!cols'] = t.header.map(h => ({ wch: Math.max(8, String(h).length * 2 + 2) }));
-      XLSX.utils.book_append_sheet(wb, ws, name);
-    }
-    download('blank_template.xlsx', new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  };
-
   // ---------- 執行 ----------
-  const SLOT_NAME = { L: '保單資料', D: '理賠資料', prior: '去年保單資料', control: '系統總數', statement: '資產負債表', products: '商品資料', customers: '客戶資料' };
+  const SLOT_NAME = Object.assign({ control: '系統總數', statement: '資產負債表', products: '商品資料', customers: '客戶資料' }, SHEET);
   function run() {
     const f = state.files;
     // 沒有保單資料也沒有理賠資料時無法檢查：說明還缺什麼，不顯示「0 個問題」
-    if (!f.L && !f.D) {
+    if (!DETAIL.some(k => f[k])) {
       document.body.classList.add('no-data');
-      $('#sample-note').textContent = `已放入：${Object.keys(f).filter(k => f[k]).map(k => SLOT_NAME[k]).join('、')}。還需要保單資料或理賠資料才能開始檢查。`;
+      $('#sample-note').textContent = `已放入：${Object.keys(f).filter(k => f[k]).map(k => SLOT_NAME[k]).join('、')}。還需要保單資料或理賠資料 (壽險、癌症險或傷害險) 才能開始檢查。`;
       return;
     }
     document.body.classList.remove('no-data');
     const t0 = performance.now();
-    state.res = DQ.validate(activeRules(), { L: f.L, D: f.D });
+    state.res = DQ.validate(activeRules(), Object.fromEntries(DETAIL.filter(k => f[k]).map(k => [k, f[k]])));
     // 客戶資料、商品資料：指向承保檔某一列的問題併入明細檢核 (可用欄位尺規與自動修正)
     state.cust = f.customers && f.L ? DQ.master.customers(state.res, f.customers.text) : null;
     state.prod = f.products && f.L ? DQ.master.products(state.res, f.products.text) : null;
@@ -182,6 +175,9 @@
     $('#summary-note').textContent = `已檢查 ${recs}，共 ${Object.values(state.files).filter(Boolean).length} 份資料，花了 ${(state.elapsed / 1000).toFixed(2)} 秒。${found}`;
   }
   function renderCats() {
+    // 「資料」篩選：只列出有問題的工作表
+    const cur = $('#f-file').value, sheets = [...new Set(state.all.map(i => i.sheet).filter(Boolean))];
+    $('#f-file').innerHTML = '<option value="">全部資料</option>' + sheets.map(n => `<option${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
     const byCat = {};
     for (const i of state.all) byCat[i.category] = (byCat[i.category] || 0) + 1;
     const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
@@ -194,6 +190,11 @@
     return state.all.filter(i => (!sev || i.severity === sev) && (!sheet || i.sheet === sheet) && (!cat || i.category === cat) &&
       (!q || [i.policy, i.ruleId, i.ruleName, i.message, DQ.report.fieldLabel(rs, i), i.value].join(' ').toLowerCase().includes(q)));
   }
+  // 表格的「欄位」只列前兩個，其餘在右側說明中看
+  function shortFields(i) {
+    const names = DQ.report.fieldLabel(rs, i).replace(/欄\d+ /g, '').split('、').filter(Boolean);
+    return names.length > 2 ? `${names.slice(0, 2).join('、')} 等 ${names.length} 欄` : names.join('、');
+  }
   function renderTable() {
     const list = filtered();
     $('#issue-count').textContent = `${list.length} / ${state.all.length}`;
@@ -202,7 +203,7 @@
         <td class="sev"><i class="${i.severity}" title="${SEV[i.severity]}"></i></td>
         <td class="where">${esc(i.sheet || '')} <span class="num">${rowLabel(i)}</span></td>
         <td class="mono">${esc((i.policy || i.code || '').trim())}</td>
-        <td>${esc(DQ.report.fieldLabel(rs, i).replace(/欄\d+ /g, ''))}</td>
+        <td>${esc(shortFields(i))}</td>
         <td class="mono val">${esc(String(i.value == null ? '' : i.value).replace(/ /g, '·'))}</td>
         <td>${esc(i.message)}</td>
         <td class="mono">${i.fix ? `${esc(i.fix.value)}${state.res.issues.includes(i) ? '<span class="pill">可一鍵修改</span>' : ''}` : ''}</td>
@@ -300,10 +301,11 @@
   }
   function applyFix(ids) {
     let total = 0;
-    for (const fid of ['L', 'D']) {
+    state.changed = state.changed || new Set();
+    for (const fid of DETAIL) {
       if (!state.files[fid]) continue;
       const out = DQ.applyFixes(rs, state.res, fid, ids);
-      if (out.applied) { state.files[fid] = Object.assign({}, state.files[fid], { text: out.text }); total += out.applied; }
+      if (out.applied) { state.files[fid] = Object.assign({}, state.files[fid], { text: out.text }); total += out.applied; state.changed.add(fid); }
     }
     const before = state.res.summary.errors + state.res.summary.warnings;
     run();
@@ -314,7 +316,11 @@
   $('#btn-fix').onclick = () => applyFix(null);
   // 使用者自己的檔名若含中文，去掉中文字，避免存成「download」
   const safeName = (name, fallback) => { const n = String(name || '').replace(/[^\x21-\x7e]/g, ''); return /^[^.]+\.\w+$/.test(n) ? n : fallback; };
-  $('#btn-dl-fixed').onclick = () => state.files.L && download(safeName(state.files.L.name, 'fixed_policies.txt'), state.files.L.text);
+  // 下載改過的明細檔 (沒有改過時下載保單資料)
+  $('#btn-dl-fixed').onclick = () => {
+    const ids = DETAIL.filter(k => state.files[k] && state.changed && state.changed.has(k));
+    for (const k of ids.length ? ids : DETAIL.filter(x => state.files[x]).slice(0, 1)) download(safeName(state.files[k].name, `fixed_${k}.txt`), state.files[k].text);
+  };
   // 問題清單：Excel 檔 (不會有編碼問題)；Excel 元件未載入時改用 CSV (含 BOM，Excel 也能正確顯示中文)
   $('#btn-dl-csv').onclick = () => {
     const rows = DQ.report.toRows(rs, state.res, state.extra);
@@ -456,7 +462,10 @@
   const SRCDOC = { rules: '檢核規則手冊', manual: '填報手冊' };
   function pageOf(id) {
     const src = window.DQ.ruleSource, r = src && src.rules.concat(src.toolRules).find(x => x.id === id);
-    if (!r) return '<span class="hint">自訂規則</span>';
+    if (!r) {
+      const own = rs.catalog.find(x => x.id === id && x.product), prod = own && rs.products.find(p => p.id === own.product);
+      return own ? `<span>${esc(prod.name)}填報手冊 ${esc(own.ref)}</span>` : '<span class="hint">自訂規則</span>';
+    }
     const s = r.source;
     if (s.doc === 'tool') return `<span class="hint" title="${esc(s.note || '')}">本工具另外加的</span>`;
     return `<span title="${esc((s.note ? s.note + '；' : '') + (s.program ? `檢核程式說明表 PDF 第 ${s.program} 頁` : ''))}">${SRCDOC[s.doc]} 第 ${s.page} 頁</span>`;
@@ -468,8 +477,8 @@
     const cat = activeRules().catalog.concat(fin.catalog, DQ.master.catalog, DQ.anomaly.catalog);
     const st = DQ.ruleStats.count();
     const list = cat.filter(r => !q || [r.id, r.name, r.level, r.ref].join(' ').toLowerCase().includes(q));
-    const imported = cat.length - st.total;
-    $('#rules-meta').textContent = `共 ${st.total} 條檢查規則：${st.cats.map(c => `${c.name} ${c.n}`).join('、')}${imported ? `；另有自訂規則 ${imported} 條` : ''}`;
+    const imported = cat.length - st.total - st.extTotal;
+    $('#rules-meta').textContent = `個人壽險共 ${st.total} 條檢查規則：${st.cats.map(c => `${c.name} ${c.n}`).join('、')}${st.ext.map(e => `；${e.name} ${e.n} 條`).join('')}${imported > 0 ? `；另有自訂規則 ${imported} 條` : ''}`;
     $('#rule-table tbody').innerHTML = list.map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(LB.level(r.level))}</td><td>${esc(r.name)}</td><td>${pageOf(r.id)}</td><td><span class="badge ${r.severity}">${SEV[r.severity]}</span></td><td class="num">${by[r.id] || ''}</td></tr>`).join('');
     $('#layout-table tbody').innerHTML = rs.layouts.L.fields.map(f => `<tr><td class="num">${f.no}</td><td>${esc(f.name)}</td><td class="num">${f.start}</td><td class="num">${f.start + f.len - 1}</td><td>${f.type === '9' ? '數字' : '英數字'}，${f.len} 個字</td></tr>`).join('');
     $('#chart-table tbody').innerHTML = fin.chart.map(a => `<tr><td class="mono">${a.code}</td><td class="ind d${a.code.length <= 1 ? 0 : a.code.length <= 2 ? 1 : 2}">${esc(a.name)}</td><td>${a.until ? `<span class="badge warning">${a.until} 起停用，改用 ${a.replacedBy}</span>` : ''}</td></tr>`).join('');
@@ -504,8 +513,14 @@
 
   // 手機上清單預設收起 (主要用逐筆確認)，按「看全部清單」展開
   $('#btn-list').onclick = () => { const on = document.body.classList.toggle('show-list'); $('#btn-list').setAttribute('aria-expanded', on); $('#btn-list').textContent = on ? '收起清單' : '看全部清單'; };
+  // 頁尾：各險種規則的版本與條數
+  (() => {
+    const st = DQ.ruleStats.count(), MANUAL = { cancer: '個人癌症保險填報手冊', accident: '新式傷害保險填報手冊' };
+    $('#rule-version').textContent = `檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度，${st.total} 條）` +
+      st.ext.map(e => `、${MANUAL[e.key] || e.name}（${e.version} 年版，${e.n} 條）`).join('') + '。';
+  })();
   // 打開時不載入任何資料：只顯示拖放框
   document.body.classList.add('no-data');
-  $('#sample-note').textContent = '還沒有資料。把 Excel 拖到上方的框；不確定格式的話，先下載空白範本照著填。';
+  $('#sample-note').textContent = '還沒有資料。把申報文字檔或 Excel 拖到上方的框。';
   if (['check', 'recon', 'decode', 'report', 'rules'].includes(hash)) showTab(hash);
 })();
