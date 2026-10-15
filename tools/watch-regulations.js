@@ -15,9 +15,12 @@ function textLines(html) {
     .replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<br\s*\/?>|<\/(p|div|li|tr|h\d|td|dd|dt|a)>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
     .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
-    .split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(l => l.length >= 4 && l.length <= 400);
+    .split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(l => l.length >= 4 && l.length <= 400 && !NOISE.test(l));
 }
+// 每天都會變、但和法規無關的字：瀏覽人數、網頁更新日期、純數字、頁碼、年月快捷選單
+const NOISE = /瀏覽人次|造訪人數|瀏覽人數|更新日期|上線人數|^\d+$|^\d+ ?\/ ?\d+$|^\d{4}\/\d{2}$|^\/\/-->$/;
 // 含關鍵字的段落 (去重、保留順序)
 function extract(html, keywords) {
   const seen = new Set(), out = [];
