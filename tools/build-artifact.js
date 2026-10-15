@@ -12,9 +12,11 @@ html = html.replace(/<script src="((?:src|rules)\/[^"]+)"><\/script>/g, (_, f) =
 // 發佈時平台會包上 doctype/head/body 骨架：只保留 title、字型、樣式與內容
 const title = html.match(/<title>[\s\S]*?<\/title>/)[0];
 const head = html.match(/<head>([\s\S]*?)<\/head>/)[1];
-const links = head.match(/<link[^>]+>/g).join('\n');
+// 只保留外部字型；manifest、圖示在單一 HTML 中沒有對應檔案
+const links = head.match(/<link[^>]+>/g).filter(l => /href="https:/.test(l)).join('\n');
 const styles = head.match(/<style>[\s\S]*?<\/style>/g).join('\n');
-const body = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>'));
+// 頁尾的「限制與風險說明」改連到公開網站 (GitHub Pages)
+const body = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>')).replace('href="docs/limits.html"', 'href="https://p7w97cjtdf-dot.github.io/-/docs/limits.html" target="_blank" rel="noopener"');
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, `${title}\n${links}\n${styles}\n${body}`);
 console.log(`已輸出 ${out} (${(fs.statSync(out).size / 1024).toFixed(0)} KB)`);
