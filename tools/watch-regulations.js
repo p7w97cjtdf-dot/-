@@ -35,7 +35,8 @@ function links(html, base) {
 }
 const diff = (prev, cur) => ({ added: cur.filter(l => !prev.includes(l)), removed: prev.filter(l => !cur.includes(l)) });
 
-async function fetchText(url) {
+async function fetchText(url, opts) {
+  opts = opts || {};
   if (url.startsWith('file:')) return fs.readFileSync(new URL(url), 'utf8');
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
   try {
@@ -45,19 +46,32 @@ async function fetchText(url) {
   } catch (e) {
     // Node 抓不到時 (例如網站憑證鏈不完整) 改用 curl 再試一次，並保留原因方便調整設定
     const why = e.cause ? `${e.message} (${e.cause.code || e.cause.message})` : e.message;
-    try { return require('child_process').execFileSync('curl', ['-sSL', '--max-time', '30', '-A', 'Mozilla/5.0 (regulation-watch)', url], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 }); }
+    // insecureTLS：只用在憑證鏈設定不完整的公開網站；只讀取公開文字，內容仍需人工確認
+    try { return require('child_process').execFileSync('curl', ['-sSL', '--max-time', '30', '-A', 'Mozilla/5.0 (regulation-watch)'].concat(opts.insecureTLS ? ['-k'] : [], [url]), { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 }); }
     catch (e2) { throw new Error(`${why}；curl：${String(e2.stderr || e2.message).trim().split('\n').pop()}`); }
   } finally { clearTimeout(t); }
 }
 // 一個來源：主頁面，加上 follow 指定的連結 (例如首頁上的「最新法令函釋」)，合併成一份段落清單
-async function sourceLines(s) {
-  const html = await fetchText(s.url);
+// 「本網頁將自動轉址」這類中繼頁：找出真正的網址 (meta refresh、location 轉址或頁面上唯一的連結)
+function redirectTarget(html, base) {
+  const m = /http-equiv=["']?refresh["']?[^>]*content=["'][^"']*url=([^"'>\s]+)/i.exec(html) || /location(?:\.href)?\s*=\s*["']([^"']+)["']/i.exec(html);
+  if (m) { try { return new URL(m[1].replace(/&amp;/g, '&'), base).href; } catch (e) { /* ignore */ } }
+  return null;
+}
+async function sourceLines(s, info) {
+  const opts = { insecureTLS: s.insecureTLS };
+  const html = await fetchText(s.url, opts);
   let lines = extract(html, s.keywords);
   for (const label of s.follow || []) {
     const hit = links(html, s.url).find(l => l.text.includes(label));
     if (!hit) { lines.push(`(找不到「${label}」連結)`); continue; }
-    try { lines = lines.concat(extract(await fetchText(hit.url), s.keywords).map(l => `[${label}] ${l}`)); }
-    catch (e) { lines.push(`(「${label}」${hit.url} 讀取失敗：${e.message})`); }
+    try {
+      let url = hit.url, page = await fetchText(url, opts);
+      const next = /自動轉址|redirect/i.test(page) && redirectTarget(page, url);
+      if (next && next !== s.url) { url = next; page = await fetchText(url, opts); }
+      info.followed[label] = url;
+      lines = lines.concat(extract(page, s.keywords).map(l => `[${label}] ${l}`));
+    } catch (e) { lines.push(`(「${label}」${hit.url} 讀取失敗：${e.message})`); }
   }
   return [...new Set(lines)];
 }
@@ -71,11 +85,12 @@ async function main(argv) {
   for (const s of cfg.sources) {
     const prev = state[s.id] || {};
     try {
-      const lines = await sourceLines(s);
+      const info = { followed: {} };
+      const lines = await sourceLines(s, info);
       if (!lines.length) throw new Error('找不到含關鍵字的內容 (網頁改版或需要登入)');
       if (!prev.lines) baseline.push(s);
       else { const d = diff(prev.lines, lines); if (d.added.length || d.removed.length) changes.push({ s, d }); }
-      state[s.id] = { name: s.name, url: s.url, checkedAt: now, changedAt: !prev.lines || changes.some(c => c.s === s) ? now : prev.changedAt, failures: 0, lines };
+      state[s.id] = { name: s.name, url: s.url, checkedAt: now, changedAt: !prev.lines || changes.some(c => c.s === s) ? now : prev.changedAt, failures: 0, followed: info.followed, lines };
     } catch (e) {
       failures.push({ s, error: e.message });
       state[s.id] = Object.assign({}, prev, { name: s.name, url: s.url, checkedAt: now, failures: (prev.failures || 0) + 1, lastError: e.message });
