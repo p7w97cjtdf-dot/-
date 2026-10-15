@@ -1,23 +1,51 @@
 {
-  "note": "每日自動監看的法規來源 (.github/workflows/regulation-watch.yml)。keywords：只比對含這些字的段落，避免網頁其他部分 (日期、瀏覽人數) 變動就誤報。網址可隨時增修；連不上的來源會列在每次執行的摘要中。",
+  "note": "每日自動監看的法規來源 (.github/workflows/regulation-watch.yml)。keywords：只比對含這些字的段落，避免網頁其他部分 (日期、瀏覽人數) 變動就誤報。網址可隨時增修；連不上的來源會列在每次執行的摘要中。 follow：在主頁面上找文字含這些字的連結，一併監看連到的頁面 (公告清單常在首頁的下一層)。",
   "sources": [
     {
       "id": "insurance-act",
       "name": "保險法（全國法規資料庫）",
       "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0390002",
-      "keywords": ["修正日期", "第", "條"]
+      "keywords": [
+        "修正日期",
+        "第",
+        "條"
+      ]
     },
     {
       "id": "ib-news",
       "name": "金融監督管理委員會保險局 首頁公告",
       "url": "https://www.ib.gov.tw/",
-      "keywords": ["填報", "申報", "統計", "準則", "辦法", "函令", "令", "公告"]
+      "keywords": [
+        "保險",
+        "填報",
+        "申報",
+        "統計",
+        "準則",
+        "辦法",
+        "函",
+        "令",
+        "公告"
+      ],
+      "follow": [
+        "最新法令函釋",
+        "重要公告"
+      ]
     },
     {
       "id": "tii-home",
       "name": "財團法人保險事業發展中心 首頁公告",
       "url": "https://www.tii.org.tw/",
-      "keywords": ["填報", "經驗", "統計", "手冊", "公告"]
+      "keywords": [
+        "填報",
+        "經驗",
+        "統計",
+        "手冊",
+        "公告"
+      ],
+      "follow": [
+        "最新消息",
+        "公告"
+      ]
     }
   ]
 }
