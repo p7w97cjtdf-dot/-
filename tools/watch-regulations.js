@@ -24,16 +24,42 @@ function extract(html, keywords) {
   for (const l of textLines(html)) if ((!keywords || !keywords.length || keywords.some(k => l.includes(k))) && !seen.has(l)) { seen.add(l); out.push(l); }
   return out.slice(0, 2000);
 }
+// 網頁中的連結 (文字 → 網址)
+function links(html, base) {
+  const out = [];
+  for (const m of String(html).matchAll(/<a\b[^>]*href\s*=\s*["']([^"'#][^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const text = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    try { out.push({ text, url: new URL(m[1].replace(/&amp;/g, '&'), base).href }); } catch (e) { /* 無效網址 */ }
+  }
+  return out;
+}
 const diff = (prev, cur) => ({ added: cur.filter(l => !prev.includes(l)), removed: prev.filter(l => !cur.includes(l)) });
 
 async function fetchText(url) {
   if (url.startsWith('file:')) return fs.readFileSync(new URL(url), 'utf8');
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
   try {
-    const res = await fetch(url, { signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (regulation-watch; filing validation assistant)' } });
+    const res = await fetch(url, { signal: ctl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (regulation-watch; filing validation assistant)', 'Accept-Language': 'zh-TW' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.text();
+  } catch (e) {
+    // Node 抓不到時 (例如網站憑證鏈不完整) 改用 curl 再試一次，並保留原因方便調整設定
+    const why = e.cause ? `${e.message} (${e.cause.code || e.cause.message})` : e.message;
+    try { return require('child_process').execFileSync('curl', ['-sSL', '--max-time', '30', '-A', 'Mozilla/5.0 (regulation-watch)', url], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 }); }
+    catch (e2) { throw new Error(`${why}；curl：${String(e2.stderr || e2.message).trim().split('\n').pop()}`); }
   } finally { clearTimeout(t); }
+}
+// 一個來源：主頁面，加上 follow 指定的連結 (例如首頁上的「最新法令函釋」)，合併成一份段落清單
+async function sourceLines(s) {
+  const html = await fetchText(s.url);
+  let lines = extract(html, s.keywords);
+  for (const label of s.follow || []) {
+    const hit = links(html, s.url).find(l => l.text.includes(label));
+    if (!hit) { lines.push(`(找不到「${label}」連結)`); continue; }
+    try { lines = lines.concat(extract(await fetchText(hit.url), s.keywords).map(l => `[${label}] ${l}`)); }
+    catch (e) { lines.push(`(「${label}」${hit.url} 讀取失敗：${e.message})`); }
+  }
+  return [...new Set(lines)];
 }
 
 async function main(argv) {
@@ -45,7 +71,7 @@ async function main(argv) {
   for (const s of cfg.sources) {
     const prev = state[s.id] || {};
     try {
-      const lines = extract(await fetchText(s.url), s.keywords);
+      const lines = await sourceLines(s);
       if (!lines.length) throw new Error('找不到含關鍵字的內容 (網頁改版或需要登入)');
       if (!prev.lines) baseline.push(s);
       else { const d = diff(prev.lines, lines); if (d.added.length || d.removed.length) changes.push({ s, d }); }
@@ -80,4 +106,4 @@ async function main(argv) {
 }
 
 if (require.main === module) main(process.argv).catch(e => { console.error(e); process.exit(1); });
-module.exports = { textLines, extract, diff, main };
+module.exports = { textLines, extract, links, diff, main };

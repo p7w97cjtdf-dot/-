@@ -32,3 +32,16 @@ test('第一次記錄、內容沒變不回報、有新公告才回報', async ()
   assert.strictEqual(JSON.parse(fs.readFileSync(st, 'utf8')).b.failures, 3);
   delete process.env.WATCH_SOURCES; delete process.env.WATCH_STATE;
 });
+
+test('follow：沿著首頁上的連結監看下一層的公告清單', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-'));
+  fs.writeFileSync(path.join(dir, 'home.html'), '<a href="list.html">最新法令函釋</a><p>選單</p>');
+  fs.writeFileSync(path.join(dir, 'list.html'), '<li>115年1月5日 金管保壽字第 1150001 號令 修正填報規定</li>');
+  const src = path.join(dir, 's.json'), st = path.join(dir, 'st.json');
+  fs.writeFileSync(src, JSON.stringify({ sources: [{ id: 'x', name: 'x', url: 'file://' + path.join(dir, 'home.html'), keywords: ['令'], follow: ['最新法令函釋'] }] }));
+  Object.assign(process.env, { WATCH_SOURCES: src, WATCH_STATE: st });
+  await W.main(['', '']);
+  const lines = JSON.parse(fs.readFileSync(st, 'utf8')).x.lines;
+  assert.ok(lines.some(l => l.startsWith('[最新法令函釋]') && l.includes('1150001')), lines.join('|'));
+  delete process.env.WATCH_SOURCES; delete process.env.WATCH_STATE;
+});
