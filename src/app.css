@@ -475,3 +475,25 @@ body.no-data #view-updates:not([hidden]) { display: block; }
 .update-notice { background: var(--accent-soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 0 0 14px; }
 .update-notice a { color: var(--cta); }
 .pack .official { display: inline-block; font-size: 12px; color: var(--cta); border: 1px solid var(--cta); border-radius: 6px; padding: 0 6px; margin-left: 6px; }
+
+/* ===== 使用說明入口 ===== */
+.help-link { align-self: center; border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; color: var(--fg); text-decoration: none; background: var(--panel); font-size: 14px; min-height: 36px; display: inline-flex; align-items: center; }
+.help-link:hover { border-color: var(--cta); color: var(--cta); }
+.guide-block { display: none; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; margin: 20px 0 8px; }
+body.no-data .guide-block { display: grid; }
+.guide-steps { list-style: none; counter-reset: g; margin: 0; padding: 0; display: grid; gap: 10px; }
+.guide-steps li { counter-increment: g; position: relative; padding: 12px 14px 12px 54px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; }
+.guide-steps li::before { content: counter(g); position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--cta); font-weight: 700; display: grid; place-items: center; }
+.guide-steps span { color: var(--mut); font-size: 14px; }
+.guide-card { display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; border-radius: 12px; background: var(--cta); color: #fff; text-decoration: none; }
+.guide-card:hover { background: #9E4625; }
+.guide-card .g-k { font-size: 13px; opacity: .85; }
+.guide-card .g-t { font-size: 20px; font-weight: 700; }
+.guide-card .g-d { font-size: 14px; opacity: .92; line-height: 1.6; }
+.guide-card .g-go { margin-top: auto; font-weight: 700; }
+@media (max-width: 720px) {
+  .guide-block { grid-template-columns: minmax(0, 1fr); }
+  .help-link { position: absolute; top: 18px; right: 16px; }
+  .top { position: relative; }
+  .brand h1 { padding-right: 100px; }
+}
