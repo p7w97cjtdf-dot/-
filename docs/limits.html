@@ -6,17 +6,13 @@
 <title>限制與風險評估｜申報資料檢核助手</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <style>
 :root {
-  --bg: #ffffff; --ink: #111111; --grey: #5f5f5f; --rule: #e2e2e2; --tile: #f4f4f4; --red: #e60012;
+  --bg: #FAF6EF; --ink: #2B2520; --grey: #74695E; --rule: #E4DACC; --tile: #F4ECDF; --red: #B4532E;
   --body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --bg: #121212; --ink: #f2f2f2; --grey: #a8a8a8; --rule: #2e2e2e; --tile: #1c1c1c; --red: #ff4d5a; }
-}
-:root[data-theme="dark"] { --bg: #121212; --ink: #f2f2f2; --grey: #a8a8a8; --rule: #2e2e2e; --tile: #1c1c1c; --red: #ff4d5a; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.75 var(--body); -webkit-font-smoothing: antialiased; }
 main { max-width: 860px; margin: 0 auto; padding: 40px 16px 64px; }
@@ -26,13 +22,14 @@ a { color: inherit; }
 h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.25; margin: 18px 0 8px; letter-spacing: .02em; }
 .lede { color: var(--grey); margin: 0 0 8px; }
 .meta { color: var(--grey); font-size: 13px; margin: 0 0 32px; }
-h2 { font-size: 22px; margin: 44px 0 12px; padding-top: 14px; border-top: 2px solid var(--ink); }
-h2 small { font: 500 12px var(--mono); color: var(--red); display: block; letter-spacing: .08em; margin-bottom: 2px; }
+h2 { font-size: 21px; margin: 40px 0 12px; padding-top: 14px; border-top: 1px solid var(--rule); }
+h2 small { display: none; }
 h3 { font-size: 17px; margin: 24px 0 6px; }
 p, li { margin: 0 0 10px; }
 ul { padding-left: 1.2em; }
 .table-wrap { overflow-x: auto; margin: 12px 0 8px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
+table { background: #FFFDF9; }
 th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--rule); }
 th { background: var(--tile); font-weight: 700; white-space: nowrap; }
 td.num, th.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
