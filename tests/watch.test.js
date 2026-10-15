@@ -45,3 +45,8 @@ test('follow：沿著首頁上的連結監看下一層的公告清單', async ()
   assert.ok(lines.some(l => l.startsWith('[最新法令函釋]') && l.includes('1150001')), lines.join('|'));
   delete process.env.WATCH_SOURCES; delete process.env.WATCH_STATE;
 });
+
+test('HTML 數字編碼轉成文字；瀏覽人數、更新日期等每天變動的字不列入比對', () => {
+  const html = '<li>&#x6700;&#x65b0;&#x6cd5;&#x4ee4;</li><li>瀏覽人次：</li><li>308091</li><li>更新日期：2026-10-15</li><li>1 / 74</li><li>2026/10</li><li>修正「保險業財務報告編製準則」</li>';
+  assert.deepStrictEqual(W.extract(html, []), ['最新法令', '修正「保險業財務報告編製準則」']);
+});
