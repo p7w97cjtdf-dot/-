@@ -1,0 +1,41 @@
+# 每天檢查法規來源 (rules/updates/sources.json)：有更動時開一張待辦單給法遵確認。
+# 只通知、不自動改規則；確認後的規則以規則更新包發布 (rules/updates/index.json)，所有人打開工具時自動套用。
+name: 法規來源監看
+
+on:
+  schedule:
+    - cron: '17 0 * * *'   # 每天台灣時間 08:17
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: regulation-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 檢查法規來源
+        run: node tools/watch-regulations.js --report report.md
+      - name: 有更動時開待辦單
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -s report.md ]; then
+            gh issue create --title "法規來源有更動：$(date -u +%Y-%m-%d)" --body-file report.md
+          fi
+      - name: 記錄這次的內容
+        run: |
+          git config user.name "regulation-watch"
+          git config user.email "regulation-watch@users.noreply.github.com"
+          git add rules/updates/watch-state.json
+          git diff --cached --quiet || git commit -m "Record regulation sources checked on $(date -u +%Y-%m-%d)"
+          git push

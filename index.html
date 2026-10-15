@@ -26,6 +26,7 @@
 </header>
 
 <main>
+  <p class="update-notice" id="update-notice" role="status" hidden></p>
   <section class="imports" aria-label="放入資料">
     <label class="drop big" id="drop-book" for="file-book">
       <span class="drop-k"><span class="on-desk">把 Excel 檔拖到這裡，或點這裡選擇檔案</span><span class="on-phone">點這裡選擇 Excel 檔</span></span>
@@ -221,6 +222,7 @@
         <button class="btn ghost" type="button" id="btn-pack-export">把本機的更新存成檔案</button>
         <span class="hint" id="pack-note" role="status"></span>
       </div>
+      <p class="hint" id="pack-official" role="status"></p>
       <div id="pack-list" class="pack-list"></div>
     </div>
 
@@ -351,8 +353,9 @@
 <script src="src/app.js"></script>
 <script src="src/app-import.js"></script>
 <script src="src/app-packs.js"></script>
+<script>DQ.app && DQ.app.loadOfficial();</script>
 <script src="src/review.js"></script>
-<script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});</script>
+<script>try { if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (e) { /* 沙盒環境不支援離線功能 */ }</script>
 <script>
 // 找不到程式檔時 (例如直接在壓縮檔裡開啟 index.html，或只複製了這一個檔案)，畫面會出現但按鈕沒有反應：在頁首說明原因
 if (!window.DQ || !window.DQ.app) {

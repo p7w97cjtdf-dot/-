@@ -148,6 +148,14 @@ npm run bench     # 計時：試用資料完整檢核一次的秒數 (另含 1 �
 - **表單新增**：選資料、欄位、條件，按「加入」馬上重新檢查，存成本機更新，可下載成更新包。
 - **AI 轉換規則文件**（線上版）：上傳新版手冊或函令，由 AI 轉成檢查，試跑確認後再使用。
 
+**自動跟上法規更動**（半自動，刻意保留人工確認）：
+
+1. **每天自動監看**：GitHub Actions（`.github/workflows/regulation-watch.yml`）每天檢查 `rules/updates/sources.json` 列出的法規來源（全國法規資料庫的保險法、金管會保險局、保發中心公告），只比對含關鍵字的段落；有新公告時自動開一張待辦單，列出新增的段落與處理步驟。不需要 API key。
+2. **法遵確認**：判斷是否影響申報，在「法規更新」頁建立更新包並試跑。
+3. **自動發布到所有人**：更新包放進 `rules/updates/`、登記在 `rules/updates/index.json`，併入 main 後，每個人打開工具時自動套用最新版，畫面會提示一次；個人可以在本機關閉，但不能刪除官方更新。
+
+不讓程式直接依網頁內容改規則：法規文字需要解讀（適用對象、生效日、例外），未經確認就上線的錯誤規則可能擋下整批正確資料或漏抓錯誤。
+
 格式說明在 `src/rule-packs.js`，示範檔 `rules/updates/example-2026-format-change.json`（假設保留欄位第 1 碼改為「數位投保註記」）。每筆資料總長度改變時仍需更新程式。
 
 ## 手機與離線使用
@@ -187,7 +195,8 @@ src/rulesets/index.js      合併各險種規則集 (工具實際使用)
 src/mock-ext.js            癌症險模擬資料、癌症險／傷害險驗收
 src/rule-packs.js          法規更新包：新增檢查、新欄位、停用內建檢查
 src/app-packs.js           法規更新頁
-rules/updates/             法規更新包示範檔
+rules/updates/             官方更新包清單 (index.json)、監看來源 (sources.json)、示範更新包
+tools/watch-regulations.js 法規來源監看 (每天由 GitHub Actions 執行)
 manifest.webmanifest, sw.js  加入主畫面、離線使用
 docs/limits.html           限制與風險評估
 src/recon.js               控制總數對帳、期初期末結轉、財報勾稽、退件解碼
