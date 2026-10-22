@@ -206,7 +206,8 @@
     const s = state.res.summary, all = state.all;
     const n = sev => all.filter(i => i.severity === sev).length;
     const fixable = all.filter(i => i.fix && state.res.issues.includes(i)).length;
-    const tile = (cls, k, v, sub) => `<div class="tile ${cls}"><span class="k">${k}</span><span class="v">${v}</span><span class="s">${sub}</span></div>`;
+    const ICON = { err: '!', warn: '?', suspect: '…', ok: '✓', fix: '↺' };
+    const tile = (cls, k, v, sub) => `<div class="tile ${cls}"><div><span class="k">${k}</span><span class="v">${v}</span><span class="s">${sub}</span></div><span class="tile-i" aria-hidden="true">${ICON[cls] || ''}</span></div>`;
     $('#summary').innerHTML =
       tile(n('error') ? 'err' : 'ok', SEV.error, n('error'), n('error') ? LB.SEV_HINT.error : '沒有必須修改的地方，可以送出') +
       tile(n('warning') ? 'warn' : 'ok', SEV.warning, n('warning'), LB.SEV_HINT.warning) +
@@ -215,6 +216,9 @@
     const recs = Object.entries(s.byFile).map(([fid, b]) => `${SHEET[fid]} ${b.records} 筆`).join('、');
     const allMst = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
     const found = state.key ? `　範例刻意放的錯誤找到：保單與理賠 ${hitCount(state.key)}/${state.key.length}、客戶與商品 ${state.masterKey.filter(k => allMst.some(i => i.ruleId === k.ruleId && i.policy === k.policy)).length}/${state.masterKey.length}。` : '';
+    const nRec = Object.values(s.byFile).reduce((t, b) => t + b.records, 0), nBad = Object.values(s.byFile).reduce((t, b) => t + b.badRecords, 0);
+    $('#run-status').className = 'run-status ' + (n('error') ? 'bad' : 'ok');
+    $('#run-status').innerHTML = `<i></i><span>已檢查 ${nRec.toLocaleString()} 筆資料・${nRec ? Math.round((nRec - nBad) / nRec * 100) : 100}% 沒有必須修改的問題</span>`;
     $('#summary-note').textContent = `已檢查 ${recs}，共 ${Object.values(state.files).filter(Boolean).length} 份資料，花了 ${(state.elapsed / 1000).toFixed(2)} 秒。${found}`;
   }
   function renderCats() {
@@ -239,18 +243,21 @@
     return names.length > 2 ? `${names.slice(0, 2).join('、')} 等 ${names.length} 欄` : names.join('、');
   }
   function renderTable() {
-    const list = filtered();
-    $('#issue-count').textContent = `${list.length} / ${state.all.length}`;
-    $('#issue-table tbody').innerHTML = list.length ? list.map(i => `
-      <tr data-id="${i.id}" class="${state.sel === i.id ? 'sel' : ''}">
-        <td class="sev"><i class="${i.severity}" title="${SEV[i.severity]}"></i></td>
-        <td class="where">${esc(i.sheet || '')} <span class="num">${rowLabel(i)}</span></td>
-        <td class="mono">${esc((i.policy || i.code || '').trim())}</td>
-        <td>${esc(shortFields(i))}</td>
-        <td class="mono val">${esc(String(i.value == null ? '' : i.value).replace(/ /g, '·'))}</td>
-        <td>${esc(i.message)}</td>
-        <td class="mono">${i.fix ? `${esc(i.fix.value)}${state.res.issues.includes(i) ? '<span class="pill">可一鍵修改</span>' : ''}` : ''}</td>
-      </tr>`).join('') : `<tr><td colspan="7" class="empty">${state.all.length ? '沒有符合條件的問題' : '沒有發現任何問題，資料可以送出。'}</td></tr>`;
+    const list = filtered(), open = state.all.filter(i => i.severity !== 'suspect').length;
+    $('#issue-count').textContent = state.all.length ? (list.length === state.all.length ? `${open} 項待處理` : `顯示 ${list.length} / ${state.all.length} 項`) : '';
+    $('#issue-count').className = 'count-pill' + (state.all.some(i => i.severity === 'error') ? ' err' : '');
+    $('#issue-list').innerHTML = list.length ? list.map(i => {
+      const val = String(i.value == null ? '' : i.value).trim();
+      const fixable = i.fix && state.res.issues.includes(i);
+      return `<div class="issue ${i.severity}${state.sel === i.id ? ' sel' : ''}" data-id="${i.id}" role="listitem" tabindex="0">
+        <div class="issue-main">
+          <div class="issue-top"><span class="sev-tag ${i.severity}">${SEV[i.severity]}</span><span class="issue-where">${esc(i.sheet || '')} ${rowLabel(i)}${(i.policy || i.code) ? `・<span class="mono">${esc((i.policy || i.code).trim())}</span>` : ''}</span></div>
+          <p class="issue-msg">${esc(i.message)}</p>
+          ${shortFields(i) || val ? `<p class="issue-sub">${shortFields(i) ? esc(shortFields(i)) : ''}${val ? `${shortFields(i) ? '：' : ''}<span class="mono">${esc(val.replace(/ /g, '·').slice(0, 40))}</span>` : ''}</p>` : ''}
+        </div>
+        <div class="issue-side">${i.fix ? `<span class="hint">建議改成</span><b class="mono">${esc(String(i.fix.value).slice(0, 24))}</b>${fixable ? '<span class="pill">可一鍵修改</span>' : ''}` : ''}</div>
+      </div>`;
+    }).join('') : `<p class="empty">${state.all.length ? '沒有符合條件的問題' : '沒有發現任何問題，資料可以送出。'}</p>`;
   }
   // 行號：文字檔為第 N 筆；由 Excel 匯入時換算成 Excel 列號 (第 1 列為標題)；CSV 工作表為檔案中的列號
   function rowLabel(i) {
@@ -260,8 +267,14 @@
   }
   ['#f-sev', '#f-file', '#f-q'].forEach(s => $(s).addEventListener('input', renderTable));
   $('#f-cat').addEventListener('input', () => { state.cat = $('#f-cat').value; renderCats(); renderTable(); });
-  $('#issue-table tbody').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) select(+tr.dataset.id); });
-  function select(id, quiet) { state.sel = id; renderTable(); renderDetail(); const tr = $(`#issue-table tr[data-id="${id}"]`); if (tr && !quiet) tr.scrollIntoView({ block: 'nearest' }); }
+  $('#issue-list').addEventListener('click', e => { const r = e.target.closest('[data-id]'); if (r) select(+r.dataset.id); });
+  $('#issue-list').addEventListener('keydown', e => { const r = e.target.closest('[data-id]'); if (r && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(+r.dataset.id); } });
+  function select(id, quiet) {
+    state.sel = id; renderTable(); renderDetail();
+    const r = $(`#issue-list [data-id="${id}"]`); if (r && !quiet) r.scrollIntoView({ block: 'nearest' });
+    // 手機 / 窄螢幕：詳情在清單下方，選取後捲到詳情
+    if (!quiet && window.matchMedia('(max-width: 1100px)').matches) $('#detail').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
 
   function ruler(lay, raw, hitFields) {
     const marks = new Array(raw.length).fill(false);
@@ -283,7 +296,8 @@
     const el = $('#detail');
     const i = state.res && state.all.find(x => x.id === state.sel);
     if (!i) {
-      el.innerHTML = `<h3>點左邊任一個問題</h3><p class="hint">這裡會說明問題在哪裡、建議怎麼改，需要時可以展開那一行的原始資料。</p>`;
+      el.innerHTML = `<div class="detail-head"><div><h3>問題說明</h3><p class="hint">點清單中任一個問題</p></div></div>
+        <p class="hint">這裡會說明問題在哪裡、依據哪一條規定、建議怎麼改；需要時可以展開那一行的原始資料。</p>`;
       return;
     }
     const lay = rs.layouts[i.file] || { title: i.sheet, recordLength: -1, fields: [], field: () => null, keyOf: () => '' };
@@ -296,19 +310,25 @@
     const spans = hits.map(x => x.f).sort((a, b) => a.start - b.start).map(f => f.len > 1 ? `${f.start}–${f.start + f.len - 1}` : `${f.start}`);
     const range = spans.length ? `（第 ${spans.join('、')} 字）` : '';
     const siblings = okLen && i.file === 'L' ? state.res.data.L.filter(r => r !== rec && r._raw.length === lay.recordLength && lay.keyOf(r) === lay.keyOf(rec)) : [];
+    const fixable = i.fix && state.res.issues.includes(i);
     el.innerHTML = `
-      <div><span class="badge ${i.severity}">${SEV[i.severity]}</span> <span class="hint">${esc(LB.SEV_HINT[i.severity] || '')}</span></div>
-      <h3>${esc(i.message)}</h3>
-      <dl class="kv">
-        <dt>檢查項目</dt><dd>${esc(i.ruleName || LB.cat(i.category))}</dd>
-        <dt>位置</dt><dd>${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}</dd>
-        <dt>欄位</dt><dd>${esc(DQ.report.fieldLabel(rs, i) || '-')}</dd>
-        ${i.value !== '' ? `<dt>目前的值</dt><dd class="mono">${esc(String(i.value).replace(/ /g, '·'))}</dd>` : ''}
-        ${i.fix ? `<dt>建議修正值</dt><dd class="mono fixval">${esc(i.fix.value)}</dd>` : ''}
-        <dt>規則編號</dt><dd class="mono">${esc(i.ruleId)}${i.ref ? `<span class="hint">（${esc(i.ref)}）</span>` : ''}</dd>
-      </dl>
-      <div class="fixbox"><div><b>建議怎麼改：</b>${esc(i.suggestion || '請人工確認')}</div>
-        ${i.fix && state.res.issues.includes(i) ? `<div><button class="btn small" id="btn-fix-one">改成建議的值</button> <span class="mono hint">${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}</span></div>` : ''}</div>
+      <div class="detail-head">
+        <div><h3>問題說明</h3><p class="hint">${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}</p></div>
+        <span class="sev-tag ${i.severity}">${SEV[i.severity]}</span>
+      </div>
+      <section class="d-sec"><p class="d-label">問題</p>
+        <div class="d-box ${i.severity}"><b>${esc(i.message)}</b>
+          <dl class="kv">
+            <dt>欄位</dt><dd>${esc(DQ.report.fieldLabel(rs, i) || '-')}</dd>
+            ${i.value !== '' ? `<dt>目前的值</dt><dd class="mono">${esc(String(i.value).replace(/ /g, '·'))}</dd>` : ''}
+          </dl>
+          <p class="hint">${esc(LB.SEV_HINT[i.severity] || '')}</p></div></section>
+      <section class="d-sec"><p class="d-label">建議修正方式</p>
+        <div class="d-box plain">${esc(i.suggestion || '請人工確認')}
+          ${i.fix ? `<dl class="kv"><dt>建議修正值</dt><dd class="mono fixval">${esc(i.fix.value)}</dd></dl>` : ''}</div></section>
+      <section class="d-sec"><p class="d-label">依據的規定</p>
+        <div class="d-box basis"><b>${esc(i.ruleName || LB.cat(i.category))}</b>
+          <dl class="kv"><dt>規則編號</dt><dd class="mono">${esc(i.ruleId)}</dd>${i.ref ? `<dt>出處</dt><dd>${esc(i.ref)}</dd>` : ''}</dl></div></section>
       ${rec ? `<details class="raw"><summary>顯示原始資料${range}</summary>
         <p class="hint">左邊數字是第幾個字；「·」代表空白；黃色是有問題的地方。</p>
         <div class="ruler">${ruler(lay, rec._raw, i.fields)}</div>
@@ -316,7 +336,12 @@
         ${rest.length ? `<details><summary class="hint">看這一行的其他 ${rest.length} 個欄位</summary><table class="fields"><tbody>${rest.map(row).join('')}</tbody></table></details>` : ''}
       </details>` : ''}
       ${siblings.length ? `<div><div class="label">同一張保單的其他資料</div><table class="fields"><tbody>${[rec].concat(siblings).sort((a, b) => a.txnSeq.localeCompare(b.txnSeq)).map(r => `<tr class="${r === rec ? 'hit' : ''}"><td class="num">第${r._line}行</td><td class="v">${r.txnSeq}</td><td class="v">${r.addType} ${r.addDate}</td><td class="v">→ ${r.exitType} ${r.exitDate}</td></tr>`).join('')}</tbody></table></div>` : ''}
-      <div><button class="btn ghost small ai-btn" id="btn-explain">請 AI 用白話解釋</button><p class="ai-notice">按下後會把這個問題和相關欄位送給 AI（Claude），不會送出整筆資料。</p><div class="ask" id="explain-out"></div></div>`;
+      <div class="ai-explain"><button class="btn ghost small ai-btn" id="btn-explain">請 AI 用白話解釋</button><p class="ai-notice">按下後會把這個問題和相關欄位送給 AI（Claude），不會送出整筆資料。</p><div class="ask" id="explain-out"></div></div>
+      <div class="detail-foot">
+        <button class="linkish" type="button" id="btn-detail-list">下載問題清單</button>
+        ${fixable ? `<button class="btn cta" id="btn-fix-one" title="${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}">改成建議的值</button>` : '<span class="hint">這個問題需要人工確認後修改</span>'}
+      </div>`;
+    $('#btn-detail-list').onclick = () => $('#btn-dl-csv').click();
     const one = $('#btn-fix-one');
     if (one) one.onclick = () => applyFix([i.id]);
     $('#btn-explain').onclick = async () => {

@@ -497,3 +497,110 @@ body.no-data .guide-block { display: grid; }
   .top { position: relative; }
   .brand h1 { padding-right: 100px; }
 }
+
+/* ===== 工作台版面：深色頂部導覽列、統計卡片、左清單右詳情 ===== */
+.top.appbar { max-width: none; margin: 0 0 22px; padding: 14px max(16px, calc((100% - 1280px) / 2 + 16px)); background: #2B2520; color: #FAF6EF; border-bottom: 0; align-items: center; flex-wrap: nowrap; box-shadow: 0 1px 3px rgba(40, 25, 10, .18); }
+.appbar .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.appbar .mark { flex: none; width: 38px; height: 38px; border-radius: 9px; background: var(--cta); color: #fff; font-weight: 700; font-size: 18px; display: grid; place-items: center; }
+.appbar .brand h1 { font-size: 18px; line-height: 1.3; color: #FAF6EF; padding: 0; }
+.appbar .sub { margin: 2px 0 0; font-size: 12px; color: #CFC3B4; max-width: none; }
+.appbar-right { display: flex; align-items: center; gap: 10px; flex: none; }
+.run-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #E8DDCF; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .18); border-radius: 999px; padding: 5px 12px; white-space: nowrap; }
+.run-status i { width: 8px; height: 8px; border-radius: 50%; background: #A89A8A; }
+.run-status.ok i { background: #7FC29B; }
+.run-status.bad i { background: #F0A27E; }
+.appbar .help-link { background: transparent; color: #FAF6EF; border-color: rgba(255, 255, 255, .35); position: static; }
+.appbar .help-link:hover { color: #fff; border-color: #fff; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-sm); }
+.bench { display: grid; grid-template-columns: minmax(0, 7fr) minmax(320px, 5fr); gap: 20px; align-items: start; }
+.bench-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.bench-side { min-width: 0; position: sticky; top: 12px; }
+
+/* 統計卡片 */
+#summary.summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; border: 0; background: none; margin: 0; border-radius: 0; overflow: visible; }
+#summary .tile { flex-direction: row; justify-content: space-between; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+#summary .tile > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#summary .tile .k { font-size: 12px; font-weight: 700; color: var(--mut); }
+#summary .tile .v { font-size: 26px; line-height: 1.15; }
+#summary .tile .s { font-size: 12px; color: var(--mut); line-height: 1.4; }
+.tile-i { flex: none; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-weight: 700; background: var(--accent-soft); color: var(--gold); }
+.tile.err .tile-i { background: var(--err-soft); color: var(--err); }
+.tile.warn .tile-i { background: var(--warn-soft); color: var(--warn); }
+.tile.suspect .tile-i { background: var(--suspect-soft); color: var(--suspect); }
+.tile.ok .tile-i { background: #E6F2EA; color: #2F6B45; }
+.summary-note { margin: -4px 0 0; }
+
+/* 問題清單 */
+.issues.card { overflow: hidden; gap: 0; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; background: #FBF6EE; border-bottom: 1px solid var(--line-soft); }
+.card-head h2 { font-size: 16px; margin: 0; }
+.card-head .hint { margin: 2px 0 0; font-size: 12px; }
+.count-pill { flex: none; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--gold); white-space: nowrap; }
+.count-pill.err { background: var(--err-soft); color: var(--err); }
+.count-pill:empty { display: none; }
+.issues .filters { padding: 12px 16px; border-bottom: 1px solid var(--line-soft); gap: 10px; }
+.issue-list { max-height: min(62vh, 640px); overflow-y: auto; }
+.issue { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 13px 16px; border-bottom: 1px solid var(--line-soft); border-left: 4px solid transparent; cursor: pointer; }
+.issue:last-child { border-bottom: 0; }
+.issue:hover { background: #FBF7F0; }
+.issue:focus-visible { outline: 2px solid var(--cta); outline-offset: -2px; }
+.issue.sel { background: var(--accent-soft); border-left-color: var(--cta); }
+.issue-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.issue-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.issue-where { font-size: 12px; font-weight: 700; color: var(--mut); }
+.issue-msg { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.5; color: var(--fg); }
+.issue-sub { margin: 0; font-size: 12px; color: var(--mut); overflow-wrap: anywhere; }
+.issue-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; max-width: 34%; text-align: right; font-size: 13px; }
+.issue-side b { overflow-wrap: anywhere; }
+.issue-list .empty { padding: 28px 16px; text-align: center; color: var(--mut); margin: 0; }
+.sev-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 6px; white-space: nowrap; }
+.sev-tag.error { background: var(--err-soft); color: var(--err); }
+.sev-tag.warning { background: var(--warn-soft); color: var(--warn); }
+.sev-tag.suspect { background: var(--suspect-soft); color: var(--suspect); }
+
+/* 右側詳情 */
+.detail.card { position: static; max-height: calc(100vh - 24px); overflow: auto; padding: 18px 20px; gap: 14px; border-radius: 12px; }
+.detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
+.detail-head h3 { font-size: 16px; margin: 0; }
+.detail-head .hint { margin: 2px 0 0; font-size: 12px; }
+.d-sec { display: flex; flex-direction: column; gap: 6px; }
+.d-label { margin: 0; font-size: 12px; font-weight: 700; color: var(--mut); }
+.d-box { border-radius: 10px; padding: 12px 14px; border: 1px solid var(--line); background: var(--bg); line-height: 1.6; font-size: 14px; }
+.d-box > b { display: block; }
+.d-box.error { background: var(--err-soft); border-color: #F2CFC6; }
+.d-box.warning { background: var(--warn-soft); border-color: #EEDCB6; }
+.d-box.suspect { background: var(--suspect-soft); border-color: #DCE0E4; }
+.d-box.basis { background: #F7F1E8; border-color: #EADFCF; }
+.d-box .kv { margin: 8px 0 0; }
+.d-box .hint { margin: 6px 0 0; }
+.detail-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line-soft); flex-wrap: wrap; }
+.linkish { background: none; border: 0; padding: 8px 0; color: var(--mut); font-weight: 700; font-size: 13px; cursor: pointer; }
+.linkish:hover { color: var(--cta); }
+
+@media (max-width: 1100px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  .bench-side { position: static; }
+  .detail.card { max-height: none; }
+}
+@media (max-width: 720px) {
+  .top.appbar { padding: 12px 16px; margin-bottom: 16px; }
+  .appbar .sub, .run-status { display: none; }
+  .appbar .brand h1 { font-size: 17px; padding-right: 0; }
+  .appbar .help-link { position: static; }
+  .top.appbar { padding-right: 16px; }
+  #summary.summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .issue { flex-direction: column; align-items: stretch; gap: 6px; }
+  .issue-side { max-width: none; align-items: flex-start; text-align: left; flex-direction: row; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .issue-list { max-height: none; }
+}
+#view-check > .summary { margin-bottom: 4px; }
+#view-check > .review-start { margin: 4px 0 14px; }
+/* 已放入資料：上傳框縮成一列 */
+body:not(.no-data) .drop.big { padding: 12px 18px; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; text-align: left; }
+body:not(.no-data) .drop.big .drop-k { font-size: 15px; }
+body:not(.no-data) .drop.big .drop-h { display: none; }
+body:not(.no-data) .drop.big::after { content: "換一份或加入其他檔案"; font-size: 13px; color: var(--cta); font-weight: 700; white-space: nowrap; }
+body:not(.no-data) .imports { margin-bottom: 4px; }
+@media (max-width: 720px) { body:not(.show-list) #view-check .bench-side { display: none; } }
+.issue-side .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--cta); color: var(--cta); background: transparent; margin-top: 2px; }
