@@ -605,3 +605,7 @@ body:not(.no-data) .imports { margin-bottom: 4px; }
 @media (max-width: 720px) { body:not(.show-list) #view-check .bench-side { display: none; } }
 .issue-side .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--cta); color: var(--cta); background: transparent; margin-top: 2px; }
 .ai-redact { margin: 8px 0 0; font-size: 12px; color: var(--mut); }
+
+/* 安全測試 T03：自行匯入的更新包、被停用檢查隱藏的問題 */
+.pack .unofficial { display: inline-block; font-size: 12px; color: var(--warn); border: 1px solid currentColor; border-radius: 6px; padding: 0 6px; margin-left: 6px; }
+.hidden-note { margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--fg); font-size: 14px; border-left: 3px solid var(--gold); }

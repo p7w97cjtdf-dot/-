@@ -1,4 +1,12 @@
-# 備用元件
+# 第三方元件
 
-`xlsx.full.min.js`：SheetJS 0.18.5（Apache-2.0，授權見 `LICENSE-sheetjs.txt`），與 cdnjs 上的版本相同。
-工具會先從 cdnjs 載入；cdnjs 被網路或公司防火牆擋住時，才改用這個檔案，讓沒有網路時也能讀 Excel。
+工具讀取 Excel、PDF、Word 用的程式庫放在這裡，和工具同一個網站提供，不從外部網站即時載入：
+外部網站若被竄改，惡意程式碼就能讀到放進工具的申報資料 (安全測試 T01)。
+
+| 檔案 | 程式庫 | 授權 |
+|---|---|---|
+| `xlsx.full.min.js` | SheetJS 0.18.5 | Apache-2.0（`LICENSE-sheetjs.txt`） |
+| `pdf.min.js`、`pdf.worker.min.js` | PDF.js 3.11.174（npm `pdfjs-dist`） | Apache-2.0（`LICENSE-pdfjs.txt`） |
+| `mammoth.browser.min.js` | mammoth 1.6.0 | BSD-2-Clause（`LICENSE-mammoth.txt`） |
+
+claude.ai 線上版是單一檔案，打包時把這些元件直接內嵌進去 (tools/build-artifact.js)，同樣不從外部網站載入。

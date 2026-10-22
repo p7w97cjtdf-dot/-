@@ -21,10 +21,19 @@
   }
   // 法規更新包 (src/rule-packs.js)：存在這台電腦的瀏覽器
   state.packs = [];
-  try { const saved = JSON.parse(localStorage.getItem('dq-rule-packs') || '[]'); if (Array.isArray(saved)) state.packs = saved.filter(x => x && x.pack).map(x => ({ pack: DQ.rulePacks.normalize(x.pack), on: x.on !== false })); } catch (e) { /* 無法讀取時忽略 */ }
+  try { const saved = JSON.parse(localStorage.getItem('dq-rule-packs') || '[]'); if (Array.isArray(saved)) state.packs = saved.filter(x => x && x.pack).map(x => ({ pack: DQ.rulePacks.normalize(x.pack), on: x.on !== false, imported: !!x.imported })); } catch (e) { /* 無法讀取時忽略 */ }
   // 官方發布的更新包 (rules/updates/index.json)：打開工具時自動下載並套用，不存進瀏覽器；使用者可在本機關閉
   const officialOff = () => { try { return new Set(JSON.parse(localStorage.getItem('dq-official-off') || '[]')); } catch (e) { return new Set(); } };
   const offKey = p => `${p.id}@${p.version || ''}`;
+  async function sha256(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  // 停用的檢查隱藏了多少問題 (結果畫面與報告都要寫出來，不讓問題「默默消失」)
+  function hiddenNote() {
+    const h = state.disabledCount || {}, ids = Object.keys(h), n = ids.reduce((t, k) => t + h[k], 0);
+    return n ? `注意：法規更新停用了 ${ids.length} 項檢查（${ids.slice(0, 5).join('、')}${ids.length > 5 ? '…' : ''}），隱藏了 ${n} 個問題；如果更新包的來源不確定，請到「法規更新」關掉後重新檢查。` : '';
+  }
   async function loadOfficial() {
     const bases = location.protocol.startsWith('http') ? [''] : [];
     bases.push('https://p7w97cjtdf-dot.github.io/-/');  // 單一檔案的線上版：改從公開網站讀取
@@ -32,8 +41,18 @@
       try {
         const idx = await (await fetch(b + 'rules/updates/index.json', { cache: 'no-cache' })).json();
         const packs = [];
-        for (const f of idx.packs || []) {
-          try { packs.push(DQ.rulePacks.normalize(await (await fetch(b + 'rules/updates/' + encodeURIComponent(f), { cache: 'no-cache' })).json(), f)); } catch (e) { /* 單一檔案讀不到就略過 */ }
+        state.officialRejected = [];
+        for (const ent of idx.packs || []) {
+          // index.json 的每一項可以是檔名，或 { file, sha256 }：有 sha256 時內容必須完全相同 (被改過就不套用)
+          const f = typeof ent === 'string' ? ent : ent && ent.file, want = ent && ent.sha256;
+          try {
+            const text = await (await fetch(b + 'rules/updates/' + encodeURIComponent(f), { cache: 'no-cache' })).text();
+            if (want && await sha256(text) !== String(want).toLowerCase()) { state.officialRejected.push(`${f}：內容和發布時登記的雜湊值不同`); continue; }
+            const p = DQ.rulePacks.normalize(JSON.parse(text), f);
+            const v = DQ.rulePacks.validate(p, Object.assign({}, BASE, { catalog: BASE.catalog.concat(DQ.rulesets.finance.catalog, DQ.master.catalog, DQ.anomaly.catalog) }), packs);
+            if (v.errors.length) { state.officialRejected.push(`${f}：${v.errors.join('；')}`); continue; }
+            packs.push(p);
+          } catch (e) { /* 單一檔案讀不到就略過 */ }
         }
         const off = officialOff();
         state.packs = packs.map(p => ({ pack: p, on: !off.has(offKey(p)), official: true })).concat(state.packs.filter(x => !x.official && !packs.some(p => p.id === x.pack.id)));
@@ -79,7 +98,7 @@
   // Excel 活頁簿：依工作表名稱分配到各檔案 (src/workbook.js)
   const BOOK = /\.(xlsx|xlsm|xls|ods)$/i;
   async function readWorkbook(file) {
-    if (!window.XLSX) { $('#sample-note').textContent = '讀取 Excel 的元件沒有載入成功（可能是網路或公司防火牆擋住）。請確認網路後重新整理頁面，或請 IT 開放 cdnjs.cloudflare.com。'; return; }
+    if (!window.XLSX) { $('#sample-note').textContent = '讀取 Excel 的元件沒有載入成功：工具的 vendor 資料夾可能不完整。請重新下載整個工具資料夾，或改用網址開啟。'; return; }
     let wb;
     try { wb = XLSX.read(await file.arrayBuffer(), { type: 'array' }); }
     catch (e) { $('#sample-note').textContent = `「${file.name}」無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次。`; return; }
@@ -97,9 +116,19 @@
     try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^\uFEFF/, ''); }
     catch (e) { return new TextDecoder('big5').decode(buf); }
   }
+  // 申報檔是純文字：前 64KB 出現 NUL 或大量控制字元，就是壓縮檔、圖片等其他檔案 (安全測試 T07)
+  function looksBinary(buf) {
+    const b = new Uint8Array(buf, 0, Math.min(buf.byteLength, 65536));
+    let ctl = 0;
+    for (const c of b) { if (c === 0) return true; if (c < 9 || (c > 13 && c < 32)) ctl++; }
+    return b.length > 0 && ctl / b.length > 0.01;
+  }
+  const notText = name => { $('#sample-note').textContent = `「${name}」看起來不是文字檔（可能是壓縮檔、圖片或其他程式的檔案），沒有讀取。申報資料請放 .txt、.csv 或 Excel 檔。`; };
   async function readFile(fid, file) {
     if (BOOK.test(file.name)) { readWorkbook(file); return; }
-    setFile(fid, file.name, decodeText(await file.arrayBuffer()));
+    const buf = await file.arrayBuffer();
+    if (looksBinary(buf)) { notText(file.name); return; }
+    setFile(fid, file.name, decodeText(buf));
     run();
   }
   for (const fid of SLOTS) {
@@ -118,7 +147,9 @@
       if (BOOK.test(f.name)) { readWorkbook(f); continue; }
       let slot = guessSlot(f.name, null);
       if (!slot && /\.txt$/i.test(f.name)) {
-        const text = decodeText(await f.arrayBuffer()), first = text.split(/\r?\n/)[0];
+        const buf = await f.arrayBuffer();
+        if (looksBinary(buf)) { notText(f.name); continue; }
+        const text = decodeText(buf), first = text.split(/\r?\n/)[0];
         slot = BY_LENGTH[first.length] || null;
         if (slot) { setFile(slot, f.name, text); run(); continue; }
       }
@@ -177,6 +208,8 @@
     console.info(`[檢核耗時] ${(state.elapsed / 1000).toFixed(3)} 秒：承保 ${(f.L && state.res.meta.L) ? state.res.meta.L.count : 0} 筆、給付 ${(f.D && state.res.meta.D) ? state.res.meta.D.count : 0} 筆，${Object.values(f).filter(Boolean).length} 個檔案`);
     state.extra = [].concat(state.roll ? state.roll.issues : [], state.ctl ? state.ctl.issues : [], state.stmt ? state.stmt.issues : [], mst.filter(i => i.file !== 'L'));
     state.extra = drop(state.extra);
+    // 對帳、客戶與商品等段落 (報告會逐段列出) 也拿掉停用的檢查，畫面與報告一致
+    for (const o of [state.roll, state.ctl, state.stmt, state.cust, state.prod]) if (o && o.issues) o.issues = o.issues.filter(i => !state.disabled.has(i.ruleId));
     // 全部工作表的問題併成一張結果表 (明細、客戶、商品、上年度、控制總數、資產負債表)
     for (const i of state.res.issues) i.sheet = SHEET[i.file];
     for (const i of state.roll ? state.roll.issues : []) i.sheet = i.line ? SHEET.L : SHEET.prior;
@@ -202,6 +235,8 @@
   // ---------- 明細檢核 ----------
   function hitCount(key) { return key.filter(k => state.res.issues.some(i => i.ruleId === k.ruleId && (!k.policy || (i.policy || '').trim() === k.policy))).length; }
   // 摘要：四個重點數字；其他資訊 (耗時、範例錯誤找到幾個) 放在下方一行小字
+  // 只要有一筆要修改就不能顯示 100%：無條件捨去到小數一位 (29,395 筆中 52 筆有問題 → 99.8%，不是四捨五入成 100%)
+  const okPct = (n, bad) => !bad ? '100' : String(Math.min(99.9, Math.floor((n - bad) / n * 1000) / 10));
   function renderSummary() {
     const s = state.res.summary, all = state.all;
     const n = sev => all.filter(i => i.severity === sev).length;
@@ -218,8 +253,13 @@
     const found = state.key ? `　範例刻意放的錯誤找到：保單與理賠 ${hitCount(state.key)}/${state.key.length}、客戶與商品 ${state.masterKey.filter(k => allMst.some(i => i.ruleId === k.ruleId && i.policy === k.policy)).length}/${state.masterKey.length}。` : '';
     const nRec = Object.values(s.byFile).reduce((t, b) => t + b.records, 0), nBad = Object.values(s.byFile).reduce((t, b) => t + b.badRecords, 0);
     $('#run-status').className = 'run-status ' + (n('error') ? 'bad' : 'ok');
-    $('#run-status').innerHTML = `<i></i><span>已檢查 ${nRec.toLocaleString()} 筆資料・${nRec ? Math.round((nRec - nBad) / nRec * 100) : 100}% 沒有必須修改的問題</span>`;
+    // 一筆資料都沒讀到時不能顯示「100% 沒有問題」(安全測試 T07)
+    if (!nRec) $('#run-status').className = 'run-status bad';
+    const cut = Object.values(s.byFile).some(b => b.truncated);
+    if (cut) { $('#run-status').className = 'run-status bad'; $('#run-status').innerHTML = `<i></i><span>問題超過 ${DQ.MAX_ISSUES.toLocaleString()} 項，只列出前 ${DQ.MAX_ISSUES.toLocaleString()} 項；檔案可能整個格式不對，請先改最常見的問題再檢查</span>`; }
+    else $('#run-status').innerHTML = nRec ? `<i></i><span>已檢查 ${nRec.toLocaleString()} 筆資料・${okPct(nRec, nBad)}% 沒有必須修改的問題</span>` : '<i></i><span>沒有讀到任何資料，請確認檔案內容</span>';
     $('#summary-note').textContent = `已檢查 ${recs}，共 ${Object.values(state.files).filter(Boolean).length} 份資料，花了 ${(state.elapsed / 1000).toFixed(2)} 秒。${found}`;
+    const hn = hiddenNote(); $('#hidden-note').hidden = !hn; $('#hidden-note').textContent = hn;
   }
   function renderCats() {
     // 「資料」篩選：只列出有問題的工作表
@@ -246,7 +286,9 @@
     const list = filtered(), open = state.all.filter(i => i.severity !== 'suspect').length;
     $('#issue-count').textContent = state.all.length ? (list.length === state.all.length ? `${open} 項待處理` : `顯示 ${list.length} / ${state.all.length} 項`) : '';
     $('#issue-count').className = 'count-pill' + (state.all.some(i => i.severity === 'error') ? ' err' : '');
-    $('#issue-list').innerHTML = list.length ? list.map(i => {
+    // 問題很多時只畫前 500 項 (一次畫幾萬項會讓瀏覽器卡住)；其餘用篩選或下載問題清單查看
+    const SHOW = 500, more = list.length - SHOW;
+    $('#issue-list').innerHTML = list.length ? list.slice(0, SHOW).map(i => {
       const val = String(i.value == null ? '' : i.value).trim();
       const fixable = i.fix && state.res.issues.includes(i);
       return `<div class="issue ${i.severity}${state.sel === i.id ? ' sel' : ''}" data-id="${i.id}" role="listitem" tabindex="0">
@@ -257,7 +299,7 @@
         </div>
         <div class="issue-side">${i.fix ? `<span class="hint">建議改成</span><b class="mono">${esc(String(i.fix.value).slice(0, 24))}</b>${fixable ? '<span class="pill">可一鍵修改</span>' : ''}` : ''}</div>
       </div>`;
-    }).join('') : `<p class="empty">${state.all.length ? '沒有符合條件的問題' : '沒有發現任何問題，資料可以送出。'}</p>`;
+    }).join('') + (more > 0 ? `<p class="empty">還有 ${more.toLocaleString()} 項沒有列出。請用上方的篩選縮小範圍，或按「下載問題清單」查看全部。</p>` : '') : `<p class="empty">${state.all.length ? '沒有符合條件的問題' : '沒有發現任何問題，資料可以送出。'}</p>`;
   }
   // 行號：文字檔為第 N 筆；由 Excel 匯入時換算成 Excel 列號 (第 1 列為標題)；CSV 工作表為檔案中的列號
   function rowLabel(i) {
@@ -375,9 +417,11 @@
       const out = DQ.applyFixes(rs, state.res, fid, ids);
       if (out.applied) { state.files[fid] = Object.assign({}, state.files[fid], { text: out.text }); total += out.applied; state.changed.add(fid); }
     }
-    const before = state.res.summary.errors + state.res.summary.warnings;
+    // 與問題清單「N 項待處理」同一個算法 (全部工作表的必須修改＋建議確認)
+    const pending = () => state.all.filter(i => i.severity === 'error' || i.severity === 'warning').length;
+    const before = pending();
     run();
-    const after = state.res.summary.errors + state.res.summary.warnings;
+    const after = pending();
     $('#action-note').textContent = total ? `已修改 ${total} 個地方，問題從 ${before} 個減為 ${after} 個。可以下載改好的資料。` : '沒有工具可以自動修改的地方。';
     return { total, before, after };
   }
@@ -524,7 +568,7 @@
   };
 
   // ---------- 報告 / 規則 ----------
-  function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
+  function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, hidden: hiddenNote(), totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
   function renderReport() { $('#report-frame').srcdoc = reportHTML(); }
   // 手冊頁碼 (rules/rules.js)：PDF 頁碼與頁面上印的頁碼
   const SRCDOC = { rules: '檢核規則手冊', manual: '填報手冊' };

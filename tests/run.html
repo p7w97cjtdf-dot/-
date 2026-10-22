@@ -27,7 +27,7 @@
 <body>
 <main>
   <h1>自動測試</h1>
-  <p class="hint">在瀏覽器內執行與工具相同的檢核程式，確認含錯誤版的刻意錯誤全部找到、正確版 0 誤報。雙擊開啟即可，不需要伺服器；Excel 往返測試需要從 cdnjs 載入 SheetJS（需連網）。</p>
+  <p class="hint">在瀏覽器內執行與工具相同的檢核程式，確認含錯誤版的刻意錯誤全部找到、正確版 0 誤報。雙擊開啟即可，不需要伺服器；Excel 往返測試使用 vendor/ 的 SheetJS，不需要連網。</p>
   <div id="banner" class="banner">執行中…</div>
   <table>
     <thead><tr><th>測試</th><th class="num">結果</th><th>狀態</th></tr></thead>
@@ -40,8 +40,7 @@
   <table><tbody id="rows-file"></tbody></table>
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>window.XLSX || document.write('<script src="../vendor/xlsx.full.min.js"><\/script>');</script>
+<script src="../vendor/xlsx.full.min.js"></script>
 <script src="../rules/rules.js"></script>
 <script src="../src/core.js"></script>
 <script src="../src/rulesets/life.js"></script>

@@ -102,7 +102,7 @@ AI 說明**不需要 API key**：只在 claude.ai 的線上版提供，使用開
 ## 放入資料沒有反應時
 
 - **畫面上方出現紅框「工具沒有完整開啟」**：`index.html` 旁邊找不到 `src`、`rules`、`vendor` 資料夾。常見原因是直接在壓縮檔裡點開，或只複製了 `index.html`。請先解壓縮整個資料夾再開啟。
-- **讀不了 Excel**：工具先從 cdnjs 載入 SheetJS，被網路或公司防火牆擋住時，會自動改用 `vendor/xlsx.full.min.js`（同版本）。
+- **讀不了 Excel**：讀 Excel、PDF、Word 的元件都放在 `vendor/`，和工具同一個網站提供；只複製了 `index.html`、沒有 `vendor` 資料夾時會讀不了。
 - 支援 `.xlsx`、`.xls`、`.xlsm`、`.ods`；工作表名稱不是預設名稱（例如 Sheet1）時，會依第一列的欄位名稱判斷是哪一份資料。
 - CSV、文字檔先用 UTF-8 讀，失敗時自動改用 Big5（Windows 的 Excel「另存 CSV」預設是 Big5）。
 - 只放了客戶、商品等資料、沒有保單或理賠資料時，會提示還缺什麼，不會顯示「0 個問題」。
@@ -118,7 +118,7 @@ AI 說明**不需要 API key**：只在 claude.ai 的線上版提供，使用開
 
 ## 快速開始
 
-直接雙擊 `index.html` 用瀏覽器開啟（不需要伺服器或安裝），把 Excel 拖進上方的框（展示用的模擬資料在 `samples/excel/`，例如 `試用資料_含錯誤.xlsx`，7 張工作表）。所有檢核都在瀏覽器內執行，資料不會上傳；試用資料與規則都內嵌在 JS 檔裡。讀 Excel 用的 SheetJS 從 cdnjs 載入，所以拖入 Excel 時需要連網。
+直接雙擊 `index.html` 用瀏覽器開啟（不需要伺服器或安裝），把 Excel 拖進上方的框（展示用的模擬資料在 `samples/excel/`，例如 `試用資料_含錯誤.xlsx`，7 張工作表）。所有檢核都在瀏覽器內執行，資料不會上傳；試用資料與規則都內嵌在 JS 檔裡。讀 Excel、PDF、Word 的元件放在 `vendor/`，不需要連網。
 
 - 結果表列出工作表、行號（由 Excel 匯入時為 Excel 列號）、欄位、原始值、錯誤說明與建議修正值，可依嚴重度（錯誤／警告／疑似異常）、工作表、類別篩選；能推得正確值的可單筆或一鍵修正。
 - 自動測試：雙擊 `tests/run.html`，確認含錯誤版的刻意錯誤全部找到、正確版 0 誤報（含 Excel 寫出再讀回的往返測試；也可選擇 `samples/excel/` 的實際檔案再測一次）。Node 版：`npm test`。
@@ -187,6 +187,8 @@ npm run bench     # 計時：試用資料完整檢核一次的秒數 (另含 1 �
 
 展示範圍、AI 應用方式、已知限制與風險對策整理在 `docs/limits.html`。本工具供申報前自我檢查使用，結果不代表正式審核。
 
+安全測試 (外傳驗證、個資遮罩、更新包信任、檢核繞過、AI 提示注入、HTML 注入、檔案壓力、輸出正確性) 的方法、結果與修正整理在 `docs/security-test-report.md`，重跑方式見 `tests/security/README.md`。
+
 ## 檢核依據
 
 - 明細檢核：`附件二_人壽保險業個人壽險填報手冊_2025填報年度`、`新式個人壽險填報說明手冊範例&檢核規則_2025`（原檔放在 `rules/source/`，不進版控）。檢核編號沿用手冊「(新)檢核編號」；`X` 開頭為本工具補充的邏輯合理性檢查（預設為警告）。手冊「(放寬不檢)」的條文未實作，文字有歧義的條文以警告呈現。
@@ -221,6 +223,7 @@ tools/watch-regulations.js 法規來源監看 (每天由 GitHub Actions 執行)
 manifest.webmanifest, sw.js  加入主畫面、離線使用
 docs/guide.html            使用說明
 docs/limits.html           限制與風險評估
+docs/security-test-report.md  安全測試報告 (T01–T08)
 src/recon.js               控制總數對帳、期初期末結轉、財報勾稽、退件解碼
 src/master.js              客戶資料、商品資料檢核
 src/sample-data.js         試用商品／客戶資料、郵遞區號對照
@@ -245,7 +248,7 @@ tools/validate.js          命令列檢核 (stderr 輸出檢核耗時)
 tools/bench.js             計時
 docs/index.html            介紹頁 (landing page)
 rules/source/              主辦單位填報手冊 (本機，不進版控)
-vendor/                    備用的 SheetJS (cdnjs 載不到時使用)
+vendor/                    SheetJS、PDF.js、mammoth (同網站提供，不從外部載入)
 tests/                     node:test 測試
 samples/                   clean/ 正確範例、dirty/ 含錯誤範例
 ```

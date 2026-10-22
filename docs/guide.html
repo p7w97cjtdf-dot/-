@@ -215,7 +215,7 @@ details[open] summary { margin-bottom: 6px; }
   <details><summary>放入檔案後沒有反應？</summary>
     <ul>
       <li>畫面上方出現紅框「工具沒有完整開啟」：表示工具的資料夾不完整，常見原因是直接在壓縮檔裡點開。請先解壓縮整個資料夾，或改用網址開啟。</li>
-      <li>讀不了 Excel：讀 Excel 需要一個元件，被公司防火牆擋住時工具會自動改用內建的備用檔；仍不行時請改放文字檔，或請 IT 開放 cdnjs.cloudflare.com。</li>
+      <li>讀不了 Excel：讀檔元件放在工具的 vendor 資料夾，只複製了 index.html 時會讀不了。請下載整個工具資料夾，或改用網址開啟。</li>
       <li>檔案沒有拖進框內也沒關係，拖到頁面任何地方都會讀取。</li>
     </ul></details>
   <details><summary>Excel 的資料檢查出很多格式錯誤？</summary>

@@ -196,9 +196,13 @@
    * @param ruleset 規則集 (例如 rulesets/life.js)
    * @param files { L: {name, text}, D: {name, text} }
    */
+  const MAX_ISSUES = 50000;
   function validate(ruleset, files, opts) {
     opts = opts || {};
     const issues = [];
+    // 問題數上限：整個檔案格式不對時可能有上百萬個問題，全部列出會讓瀏覽器卡住 (安全測試 T07)。
+    // 超過上限就不再收集，並在該檔標記 truncated (正確比例不再計算，畫面與報告會說明)
+    const MAX = opts.maxIssues || MAX_ISSUES;
     const data = {};
     const meta = {};
     const ruleMap = {};
@@ -214,6 +218,7 @@
 
       const keyOf = rec => rec && rec._raw && layout.keyOf ? layout.keyOf(rec) : '';
       const push = (rec, iss) => {
+        if (issues.length >= MAX) { meta[fid].truncated = true; return; }
         const issue = makeIssue(Object.assign({ file: fid, line: rec ? rec._line : 0, policy: keyOf(rec) }, iss));
         const def = ruleMap[issue.ruleId];
         if (def && def.severity && !iss.severity) issue.severity = def.severity;
@@ -273,13 +278,15 @@
         }
         meta[fid].policies = groups.size;
       }
-      data[fid] = good.concat(records.filter(r => !good.includes(r)));
+      const isGood = new Set(good);
+      data[fid] = good.concat(records.filter(r => !isGood.has(r)));
     }
 
     // 跨檔檢核
     if (ruleset.crossRules && Object.keys(meta).length) {
       for (const rule of ruleset.crossRules) {
         rule(data, (fid, rec, iss) => {
+          if (issues.length >= MAX) { if (meta[fid]) meta[fid].truncated = true; return; }
           const layout = ruleset.layouts[fid];
           const issue = makeIssue(Object.assign({ file: fid, line: rec ? rec._line : 0,
             policy: rec && layout.keyOf ? layout.keyOf(rec) : '', category: '跨檔' }, iss));
@@ -307,7 +314,8 @@
     for (const fid of Object.keys(meta)) {
       const bad = new Set(issues.filter(i => i.file === fid && i.severity === 'error' && i.line).map(i => i.line));
       byFile[fid] = { records: meta[fid].count, policies: meta[fid].policies || 0, badRecords: bad.size,
-        passRate: meta[fid].count ? (meta[fid].count - bad.size) / meta[fid].count : 1 };
+        passRate: meta[fid].count && !meta[fid].truncated ? (meta[fid].count - bad.size) / meta[fid].count : null,  // 0 筆或問題太多沒列完時沒有比例
+        truncated: !!meta[fid].truncated };
     }
     const count = (key) => issues.reduce((m, i) => { m[i[key]] = (m[i[key]] || 0) + 1; return m; }, {});
     return {
@@ -345,5 +353,5 @@
   }
 
   return { isValidDate, toDate, fmtDate, addYearsMinusDay, monthsBetween, ageAt, fmtAmount, num, big, isZero,
-    pad, buildLine, parseFixedWidth, parseCSV, csvToFixedWidth, recordsToCSV, validate, applyFixes, summarize };
+    MAX_ISSUES, pad, buildLine, parseFixedWidth, parseCSV, csvToFixedWidth, recordsToCSV, validate, applyFixes, summarize };
 });
