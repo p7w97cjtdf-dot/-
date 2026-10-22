@@ -113,9 +113,12 @@
       const base = Object.assign({}, app.base, { catalog: allCatalog() });
       const v = P.validate(pack, base, app.state.packs.filter(x => x.pack.id !== pack.id).map(x => x.pack));
       const bad = v.rules.filter(r => r.errors.length);
-      app.setPacks(app.state.packs.filter(x => x.pack.id !== pack.id).concat({ pack, on: true }));
+      // 自行匯入的更新包沒有經過官方發布；會停用內建檢查時一定要先確認 (停用後那些問題不會顯示)
+      const dis = pack.disable.filter(id => !v.errors.some(m => m.includes(`「${id}」`)));
+      const on = !dis.length || confirm(`「${pack.name}」不是從工具的官方網站取得，會停用 ${dis.length} 項內建檢查：\n${dis.slice(0, 10).join('、')}${dis.length > 10 ? '…' : ''}\n\n停用後，這些檢查找到的問題不會出現在結果與報告。請確認檔案來源可信。\n要現在套用嗎？（選「取消」會先匯入但不使用）`);
+      app.setPacks(app.state.packs.filter(x => x.pack.id !== pack.id).concat({ pack, on, imported: true }));
       fillFields();
-      note('#pack-note', `已匯入「${pack.name}」：${P.summary(pack)}。` + (v.errors.length || bad.length ? `有 ${v.errors.length + bad.length} 項無法使用，已略過（見下方說明）。` : '已套用到檢查結果。'));
+      note('#pack-note', `已匯入「${pack.name}」：${P.summary(pack)}。` + (v.errors.length || bad.length ? `有 ${v.errors.length + bad.length} 項無法使用，已略過（見下方說明）。` : '') + (on ? '已套用到檢查結果。' : '尚未使用，確認來源後可在下方打開。'));
     } catch (err) { note('#pack-note', `「${f.name}」不是規則更新包，或檔案內容有誤：${err.message}`); }
   });
   const download = x => app.download(`rule-pack-${String(x.pack.id).replace(/[^\w.-]/g, '_')}.json`, JSON.stringify(x.pack, null, 2) + '\n', 'application/json');
@@ -127,7 +130,8 @@
     $('#tc-updates').textContent = packs.filter(x => x.on).length || '';
     $('#dis-ids').innerHTML = allCatalog().slice(0, 2000).map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
     const ol = app.state.officialLoaded;
-    $('#pack-official').textContent = ol ? (ol.count ? `已從公開網站取得 ${ol.count} 個官方更新包，打開工具時會自動檢查有沒有新版。` : '已檢查公開網站：目前沒有官方發布的法規更新。') : '尚未取得官方更新（直接開啟檔案或沒有網路時不會自動更新）。';
+    $('#pack-official').textContent = (ol ? (ol.count ? `已從公開網站取得 ${ol.count} 個官方更新包，打開工具時會自動檢查有沒有新版。` : '已檢查公開網站：目前沒有官方發布的法規更新。') : '尚未取得官方更新（直接開啟檔案或沒有網路時不會自動更新）。')
+      + ((app.state.officialRejected || []).length ? `　有 ${app.state.officialRejected.length} 個官方更新包沒有通過檢查、未套用：${app.state.officialRejected.join('；')}` : '');
     if (!packs.length) { $('#pack-list').innerHTML = '<p class="hint">目前沒有套用任何法規更新，使用內建規則檢查。</p>'; return; }
     const base = Object.assign({}, app.base, { catalog: allCatalog() });
     $('#pack-list').innerHTML = packs.map((x, k) => {
@@ -144,7 +148,7 @@
       return `<article class="pack${x.on ? '' : ' off'}">
         <div class="pack-head">
           <label class="switch"><input type="checkbox" data-on="${k}"${x.on ? ' checked' : ''}> 使用中</label>
-          <div><b>${esc(p.name)}</b>${x.official ? '<span class="official">官方發布・自動套用</span>' : ''}${p.version ? `<span class="hint">　第 ${esc(p.version)} 版</span>` : ''}
+          <div><b>${esc(p.name)}</b>${x.official ? '<span class="official">官方發布・自動套用</span>' : x.imported ? '<span class="unofficial">自行匯入・未經官方發布</span>' : ''}${p.version ? `<span class="hint">　第 ${esc(p.version)} 版</span>` : ''}
             <div class="hint">${[p.issuedAt && `發布 ${p.issuedAt.replace(/^(\d{4})(\d\d)(\d\d)$/, '$1/$2/$3')}`, p.basis && `依據：${p.basis}`].filter(Boolean).map(esc).join('　')}</div></div>
           <div class="pack-acts"><button class="chip" data-dl="${k}">下載</button>${x.official ? '' : `<button class="chip" data-rm="${k}">移除</button>`}</div>
         </div>

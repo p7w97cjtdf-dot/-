@@ -78,6 +78,7 @@
   <!-- ================= 明細檢核 ================= -->
   <section id="view-check" class="view">
     <div class="summary" id="summary"></div>
+    <p class="hidden-note" id="hidden-note" role="status" hidden></p>
     <p class="summary-note hint" id="summary-note"></p>
     <div class="review-start">
       <button id="btn-review" class="btn cta">逐筆確認問題</button>
@@ -171,7 +172,7 @@
         <button class="chip ex">資產負債表不平，期初期末兜不攏</button>
         <button class="chip ex">第 37 行資料有誤，保單分紅類別錯誤</button>
       </div>
-      <p class="ai-notice">按下「請 AI 說明怎麼改」會把退件通知和找到的問題送給 AI（Claude）；身分證號、姓名、地址、電話、Email 會先遮蔽，仍有疑似個資就不會送出。</p>
+      <p class="ai-notice">按下「請 AI 說明怎麼改」會把退件通知和找到的問題送給 AI（Claude）；身分證號、姓名、地址、電話、Email 會先遮蔽，仍有疑似個資就不會送出。請不要貼上客戶個資：沒有標示的姓名可能無法辨識。</p>
       <div class="ai-out" id="dec-ai"></div>
     </div>
     <div id="dec-out" class="findings"></div>
@@ -343,11 +344,11 @@
   <p>所有檢查都在你的電腦上進行，資料不會上傳。會計科目為示範用的簡化版。AI 說明只在線上版提供。<a href="docs/guide.html">使用說明</a>・<a href="#updates" id="link-updates">法規更新</a>・<a href="docs/limits.html">限制與風險說明</a></p>
 </footer>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>window.XLSX || document.write('<script src="vendor/xlsx.full.min.js"><\/script>');</script>
+<!-- 讀取 PDF、Word、Excel 的元件放在 vendor/，和工具同一個網站提供 (不從外部網站即時載入，避免被竄改的程式碼讀到申報資料) -->
+<script src="vendor/pdf.min.js"></script>
+<script src="vendor/pdf.worker.min.js"></script>
+<script src="vendor/mammoth.browser.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
 <script src="rules/rules.js"></script>
 <script src="src/labels.js"></script>
 <script src="src/core.js"></script>

@@ -9,6 +9,9 @@
  *  Email                  wang@example.com → w***@example.com
  *  信用卡／帳號           4 碼一組的卡號 → ****-****-****-1234；「帳號：」後的數字 → [已遮蔽帳號]
  *
+ *  出生日期               「出生日期：0790101」「生日 1990/01/01」→ 出生日期：[已遮蔽生日]
+ *
+ * 遮罩前先把全形英數字轉成半形 (Ａ１２３… → A123…)；證號中間夾空白或連字號 (A 123 456 789) 也會遮罩。
  * guard(text, ctx)：遮罩後再掃描一次，仍偵測到疑似個資就丟出錯誤 (停止送出)，不會「漏過去」。
  * 保單號碼、賠案號碼等外觀像證號的代碼，只要出現在申報資料的對應欄位 (ctx.exempt)，就不遮罩。
  */
@@ -22,6 +25,9 @@
   const D = '0-9０-９';
   // 身分證：英文字母＋1/2 (性別)；新式居留證：英文字母＋8/9；舊式居留證：兩個英文字母＋8 碼
   const TWID = /(?<![A-Za-z0-9])([A-Za-z][1289]\d{8}|[A-Za-z][A-Da-d]\d{8})(?![A-Za-z0-9])/g;
+  // 證號中間夾空白或連字號 (A 123-456-789)
+  const TWID_LOOSE = /(?<![A-Za-z0-9])[A-Za-z][\s-]?(?:[1289]|[A-Da-d])(?:[\s-]?\d){8}(?![A-Za-z0-9])/g;
+  const BIRTH = new RegExp(`((?:出生(?:日期|年月日)?|生日)\\s*[:：=]?\\s*)(?:民國\\s*)?\\d{2,4}\\s*[年/.-]?\\s*\\d{1,2}\\s*[月/.-]?\\s*\\d{1,2}\\s*日?`, 'g');
   const MOBILE = /(?<![0-9])(?:\+?886[\s-]?|0)9\d{2}[\s-]?\d{3}[\s-]?\d{3}(?![0-9])/g;
   // 市話：需有區碼括號或分隔符號，避免誤判一般數字 (金額、日期)
   const LANDLINE = /(?<![0-9])(?:\(0\d{1,3}\)\s?|0\d{1,3}[\s-])\d{3,4}[\s-]?\d{4}(?:\s?(?:#|轉|ext\.?)\s?\d{1,5})?(?![0-9])/gi;
@@ -36,7 +42,7 @@
   // 有標示的姓名：「姓名：王小明」「要保人：王小明」(必須有分隔符號，避免把「被保險人身份」誤判)
   const NAME_LABEL = new RegExp(`((?:姓名|名字|全名)\\s*[:：=]?\\s*|(?:要保人|被保險人|受益人|聯絡人|負責人|申請人|客戶)\\s*[:：=]\\s*)([${CJK}·．]{2,5})`, 'g');
 
-  const TYPES = { id: '身分證／居留證', name: '姓名', address: '地址', phone: '電話', email: 'Email', card: '卡號／帳號' };
+  const TYPES = { birth: '出生日期', id: '身分證／居留證', name: '姓名', address: '地址', phone: '電話', email: 'Email', card: '卡號／帳號' };
 
   const maskTwId = s => s.slice(0, 4) + '****' + s.slice(-2);
   const maskName = s => { const c = [...s]; return c.length <= 2 ? c[0] + '○' : c[0] + '○'.repeat(c.length - 2) + c[c.length - 1]; };
@@ -54,16 +60,23 @@
     };
   }
 
+  // 全形英數字轉半形，避免「Ａ１２３４５６７８９」「０９１２…」躲過比對 (標點不轉，原文照舊)
+  const half = v => String(v == null ? '' : v).replace(/[\uff10-\uff19\uff21-\uff3a\uff41-\uff5a]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
+  // 姓名中間夾空白 (王 小 明) 也要比對得到
+  const nameRe = nm => new RegExp([...nm].map(ch => ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*'), 'g');
+
   function redact(text, ctx) {
     const c = norm(ctx), counts = {};
     const hit = (t, n) => { counts[t] = (counts[t] || 0) + (n || 1); };
-    let s = String(text == null ? '' : text);
+    let s = half(text);
     // 1. 資料中已知的證號與姓名 (精確比對，涵蓋格式不標準的證號)
     for (const id of c.ids) if (!c.exempt.has(id) && s.includes(id)) { const n = s.split(id).length - 1; s = s.split(id).join(maskTwId(id)); hit('id', n); }
-    for (const nm of c.names) if (s.includes(nm)) { const n = s.split(nm).length - 1; s = s.split(nm).join(maskName(nm)); hit('name', n); }
+    for (const nm of c.names) s = s.replace(nameRe(nm), () => { hit('name'); return maskName(nm); });
     // 2. 樣式比對
     s = s.replace(EMAIL, m => { hit('email'); return maskEmail(m); });
     s = s.replace(TWID, m => { if (c.exempt.has(m)) return m; hit('id'); return maskTwId(m); });
+    s = s.replace(TWID_LOOSE, m => { const id = m.replace(/[\s-]/g, ''); if (c.exempt.has(id)) return m; hit('id'); return maskTwId(id); });
+    s = s.replace(BIRTH, (_, lab) => { hit('birth'); return lab + '[已遮蔽生日]'; });
     s = s.replace(CARD, m => { hit('card'); return '****-****-****-' + m.replace(/[^\d]/g, '').slice(-4); });
     s = s.replace(ACCOUNT, (_, lab) => { hit('card'); return lab + '[已遮蔽帳號]'; });
     s = s.replace(MOBILE, m => { hit('phone'); return maskMobile(m); });
@@ -77,12 +90,14 @@
 
   // 掃描：回傳仍可辨識的個資 [{ type, sample }] (sample 只顯示部分，避免在畫面上再露出)
   function scan(text, ctx) {
-    const c = norm(ctx), s = String(text == null ? '' : text), out = [];
+    const c = norm(ctx), s = half(text), out = [];
     const peek = v => String(v).slice(0, 2) + '…';
     for (const id of c.ids) if (!c.exempt.has(id) && s.includes(id)) out.push({ type: 'id', sample: peek(id) });
-    for (const nm of c.names) if (s.includes(nm)) out.push({ type: 'name', sample: peek(nm) });
+    for (const nm of c.names) if (nameRe(nm).test(s)) out.push({ type: 'name', sample: peek(nm) });
     const each = (re, type, skip) => { for (const m of s.matchAll(re)) if (!(skip && skip(m))) out.push({ type, sample: peek(m[0]) }); };
     each(TWID, 'id', m => c.exempt.has(m[0]));
+    each(TWID_LOOSE, 'id', m => c.exempt.has(m[0].replace(/[\s-]/g, '')));
+    each(BIRTH, 'birth', m => /\[已遮蔽生日\]/.test(m[0]));
     each(EMAIL, 'email'); each(MOBILE, 'phone'); each(LANDLINE, 'phone'); each(CARD, 'card');
     each(ACCOUNT, 'card', m => /\[已遮蔽帳號\]/.test(m[0]));
     each(NAME_LABEL, 'name', m => /○/.test(m[2]));

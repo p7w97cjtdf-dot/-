@@ -10,7 +10,8 @@
 })(typeof self !== 'undefined' ? self : this, function (C, LB) {
   'use strict';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const pct = x => (x * 100).toFixed(1) + '%';
+  // 有任何一筆要修改就不顯示 100%：無條件捨去到小數一位
+  const pct = x => x == null ? '沒有資料' : x >= 1 ? '100%' : Math.min(99.9, Math.floor(x * 1000) / 10).toFixed(1) + '%';
   const SEV = LB.SEV, SHEET = LB.SHEET;
 
   function fieldLabel(rs, i) {
@@ -52,7 +53,8 @@
   }
   // CSV：加上 BOM 與 Windows 換行，Excel 直接開啟中文不會變亂碼
   function toCSV(rs, res, extra) {
-    const q = v => { v = String(v == null ? '' : v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    // 以 = + @ 或「- 加非數字」開頭的內容，Excel 會當成公式執行 (CSV 公式注入)：前面加 ' 讓它保持文字
+    const q = v => { v = String(v == null ? '' : v); if (/^[=+@\t\r]|^-[^\d]/.test(v)) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     return '\uFEFF' + toRows(rs, res, extra).map(r => r.map(q).join(',')).join('\r\n') + '\r\n';
   }
 
@@ -71,6 +73,8 @@
     opts = opts || {};
     const s = res.summary;
     const tops = topRules(rs, res, 15);
+    // 全部工作表的問題數 (和畫面的數字相同)；沒有傳入時只算保單與理賠資料
+    const T = opts.totals;
     const cats = Object.entries(s.byCategory).sort((a, b) => b[1] - a[1]).map(([c, n]) => [LB.cat(c), n]);
     const maxCat = Math.max(1, ...cats.map(c => c[1]));
     const rows = res.issues.map(i => `<tr class="${i.severity}"><td>${i.id}</td><td><span class="sev ${i.severity}">${SEV[i.severity]}</span></td><td>${SHEET[i.file] || i.file}</td><td class="num">${i.line || '-'}</td><td class="mono">${esc((i.policy || '').trim())}</td><td>${esc(fieldLabel(rs, i).replace(/欄\d+ /g, ''))}</td><td class="mono">${esc(String(i.value).trim())}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('');
@@ -90,8 +94,8 @@ th{position:sticky;top:0;background:var(--bg);font-weight:600}.num{text-align:ri
 .ai{border-left:3px solid var(--acc);padding:4px 14px;white-space:pre-wrap}.ai-tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border:1px solid #7c3aed;color:#6d28d9;border-radius:4px;vertical-align:middle}.scroll{overflow-x:auto}
 @media print{th{position:static}}</style></head><body><main>
 <h1>資料檢查報告｜${esc(rs.name)}</h1>
-<div class="meta">產生時間：${esc(new Date(res.generatedAt).toLocaleString('zh-TW'))}　資料：${Object.entries(res.meta).map(([k, m]) => esc(m.name || rs.layouts[k].title)).join('、')}${opts.elapsed != null ? `　檢查花了 ${(opts.elapsed / 1000).toFixed(2)} 秒` : ''}${(rs.products || [rs]).filter(p => Object.keys(res.meta).some(k => p.layouts && p.layouts[k])).map((p, i) => `${i ? '、' : '<br>規則依據：'}${esc(p.name)}${/\d{4}/.test(p.name) ? '' : `（${esc(p.version)} 年版手冊）`}`).join('')}${(opts.packs || []).length ? `<br>另套用法規更新：${opts.packs.map(p => esc(p.name + (p.version ? ` 第 ${p.version} 版` : '') + (p.basis ? `（${p.basis}）` : ''))).join('、')}` : ''}</div>
-<div class="cards">${fileCards}<div class="card"><div class="k">${SEV.error}</div><div class="v err">${s.errors}</div><div class="s">${LB.SEV_HINT.error}</div></div><div class="card"><div class="k">${SEV.warning}</div><div class="v warn">${s.warnings}</div><div class="s">${LB.SEV_HINT.warning}</div></div><div class="card"><div class="k">${SEV.suspect}</div><div class="v" style="color:#0e7490">${s.suspects || 0}</div><div class="s">${LB.SEV_HINT.suspect}</div></div><div class="card"><div class="k">可以一鍵修改</div><div class="v">${s.fixable}</div><div class="s">工具知道正確的值</div></div></div>
+<div class="meta">產生時間：${esc(new Date(res.generatedAt).toLocaleString('zh-TW'))}　資料：${Object.entries(res.meta).map(([k, m]) => esc(m.name || rs.layouts[k].title)).join('、')}${opts.elapsed != null ? `　檢查花了 ${(opts.elapsed / 1000).toFixed(2)} 秒` : ''}${(rs.products || [rs]).filter(p => Object.keys(res.meta).some(k => p.layouts && p.layouts[k])).map((p, i) => `${i ? '、' : '<br>規則依據：'}${esc(p.name)}${/\d{4}/.test(p.name) ? '' : `（${esc(p.version)} 年版手冊）`}`).join('')}${(opts.packs || []).length ? `<br>另套用法規更新：${opts.packs.map(p => esc(p.name + (p.version ? ` 第 ${p.version} 版` : '') + (p.basis ? `（${p.basis}）` : ''))).join('、')}` : ''}${opts.hidden ? `<br><b class="hidden-note">${esc(opts.hidden)}</b>` : ''}${Object.values(s.byFile).some(b => b.truncated) ? '<br><b>問題太多，只列出前一部分 (之後的資料沒有檢查完)；檔案可能整個格式不對，請先修正最常見的問題再檢查一次。</b>' : ''}</div>
+<div class="cards">${fileCards}<div class="card"><div class="k">${SEV.error}</div><div class="v err">${T ? T.error : s.errors}</div><div class="s">${LB.SEV_HINT.error}</div></div><div class="card"><div class="k">${SEV.warning}</div><div class="v warn">${T ? T.warning : s.warnings}</div><div class="s">${LB.SEV_HINT.warning}</div></div><div class="card"><div class="k">${SEV.suspect}</div><div class="v" style="color:#0e7490">${T ? T.suspect : s.suspects || 0}</div><div class="s">${LB.SEV_HINT.suspect}</div></div><div class="card"><div class="k">可以一鍵修改</div><div class="v">${s.fixable}</div><div class="s">工具知道正確的值</div></div></div>
 ${opts.aiSummary ? `<h2>AI 整理的重點 <span class="ai-tag">AI 產生</span></h2><p class="meta">以下由 AI（Claude）依檢查結果產生，送出前已遮住姓名、身分證號和地址；僅供參考，哪些要改以檢查結果為準。</p><div class="ai">${esc(opts.aiSummary)}</div>` : ''}
 ${reconHTML(opts.recon)}
 <h2>保單與理賠資料：各類問題的數量</h2>${cats.map(([c, n]) => `<div class="bar"><span>${esc(c)}</span><i style="width:${Math.max(2, n / maxCat * 60)}%"></i><span>${n}</span></div>`).join('')}

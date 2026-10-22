@@ -671,6 +671,16 @@
       p(r, { ruleId: '30402_P1508', category: '多筆邏輯', fields: ['exitDate', 'longevityAge'], value: `${ageAt(r.birthDate, r.exitDate)} 歲 / ${r.longevityAge}`, message: '退保別=HLM(祝壽金) 時到達年齡應等於祝壽保險金給付年齡', suggestion: '確認退保日期、出生日期或祝壽金給付年齡' });
   });
 
+  // ================= 多筆檢核：給付 (同一保單號碼) =================
+  // 整筆內容完全相同的給付資料 (重複填送；安全測試 T04 發現原本沒有檢查)，歸在主鍵重複 K0001
+  const groupD = [(recs, p) => {
+    const seen = new Map();
+    for (const r of recs) {
+      if (seen.has(r._raw)) p(r, { ruleId: 'K0001', category: '多筆邏輯', fields: ['policyNo'], value: r.policyNo, message: `與第 ${seen.get(r._raw)} 行的給付資料完全相同 (重複填送)`, suggestion: '刪除重複的那一筆；同一事故多次給付時，給付日期或金額應不同' });
+      else seen.set(r._raw, r._line);
+    }
+  }];
+
   // ================= 跨檔檢核 =================
   const cross = [];
   cross.push((data, p) => {
@@ -716,7 +726,7 @@
     id: 'life', name: '個人壽險 (2025 填報年度)', version: '2025',
     layouts: { L, D }, tables: T, catalog,
     recordRules: { L: recordL, D: recordD },
-    groupRules: { L: groupL },
+    groupRules: { L: groupL, D: groupD },
     crossRules: cross,
   };
 });
