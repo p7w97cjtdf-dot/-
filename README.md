@@ -64,6 +64,15 @@ THEME 6 | Finance, Actuarial & Data Management — **6-2 資料品質與檢核�
 
 AI 說明**不需要 API key**：只在 claude.ai 的線上版提供，使用開啟者自己的 Claude 帳號（第一次使用時會詢問是否允許）。在自己電腦上直接開啟 `index.html` 時沒有 AI，按鈕會說明原因；其他檢查功能都能正常使用，規則匯入也可以用「使用範例的轉換結果」展示。
 
+## 部署到 Vercel
+
+這是純前端的靜態網站，不需要建置或伺服器，`vercel.json` 已設定好（不安裝套件、不建置、直接提供整個資料夾；`sw.js` 與法規更新包不快取，確保大家拿到最新版）。
+
+- **連結 GitHub（建議）**：在 vercel.com 選「Add New → Project」，匯入這個 repository，按「Deploy」。之後每次併入 main 都會自動更新網站。
+- **用命令列**：安裝 Vercel CLI（`npm i -g vercel`）後，在專案資料夾執行 `vercel`（預覽）或 `vercel --prod`（正式）。
+
+部署後檢核工具在網站根目錄（`/`），使用說明在 `/docs/guide.html`，介紹頁在 `/docs/`。
+
 ## 線上版
 
 介紹頁（landing page）：`docs/index.html`，連結指向上一層的 `index.html` 與 `samples/excel/`。
