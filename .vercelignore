@@ -1,0 +1,5 @@
+# 部署到 Vercel 時不需要的檔案 (網站本身用不到)
+rules/source/
+tools/
+design-system/
+node_modules/
