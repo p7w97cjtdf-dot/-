@@ -18,12 +18,18 @@
 <meta name="description" content="保險申報資料檢核：個人壽險、癌症險、傷害險。自動找出錯誤、說明怎麼改，資料只在你的裝置上處理。">
 </head>
 <body>
-<header class="top">
+<header class="top appbar">
   <div class="brand">
-    <h1>申報資料檢核助手</h1>
-    <p class="sub">把要申報的保單、理賠等資料放進來，自動找出錯誤並告訴你怎麼改。資料只在你的電腦上處理，不會上傳。</p>
+    <span class="mark" aria-hidden="true">檢</span>
+    <div>
+      <h1>申報資料檢核助手</h1>
+      <p class="sub">保險申報資料預檢工作台・個人壽險／癌症險／傷害險・資料只在你的電腦上處理，不會上傳</p>
+    </div>
   </div>
-  <a class="help-link" href="docs/guide.html">使用說明</a>
+  <div class="appbar-right">
+    <span class="run-status" id="run-status" role="status"><i></i><span>尚未放入資料</span></span>
+    <a class="help-link" href="docs/guide.html">使用說明</a>
+  </div>
 </header>
 
 <main>
@@ -78,40 +84,42 @@
       <span class="hint">一次看一個問題，決定要不要改；手機上最好用。</span>
       <button id="btn-list" class="btn ghost list-toggle" aria-expanded="false">看全部清單</button>
     </div>
+    <div class="bench">
+      <div class="bench-main">
 
-    <div class="ai" id="ai-box" hidden>
-      <div id="ai-out" class="ai-out"></div>
-    </div>
+        <div class="ai" id="ai-box" hidden>
+          <div id="ai-out" class="ai-out"></div>
+        </div>
 
-    <div class="issues">
-      <div class="filters">
-        <h2>找到的問題 <span id="issue-count" class="count"></span></h2>
-        <div class="filter-row">
-          <select id="f-sev" aria-label="狀況"><option value="">全部狀況</option><option value="error">必須修改</option><option value="warning">建議確認</option><option value="suspect">請人工判斷</option></select>
-          <select id="f-file" aria-label="資料"><option value="">全部資料</option><option>保單資料</option><option>理賠資料</option><option>客戶資料</option><option>商品資料</option><option>去年保單資料</option><option>系統總數</option><option>資產負債表</option></select>
-          <select id="f-cat" aria-label="問題類型" hidden><option value="">全部問題類型</option></select>
-          <input id="f-q" type="search" placeholder="搜尋保單號碼、欄位或文字…">
+        <div class="issues card">
+          <div class="card-head">
+            <div><h2>找到的問題</h2><p class="hint">點任一項，右側會說明錯在哪裡、依據哪條規定、建議怎麼改</p></div>
+            <span class="count-pill" id="issue-count"></span>
+          </div>
+          <div class="filters">
+            <div class="filter-row">
+              <select id="f-sev" aria-label="狀況"><option value="">全部狀況</option><option value="error">必須修改</option><option value="warning">建議確認</option><option value="suspect">請人工判斷</option></select>
+              <select id="f-file" aria-label="資料"><option value="">全部資料</option></select>
+              <select id="f-cat" aria-label="問題類型" hidden><option value="">全部問題類型</option></select>
+              <input id="f-q" type="search" placeholder="搜尋保單號碼、欄位或文字…">
+            </div>
+            <div class="actions">
+              <button id="btn-fix" class="btn cta">一鍵修改所有可修的地方</button>
+              <button id="btn-dl-csv" class="btn ghost">下載問題清單</button>
+              <button id="btn-dl-report" class="btn ghost">下載報告</button>
+              <button id="btn-dl-fixed" class="btn ghost">下載改好的保單資料</button>
+              <button id="btn-dl-reject" class="btn ghost" hidden>下載有問題的資料列</button>
+              <button id="btn-ai" class="btn ghost ai-btn" title="會把檢查結果送給 AI（Claude）整理；姓名、身分證號和地址會先遮住">請 AI 整理重點</button>
+              <span class="hint" id="action-note"></span>
+            </div>
+            <p class="ai-notice">按「請 AI 整理重點」會把檢查結果送給 AI（Claude）；姓名、身分證號和地址會先遮住。</p>
+          </div>
+          <div class="issue-list" id="issue-list" role="list" aria-label="找到的問題"></div>
         </div>
-        <div class="actions">
-          <button id="btn-fix" class="btn cta">一鍵修改所有可修的地方</button>
-          <button id="btn-dl-csv" class="btn ghost">下載問題清單</button>
-          <button id="btn-dl-report" class="btn ghost">下載報告</button>
-          <button id="btn-dl-fixed" class="btn ghost">下載改好的保單資料</button>
-          <button id="btn-dl-reject" class="btn ghost" hidden>下載有問題的資料列</button>
-          <button id="btn-ai" class="btn ghost ai-btn" title="會把檢查結果送給 AI（Claude）整理；姓名、身分證號和地址會先遮住">請 AI 整理重點</button>
-          <span class="hint" id="action-note"></span>
-        </div>
-        <p class="ai-notice">按「請 AI 整理重點」會把檢查結果送給 AI（Claude）；姓名、身分證號和地址會先遮住。</p>
       </div>
-      <div class="split">
-        <div class="table-wrap">
-          <table id="issue-table">
-            <thead><tr><th></th><th>位置</th><th>保單號碼</th><th>欄位</th><th>目前的值</th><th>問題</th><th>建議改成</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <aside class="detail" id="detail" aria-live="polite"></aside>
-      </div>
+      <aside class="bench-side">
+        <div class="detail card" id="detail" aria-live="polite"></div>
+      </aside>
     </div>
   </section>
 
