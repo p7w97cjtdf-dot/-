@@ -604,3 +604,4 @@ body:not(.no-data) .drop.big::after { content: "換一份或加入其他檔案";
 body:not(.no-data) .imports { margin-bottom: 4px; }
 @media (max-width: 720px) { body:not(.show-list) #view-check .bench-side { display: none; } }
 .issue-side .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--cta); color: var(--cta); background: transparent; margin-top: 2px; }
+.ai-redact { margin: 8px 0 0; font-size: 12px; color: var(--mut); }

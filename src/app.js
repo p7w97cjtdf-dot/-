@@ -336,7 +336,7 @@
         ${rest.length ? `<details><summary class="hint">看這一行的其他 ${rest.length} 個欄位</summary><table class="fields"><tbody>${rest.map(row).join('')}</tbody></table></details>` : ''}
       </details>` : ''}
       ${siblings.length ? `<div><div class="label">同一張保單的其他資料</div><table class="fields"><tbody>${[rec].concat(siblings).sort((a, b) => a.txnSeq.localeCompare(b.txnSeq)).map(r => `<tr class="${r === rec ? 'hit' : ''}"><td class="num">第${r._line}行</td><td class="v">${r.txnSeq}</td><td class="v">${r.addType} ${r.addDate}</td><td class="v">→ ${r.exitType} ${r.exitDate}</td></tr>`).join('')}</tbody></table></div>` : ''}
-      <div class="ai-explain"><button class="btn ghost small ai-btn" id="btn-explain">請 AI 用白話解釋</button><p class="ai-notice">按下後會把這個問題和相關欄位送給 AI（Claude），不會送出整筆資料。</p><div class="ask" id="explain-out"></div></div>
+      <div class="ai-explain"><button class="btn ghost small ai-btn" id="btn-explain">請 AI 用白話解釋</button><p class="ai-notice">按下後會把這個問題和相關欄位送給 AI（Claude），不會送出整筆資料；身分證號、姓名、地址、電話、Email 會先遮蔽。</p><div class="ask" id="explain-out"></div></div>
       <div class="detail-foot">
         <button class="linkish" type="button" id="btn-detail-list">下載問題清單</button>
         ${fixable ? `<button class="btn cta" id="btn-fix-one" title="${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}">改成建議的值</button>` : '<span class="hint">這個問題需要人工確認後修改</span>'}
@@ -510,7 +510,7 @@
   // ---------- AI ----------
   const reconCtx = () => ({ ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod });
   // AI 回覆一律加上「AI 產出」標示
-  function showAI(out, text) { out.innerHTML = `<div class="ai-tag">${esc(DQ.ai.LABEL)}</div><div class="ai-text">${esc(text)}</div>`; }
+  function showAI(out, text) { out.innerHTML = `<div class="ai-tag">${esc(DQ.ai.LABEL)}</div><div class="ai-text">${esc(text)}</div><p class="ai-redact">${esc(DQ.ai.redactionNote())}</p>`; }
   $('#btn-ai').onclick = async () => {
     const out = $('#ai-out');
     $('#ai-box').hidden = false;

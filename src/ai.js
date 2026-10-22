@@ -3,7 +3,8 @@
  * 規則引擎負責「找出」問題 (結果固定、可追查)；AI 只負責「說明」。
  * 不需要 API key：只在 claude.ai 線上版使用開啟者自己的 Claude 帳號 (平台的 sample 功能)；
  * 在自己電腦上直接開啟 index.html 時沒有 AI，其他檢查功能照常。
- * 送出內容由 ai-payload.js 組成並遮住姓名、證號、地址；單筆解釋不送整筆資料。
+ * 送出內容由 ai-payload.js 組成並遮住個資；送出前 pii.guard 再遮罩與掃描一次，仍有疑似個資就停止送出 (fail closed)。
+ * 單筆解釋不送整筆資料。
  */
 (function (root) {
   'use strict';
@@ -17,13 +18,19 @@
     try { if (root.claude && root.claude.use) platform = await root.claude.use('sample'); } catch (e) { platform = null; }
     return !!platform;
   })();
+  let lastRedaction = null;
   const OFFLINE = 'AI 說明只能在線上版使用；在自己電腦上開啟時無法使用，其他檢查功能不受影響。';
 
   async function ask(prompt, opts) {
     opts = opts || {};
     if (!platform) throw new Error(OFFLINE);
+    // 最後關卡：所有送出的文字再遮罩、再掃描一次；仍偵測到個資就不送 (錯誤訊息會說明是哪一類)
+    const safe = root.DQ.pii.guard(prompt, opts.ctx);
+    const counts = Object.assign({}, P().takeCounts());
+    for (const [k, n] of Object.entries(safe.counts)) counts[k] = (counts[k] || 0) + n;
+    lastRedaction = { counts, at: new Date() };
     try {
-      const out = await platform(`${opts.system || SYSTEM}\n\n${prompt}`, { modelTier: opts.tier || 'default' });
+      const out = await platform(`${opts.system || SYSTEM}\n\n${safe.text}`, { modelTier: opts.tier || 'default' });
       return out.text.trim();
     } catch (e) {
       if (e && e.code === 'not_granted') throw new Error('沒有允許使用 Claude，所以無法產生 AI 說明。');
@@ -35,7 +42,7 @@
   const P = () => root.DQ.aiPayload;
 
   async function summarize(rs, res, recon) {
-    const data = P().summaryData(root.DQ, rs, res, recon);
+    const data = P().summaryData(root.DQ, rs, res, recon), ctx = P().context(res, recon);
     return ask(`以下是本次法規申報資料的檢核結果 (JSON)，包含個人壽險申報明細檢核、與上游系統控制總數對帳、上年度期末結轉、資產負債表勾稽：
 ${data}
 
@@ -44,11 +51,11 @@ ${data}
 2. 問題主要出在哪裡：歸成 3~5 類可能的共同原因 (例如：轉檔時少補了 0、民國年和西元年混用、各系統結帳日不同)，每類說明影響幾筆。分成「要改資料」和「只是結帳日或算法不同、寫說明就好」兩種。
 3. 先改什麼：建議的修改順序和理由。
 4. 以後怎麼避免：資料產生時可以加的檢查。
-每段精簡，用條列，總長度 500 字內。`);
+每段精簡，用條列，總長度 500 字內。`, { ctx });
   }
 
   async function explain(rs, res, issue, recon) {
-    const o = P().explainData(rs, res, issue, recon);
+    const o = P().explainData(rs, res, issue, recon), ctx = P().context(res, recon);
     return ask(`請解釋下列檢核錯誤，並提出具體修正方式。
 檢核編號：${o.ruleId}（${o.ruleName}，依據：${o.ref}）
 問題：${o.message}
@@ -57,11 +64,11 @@ ${data}
 同一檢核編號本次共 ${o.sameRule} 筆。
 該筆${o.title}的相關欄位：${o.fields}
 
-請用 3~5 點說明：這條規則在檢查什麼、這筆資料為何不通過、正確值應該怎麼判斷 (若可推得請直接給值)、是否可能是系統性問題。200 字內。`);
+請用 3~5 點說明：這條規則在檢查什麼、這筆資料為何不通過、正確值應該怎麼判斷 (若可推得請直接給值)、是否可能是系統性問題。200 字內。`, { ctx });
   }
 
   async function decode(text, decoded, res, recon) {
-    const o = P().decodeData(text, decoded, res, recon);
+    const o = P().decodeData(text, decoded, res, recon), ctx = P().context(res, recon);
     return ask(`主管機關/申報系統的退件訊息如下：
 「${o.text}」
 
@@ -71,7 +78,7 @@ ${o.brief}
 請用繁體中文回答 (300 字內，條列)：
 1. 這則退件訊息最可能指的是哪些問題 (說明判斷依據；若是籠統代碼，指出最可能的 1~2 類並說明理由)。
 2. 修正步驟與順序 (指出可一次修正多筆的系統性問題)。
-3. 重新申報前還應檢查什麼，避免再次被退件。`);
+3. 重新申報前還應檢查什麼，避免再次被退件。`, { ctx });
   }
 
   root.DQ = root.DQ || {};
@@ -81,5 +88,7 @@ ${o.brief}
 
   // AI 產出一律加上標示，畫面與報告共用
   const LABEL = '以下由 AI（Claude）產生，僅供參考；哪些要改，以上方的檢查結果為準';
-  root.DQ.ai = { summarize, explain, decode, convertRules, LABEL, OFFLINE, ready, available: () => !!platform };
+  // 最近一次送出前遮罩了哪些個資 (畫面顯示用)
+  const redactionNote = () => lastRedaction && root.DQ.pii.describe(lastRedaction.counts) ? `送出前已遮蔽：${root.DQ.pii.describe(lastRedaction.counts)}` : '送出前已檢查，未發現需要遮蔽的個資';
+  root.DQ.ai = { summarize, explain, decode, convertRules, LABEL, OFFLINE, ready, available: () => !!platform, redactionNote };
 })(typeof self !== 'undefined' ? self : this);
