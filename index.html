@@ -109,10 +109,10 @@
               <button id="btn-dl-report" class="btn ghost">下載報告</button>
               <button id="btn-dl-fixed" class="btn ghost">下載改好的保單資料</button>
               <button id="btn-dl-reject" class="btn ghost" hidden>下載有問題的資料列</button>
-              <button id="btn-ai" class="btn ghost ai-btn" title="會把檢查結果送給 AI（Claude）整理；姓名、身分證號和地址會先遮住">請 AI 整理重點</button>
+              <button id="btn-ai" class="btn ghost ai-btn" title="會把檢查結果送給 AI（Claude）整理；個人資料會先遮蔽">請 AI 整理重點</button>
               <span class="hint" id="action-note"></span>
             </div>
-            <p class="ai-notice">按「請 AI 整理重點」會把檢查結果送給 AI（Claude）；姓名、身分證號和地址會先遮住。</p>
+            <p class="ai-notice">按「請 AI 整理重點」會把檢查結果送給 AI（Claude）；身分證號、姓名、地址、電話、Email 會先遮蔽，送出前再檢查一次，仍有疑似個資就不會送出。</p>
           </div>
           <div class="issue-list" id="issue-list" role="list" aria-label="找到的問題"></div>
         </div>
@@ -171,7 +171,7 @@
         <button class="chip ex">資產負債表不平，期初期末兜不攏</button>
         <button class="chip ex">第 37 行資料有誤，保單分紅類別錯誤</button>
       </div>
-      <p class="ai-notice">按下「請 AI 說明怎麼改」會把退件通知和找到的問題送給 AI（Claude）；姓名、身分證號和地址會先遮住。</p>
+      <p class="ai-notice">按下「請 AI 說明怎麼改」會把退件通知和找到的問題送給 AI（Claude）；身分證號、姓名、地址、電話、Email 會先遮蔽，仍有疑似個資就不會送出。</p>
       <div class="ai-out" id="dec-ai"></div>
     </div>
     <div id="dec-out" class="findings"></div>
@@ -204,7 +204,7 @@
         <button class="btn ghost" id="btn-preconverted">使用範例的轉換結果（不需 AI）</button>
         <span class="hint" id="conv-note"></span>
       </div>
-      <p class="ai-notice">按下「用 AI 轉換」會把文件的文字送給 AI（Claude）；文件中的身分證號會先遮住。「使用範例的轉換結果」不會連網。</p>
+      <p class="ai-notice">按下「用 AI 轉換」會把文件的文字送給 AI（Claude）；文件中的身分證號、姓名、地址、電話、Email 會先遮蔽。「使用範例的轉換結果」不會連網。</p>
     </div>
 
     <div class="block" id="imp-result" hidden>
@@ -370,6 +370,7 @@
 <script src="src/rule-packs.js"></script>
 <script src="src/rule-import.js"></script>
 <script src="src/rule-samples.js"></script>
+<script src="src/pii.js"></script>
 <script src="src/ai-payload.js"></script>
 <script src="src/ai.js"></script>
 <script src="src/app.js"></script>

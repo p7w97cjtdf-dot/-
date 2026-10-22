@@ -1,61 +1,45 @@
 /*
- * 送給 Claude 的內容一律在這裡組成並遮罩個資，方便稽核與測試。
- *  - 證件編號：只留前 2 碼 (A1********)
- *  - 姓名：只留首尾字 (王○明；兩字姓名為 王○)
- *  - 地址：只留縣市與鄉鎮市區 (臺北市信義區＊＊)
+ * 送給 Claude 的內容一律在這裡組成並遮罩個資，方便稽核與測試。遮罩規則在 src/pii.js：
+ *  - 身分證／居留證：A123****89；姓名：王○明；地址：臺北市信義區[已遮蔽地址]
+ *  - 電話：0912***678、(02)****6789；Email：w***@example.com；卡號／帳號
  *  - 單筆解釋只送與該問題相關的欄位與少數非個資背景欄位，不送整筆明細
+ *  - src/ai.js 送出前會再經過 pii.guard 最後檢查一次，仍有疑似個資就停止送出
  * 出生日期、性別等仍會出現在「問題欄位本身就是它」的情況 (例如出生日期不是合法日期)，
  * 但已無法與姓名、證號連結。
  */
 (function (root, factory) {
-  const m = factory();
+  const pii = (typeof module === 'object' && module.exports) ? require('./pii.js') : root.DQ.pii;
+  const m = factory(pii);
   if (typeof module === 'object' && module.exports) module.exports = m;
   else { root.DQ = root.DQ || {}; root.DQ.aiPayload = m; }
-})(typeof self !== 'undefined' ? self : this, function () {
+})(typeof self !== 'undefined' ? self : this, function (pii) {
   'use strict';
 
-  const ID_RE = /\b[A-Z][A-Z0-9]\d{8}\b/g;
-  const ADDR_RE = /([一-鿿]{2,3}[縣市][一-鿿]{1,3}?[區鄉鎮市])[^\s」』"',，、。；;)）…]+/g;
   // 單筆解釋時可附上的背景欄位 (不含證號、生日、性別、郵遞區號、身心障礙、經濟弱勢、職業代碼)
   const CONTEXT = ['policySeq', 'txnSeq', 'termType', 'term', 'addType', 'addDate', 'exitType', 'exitDate', 'productClass', 'startDate', 'endDate',
     'productCode', 'currency', 'payFreq', 'payTerm', 'claimType', 'eventDate', 'payDate'];
 
-  // 從資料中收集要遮罩的姓名、證號；保單號碼也是「1 英文 + 9 數字」，要排除
+  // 從資料中收集要遮罩的姓名、證號，以及外觀像證號但不是個資的代碼 (保單號碼、賠案號碼、險種代號)
+  const EXEMPT_FIELDS = ['policyNo', 'claimNo', 'companyPlanCode', 'companyPolicyCode', 'productCode', 'productClass'];
   function context(res, recon) {
-    const names = new Set(), ids = new Set(), policies = new Set();
+    const names = new Set(), ids = new Set(), exempt = new Set();
     const cust = recon && recon.cust;
     for (const r of (cust && cust.rows) || []) { if (r.name) names.add(r.name.trim()); if (r.id) ids.add(r.id.trim()); }
-    for (const f of ['L', 'D']) for (const r of ((res && res.data && res.data[f]) || [])) {
-      if (r.policyNo) policies.add(r.policyNo.trim());
+    for (const recs of Object.values((res && res.data) || {})) for (const r of recs || []) {
+      for (const k of EXEMPT_FIELDS) if (r[k] && r[k].trim()) exempt.add(r[k].trim());
       if (r.idNo && r.idNo.trim() && !/^0+$/.test(r.idNo.trim())) ids.add(r.idNo.trim());
     }
+    for (const id of ids) exempt.delete(id);
     names.delete(''); ids.delete('');
-    return { names: [...names].sort((a, b) => b.length - a.length), ids, policies };
+    return { names: [...names].sort((a, b) => b.length - a.length), ids, exempt, policies: exempt };
   }
 
-  const maskId = s => s.slice(0, 2) + '*'.repeat(Math.max(0, s.length - 2));
-  const maskName = s => s.length <= 2 ? s[0] + '○' : s[0] + '○'.repeat(s.length - 2) + s[s.length - 1];
-
-  function mask(text, ctx) {
-    let s = String(text == null ? '' : text);
-    ctx = ctx || { names: [], ids: new Set(), policies: new Set() };
-    for (const id of ctx.ids) if (id.length >= 6) s = s.split(id).join(maskId(id));
-    s = s.replace(ID_RE, t => ctx.policies.has(t) ? t : maskId(t));
-    for (const n of ctx.names) if (n.length >= 2) s = s.split(n).join(maskName(n));
-    s = s.replace(ADDR_RE, (_, p) => p + '＊＊');
-    return s;
-  }
-
+  // 每次組成送出內容時累計遮罩了哪些個資 (takeCounts 取出並歸零，畫面顯示用)
+  let tally = {};
+  const mask = (text, ctx) => { const r = pii.redact(text, ctx); for (const [k, n] of Object.entries(r.counts)) tally[k] = (tally[k] || 0) + n; return r.text; };
+  const takeCounts = () => { const t = tally; tally = {}; return t; };
   // 檢查遮罩後是否仍含個資 (測試與畫面預覽用)
-  function leaks(text, ctx) {
-    const s = String(text), out = [];
-    for (const id of ctx.ids) if (s.includes(id)) out.push('證號 ' + id);
-    for (const n of ctx.names) if (n.length >= 2 && s.includes(n)) out.push('姓名 ' + n);
-    for (const t of s.match(ID_RE) || []) if (!ctx.policies.has(t)) out.push('證號 ' + t);
-    if (ADDR_RE.test(s)) out.push('地址');
-    ADDR_RE.lastIndex = 0;
-    return out;
-  }
+  const leaks = (text, ctx) => pii.scan(text, ctx).map(x => `${pii.TYPES[x.type]} ${x.sample}`);
 
   const sev = s => s === 'error' ? '錯誤' : s === 'suspect' ? '疑似異常' : '警告';
   const fileName = f => ({ L: '承保', D: '給付', C: '客戶資料', P: '商品資料' })[f] || f;
@@ -113,5 +97,5 @@
   // 4) 規則匯入：規則文件文字 + 欄位字典 + 規則格式說明；文件中若有證號也一併遮罩
   function ruleDoc(prompt) { return mask(prompt, null); }
 
-  return { mask, leaks, context, summaryData, explainData, decodeData, ruleDoc, CONTEXT };
+  return { mask, leaks, takeCounts, context, summaryData, explainData, decodeData, ruleDoc, CONTEXT, EXEMPT_FIELDS };
 });
