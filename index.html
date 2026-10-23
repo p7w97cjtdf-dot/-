@@ -138,11 +138,12 @@
 
   <!-- ================= 明細檢核 ================= -->
   <section id="view-check" class="view">
-    <div class="summary" id="summary"></div>
-    <p class="hidden-note" id="hidden-note" role="status" hidden></p>
-    <p class="summary-note hint" id="summary-note" hidden></p>
     <div class="bench">
       <div class="bench-main">
+        <div class="summary" id="summary"></div>
+        <div hidden id="tile-btns"><button id="btn-fix" class="btn cta tile-btn" type="button">一鍵修改</button><button id="btn-get-fixed" class="btn ghost tile-btn" type="button">下載改好的資料</button></div>
+        <p class="hidden-note" id="hidden-note" role="status" hidden></p>
+        <p class="summary-note hint" id="summary-note" hidden></p>
 
         <div class="ai" id="ai-box" hidden>
           <div id="ai-out" class="ai-out"></div>
@@ -151,26 +152,28 @@
         <div class="issues card">
           <div class="card-head">
             <div><h2>檢核清單</h2><p class="hint">點選項目，右側會顯示問題說明與建議修正方式</p></div>
-            <span class="count-pill" id="issue-count"></span>
-          </div>
-          <div class="list-tools">
-            <select id="f-sev" aria-label="狀況"><option value="">全部</option><option value="error">必須修改</option><option value="warning">建議確認</option><option value="suspect">請人工判斷</option></select>
-            <input id="f-q" type="search" placeholder="搜尋保單號碼或文字" aria-label="搜尋">
-            <button id="btn-fix" class="btn cta small">一鍵修改全部</button>
-            <details class="more-menu">
-              <summary>更多</summary>
-              <div class="more-pop">
-                <button id="btn-dl-fixed" class="menu-item" type="button">下載改好的資料</button>
-                <button id="btn-dl-csv" class="menu-item" type="button">下載問題清單</button>
-                <button id="btn-dl-report" class="menu-item" type="button">下載檢核報告</button>
-                <button id="btn-dl-audit" class="menu-item" type="button">匯出稽核軌跡</button>
-                <button id="btn-dl-reject" class="menu-item" type="button" hidden>下載有問題的資料列</button>
-                <button id="btn-review" class="menu-item" type="button">逐筆確認（適合手機）</button>
-                <button id="btn-ai" class="menu-item ai-btn" type="button" title="會把檢查結果送給 AI（Claude）整理；送出前會先遮蔽個資並讓你確認內容">請 AI 整理重點</button>
-                <label class="menu-field">只看這份資料<select id="f-file" aria-label="資料"><option value="">全部資料</option></select></label>
-                <select id="f-cat" aria-label="問題類型" hidden><option value="">全部問題類型</option></select>
-              </div>
-            </details>
+            <div class="head-r">
+              <span class="count-pill" id="issue-count"></span>
+              <details class="more-menu">
+                <summary>篩選・下載</summary>
+                <div class="more-pop">
+                  <p class="menu-h">篩選</p>
+                  <select id="f-sev" class="menu-input" aria-label="狀況"><option value="">全部狀況</option><option value="error">必須修改</option><option value="warning">建議確認</option><option value="suspect">請人工判斷</option></select>
+                  <input id="f-q" class="menu-input" type="search" placeholder="搜尋保單號碼或文字" aria-label="搜尋">
+                  <select id="f-file" class="menu-input" aria-label="資料"><option value="">全部資料</option></select>
+                  <select id="f-cat" aria-label="問題類型" hidden><option value="">全部問題類型</option></select>
+                  <p class="menu-h">下載</p>
+                  <button id="btn-dl-fixed" class="menu-item" type="button">下載改好的資料</button>
+                  <button id="btn-dl-csv" class="menu-item" type="button">下載問題清單</button>
+                  <button id="btn-dl-report" class="menu-item" type="button">下載檢核報告</button>
+                  <button id="btn-dl-audit" class="menu-item" type="button">匯出稽核軌跡</button>
+                  <button id="btn-dl-reject" class="menu-item" type="button" hidden>下載有問題的資料列</button>
+                  <p class="menu-h">其他</p>
+                  <button id="btn-review" class="menu-item" type="button">逐筆確認（適合手機）</button>
+                  <button id="btn-ai" class="menu-item ai-btn" type="button" title="會把檢查結果送給 AI（Claude）整理；送出前會先遮蔽個資並讓你確認內容">請 AI 整理重點</button>
+                </div>
+              </details>
+            </div>
           </div>
           <p class="focus-bar" id="focus-bar" hidden></p>
           <p class="hint action-note" id="action-note" role="status"></p>
