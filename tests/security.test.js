@@ -157,3 +157,19 @@ test('紅隊：CSP 只允許同網站程式檔與指定的內嵌提示，不允�
   const vercel = JSON.parse(read('vercel.json'));
   assert.ok(JSON.stringify(vercel).includes("frame-ancestors 'none'"));
 });
+
+test('上傳：CSV 依標題列判斷是哪一份申報檔，不看檔名', () => {
+  const L = all.layouts;
+  const detail = Object.fromEntries(['L', 'D', 'CL', 'CD', 'AL', 'AD'].filter(k => L[k]).map(k => [k, L[k]]));
+  const csv = (lay, half) => lay.fields.map(f => half ? f.name.replace(/（/g, '(').replace(/）/g, ')') : f.name).join(',') + '\n' + lay.fields.map(f => '0'.repeat(f.len)).join(',') + '\n';
+  for (const k of Object.keys(detail)) {
+    assert.strictEqual(C.csvLayout(csv(detail[k]), detail), k, k);
+    assert.strictEqual(C.csvLayout(csv(detail[k], true), detail), k, k + ' 半形括號');
+    assert.strictEqual(C.csvLayout('﻿' + detail[k].fields.map(f => f.key).join(',') + '\n', detail), k, k + ' 英文欄位代號');
+  }
+  // 沒有標題列：欄位數只符合一種檔案
+  assert.strictEqual(C.csvLayout(L.L.fields.map(f => '1'.repeat(f.len)).join(',') + '\n', detail), 'L');
+  // 客戶、商品資料之類對不上的標題：不猜
+  assert.strictEqual(C.csvLayout('客戶編號,姓名,身分證號,生日,性別,地址,電話,Email,職業,年收入,婚姻,子女,備註\n', detail), null);
+  assert.strictEqual(C.csvLayout('', detail), null);
+});

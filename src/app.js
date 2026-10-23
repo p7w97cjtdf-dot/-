@@ -108,7 +108,9 @@
   const SLOTS = ['L', 'D', 'prior', 'control', 'statement', 'products', 'customers', 'CL', 'CD', 'AL', 'AD'];
   const DETAIL = ['L', 'D', 'CL', 'CD', 'AL', 'AD'];  // 固定長度的明細檔 (依規則集檢查)
   function setFile(fid, name, text, fromSheet) {
-    if (DETAIL.includes(fid) && /\.csv$/i.test(name)) { text = DQ.csvToFixedWidth(text, rs.layouts[fid]); name = name.replace(/\.csv$/i, '.txt'); }
+    // CSV 依欄位定義轉成固定長度 (去年保單資料和保單資料同格式)
+    const lay = DETAIL.includes(fid) ? rs.layouts[fid] : fid === 'prior' ? rs.layouts.L : null;
+    if (lay && /\.csv$/i.test(name)) { text = DQ.csvToFixedWidth(text, lay); name = name.replace(/\.csv$/i, '.txt'); }
     state.files[fid] = { name, text, fromSheet: !!fromSheet };
     audit('放入資料', `${SLOT_NAME[fid] || fid}：${name}（${text.split(/\r?\n/).filter(Boolean).length.toLocaleString()} 行）`, text);
     $('#name-' + fid).textContent = name;
@@ -180,6 +182,7 @@
   }
   // 上方的大框：Excel 依工作表名稱分配；文字檔、CSV 依檔名判斷是哪一份資料
   // 檔名看不出來時，依第一行的長度判斷是哪一種申報檔
+  const DETAIL_LAYOUTS = Object.fromEntries(DETAIL.filter(k => rs.layouts[k]).map(k => [k, rs.layouts[k]]));
   const BY_LENGTH = Object.fromEntries(DETAIL.filter(k => rs.layouts[k]).map(k => [rs.layouts[k].recordLength, k]));
   // 大檔案提醒：實測 56 MB (14.7 萬筆) 約用 600 MB 記憶體，約為檔案大小的 11 倍 (安全測試 T07)
   const BIG = 40 * 1048576;
@@ -210,18 +213,22 @@
     for (const f of files) {
       if (tooBig(f)) continue;
       if (BOOK.test(f.name)) { readWorkbook(f); continue; }
+      // 先看內容 (CSV 的標題列、文字檔每行的長度) 判斷是哪一份申報檔，看不出來才看檔名；
+      // 保單資料的檔名寫著「去年」時放到去年保單資料
       let slot = guessSlot(f.name, null);
-      if (!slot && /\.txt$/i.test(f.name)) {
+      if (/\.(txt|csv)$/i.test(f.name)) {
         const buf = await f.arrayBuffer();
         if (looksBinary(buf)) { notText(f.name); continue; }
-        const text = decodeText(buf), first = text.split(/\r?\n/)[0];
-        slot = BY_LENGTH[first.length] || null;
-        if (slot) { setFile(slot, f.name, text); run(); continue; }
+        const text = decodeText(buf);
+        const byContent = /\.csv$/i.test(f.name) ? DQ.csvLayout(text, DETAIL_LAYOUTS) : BY_LENGTH[text.split(/\r?\n/)[0].length] || null;
+        if (byContent) slot = byContent === 'L' && slot === 'prior' ? 'prior' : byContent;
+        if (slot) { setFile(slot, f.name, text); run(); } else unknown.push(f.name);
+        continue;
       }
       if (slot) readFile(slot, f); else unknown.push(f.name);
     }
     if (unknown.length) {
-      $('#sample-note').textContent = `看不出「${unknown.join('」「')}」是哪一份資料，請展開下方「分別放入各份資料」，放進對應的格子。`;
+      $('#sample-note').textContent = `看不出「${unknown.join('」「')}」是哪一份資料（CSV 的第一列要是欄位名稱，例如「公司代號、保單編號…」；文字檔每行長度要符合申報格式），請展開下方「分別放入各份資料」，放進對應的格子。`;
       document.querySelector('details.more').open = true;
     }
   }

@@ -125,6 +125,26 @@
     }).join('')).join('\n') + '\n';
   }
 
+  // CSV 是哪一種申報檔：看標題列對到哪一份檔案的欄位名稱 (至少八成欄位對得上，取對得最多的)；
+  // 沒有標題列 (第一列就是資料) 時，欄位數剛好只等於一種檔案的欄位數才算。看不出來時回傳 null
+  function csvLayout(text, layouts) {
+    const rows = parseCSV(String(text).replace(/^\uFEFF/, '').slice(0, 65536));
+    if (!rows.length) return null;
+    const norm = h => String(h).trim().replace(/（/g, '(').replace(/）/g, ')').replace(/\s+/g, '');
+    const header = new Set(rows[0].map(norm));
+    let best = null, bestScore = 0;
+    for (const [k, L] of Object.entries(layouts)) {
+      if (!L || !L.fields) continue;
+      const hit = L.fields.filter(f => header.has(norm(f.key)) || header.has(norm(f.name))).length;
+      const score = hit / L.fields.length;
+      if (score >= 0.8 && score > bestScore) { best = k; bestScore = score; }
+    }
+    if (best) return best;
+    if (/[\u4e00-\u9fff]/.test(rows[0].join(''))) return null;   // 第一列是標題 (例如客戶、商品資料)，但對不上任何申報檔
+    const n = rows[0].length, same = Object.entries(layouts).filter(([, L]) => L && L.fields && L.fields.length === n);
+    return same.length === 1 ? same[0][0] : null;
+  }
+
   function recordsToCSV(layout, records) {
     const esc = v => /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
     const head = layout.fields.map(f => f.key).join(',');
@@ -353,5 +373,5 @@
   }
 
   return { isValidDate, toDate, fmtDate, addYearsMinusDay, monthsBetween, ageAt, fmtAmount, num, big, isZero,
-    MAX_ISSUES, pad, buildLine, parseFixedWidth, parseCSV, csvToFixedWidth, recordsToCSV, validate, applyFixes, summarize };
+    MAX_ISSUES, pad, buildLine, parseFixedWidth, parseCSV, csvToFixedWidth, csvLayout, recordsToCSV, validate, applyFixes, summarize };
 });
