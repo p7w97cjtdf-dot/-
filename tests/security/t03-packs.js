@@ -38,10 +38,10 @@ async function scenario(name, opts, act) {
   };
   const reload = async t => { await t.page.evaluate(() => DQ.app.loadOfficial()); await t.page.waitForTimeout(1000); };
   out.push(await scenario('官方包被竄改 (雜湊不符)', { serve: serve({ packs: [{ file: 'p.json', sha256: sha(text + ' ') }] }) }, reload));
-  out.push(await scenario('官方包雜湊相符', { serve: serve({ packs: [{ file: 'p.json', sha256: sha(text) }] }) }, reload));
+  out.push(await scenario('官方包雜湊相符，但還沒有簽章公鑰', { serve: serve({ packs: [{ file: 'p.json', sha256: sha(text) }] }) }, reload));
   out.push(await scenario('官方包停用不存在的檢查', { serve: serve({ packs: ['bad.json'] }) }, reload));
   // 數位簽章：有公鑰時只接受核准者簽過的更新包
-  const kp = () => { const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }); const j = publicKey.export({ format: 'jwk' }); return { privateKey, pk: { keyId: crypto.createHash('sha256').update(j.x + j.y).digest('hex').slice(0, 16), key: { kty: j.kty, crv: j.crv, x: j.x, y: j.y } } }; };
+  const kp = () => { const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }); const j = publicKey.export({ format: 'jwk' }); return { privateKey, pk: { keyId: crypto.createHash('sha256').update(JSON.stringify([j.x, j.y])).digest('hex').slice(0, 16), key: { kty: j.kty, crv: j.crv, x: j.x, y: j.y } } }; };
   const A = kp(), B = kp();
   const sign = (k, t) => crypto.sign('sha256', Buffer.from(t), { key: k, dsaEncoding: 'ieee-p1363' }).toString('base64');
   const good = { file: 'p.json', sha256: sha(text), sig: sign(A.privateKey, text) };

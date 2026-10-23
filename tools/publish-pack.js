@@ -31,7 +31,8 @@ if (process.argv[2] === '--check') {
     let text; try { text = fs.readFileSync(path.join(dir, name), 'utf8'); } catch (x) { errs.push(`${name}：找不到檔案`); continue; }
     if (typeof e === 'string' || !e.sha256) errs.push(`${name}：沒有登記 SHA-256，請用 tools/publish-pack.js 重新發布`);
     else if (sha(text) !== e.sha256) errs.push(`${name}：內容和登記的 SHA-256 不同`);
-    if (pub && (typeof e === 'string' || !verifySig(text, e.sig))) errs.push(`${name}：沒有簽章或簽章不對`);
+    if (!pub) errs.push(`${name}：還沒有簽章公鑰 (rules/updates/public-key.json)，工具不會套用沒有簽章的官方更新包`);
+    else if (typeof e === 'string' || !verifySig(text, e.sig)) errs.push(`${name}：沒有簽章或簽章不對`);
     errs.push(...problems(text, name).bad.map(b => `${name}：${b}`));
   }
   if (errs.length) { console.error('官方更新包檢查沒有通過：\n- ' + errs.join('\n- ')); process.exit(1); }
@@ -47,7 +48,8 @@ const text = fs.readFileSync(file, 'utf8');
 const { pack, bad } = problems(text, file);
 if (bad.length) { console.error('更新包沒有通過檢查：\n- ' + bad.join('\n- ')); process.exit(1); }
 const entry = { file: path.basename(file), sha256: sha(text) };
-if (pub) {
+if (!pub) { console.error('還沒有簽章公鑰：請先由核准者執行 node tools/pack-keygen.js 產生金鑰。工具不會套用沒有簽章的官方更新包。'); process.exit(1); }
+{
   if (!keyPath) { console.error('已設定簽章公鑰，發布時必須用私鑰簽章：加上 --key <私鑰路徑>，或設定環境變數 PACK_SIGNING_KEY。'); process.exit(1); }
   const key = crypto.createPrivateKey(fs.readFileSync(keyPath.replace(/^~(?=$|\/)/, require('os').homedir())));
   entry.sig = crypto.sign('sha256', Buffer.from(text), { key, dsaEncoding: 'ieee-p1363' }).toString('base64');
@@ -57,4 +59,4 @@ if (pub) {
 const idx = JSON.parse(fs.readFileSync(idxFile, 'utf8'));
 idx.packs = (idx.packs || []).filter(e => (typeof e === 'string' ? e : e.file) !== entry.file).concat(entry);
 fs.writeFileSync(idxFile, JSON.stringify(idx, null, 2) + '\n');
-console.log(`已登記 ${entry.file}：${packs.summary(pack)}${entry.sig ? '（已簽章）' : '（尚未設定簽章公鑰，只登記 SHA-256）'}${pack.disable.length ? `\n注意：會停用 ${pack.disable.length} 項內建檢查 (${pack.disable.join('、')})，請法遵確認。` : ''}`);
+console.log(`已登記 ${entry.file}：${packs.summary(pack)}（已簽章）${pack.disable.length ? `\n注意：會停用 ${pack.disable.length} 項內建檢查 (${pack.disable.join('、')})，請法遵確認。` : ''}`);

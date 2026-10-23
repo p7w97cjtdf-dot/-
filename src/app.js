@@ -41,19 +41,25 @@
     const h = state.disabledCount || {}, ids = Object.keys(h), n = ids.reduce((t, k) => t + h[k], 0);
     return n ? `注意：法規更新停用了 ${ids.length} 項檢查（${ids.slice(0, 5).join('、')}${ids.length > 5 ? '…' : ''}），隱藏了 ${n} 個問題；如果更新包的來源不確定，請到「法規更新」關掉後重新檢查。` : '';
   }
-  // 官方更新包的簽章公鑰 (rules/updates/public-key.json)：有公鑰時，只套用用對應私鑰簽過的更新包。
-  // 這台裝置曾經看過公鑰、之後卻讀不到或換了一把，就不套用任何官方更新包 (避免被拿掉公鑰繞過簽章)
+  // 官方更新包的簽章公鑰 (rules/updates/public-key.json)：只套用用對應私鑰簽過的更新包；取不到公鑰就一律不套用 (fail closed)。
+  // PACK_KEY_PINS：核准的公鑰指紋固定在程式裡 (產生金鑰後由 tools/pack-keygen.js 印出，填進來並經審核發布)。
+  // 有填時，網站上的公鑰指紋必須在清單中；沒填時，第一次看到的公鑰記在這台裝置，之後被拿掉或更換都不套用。
+  const PACK_KEY_PINS = [];
   const b64 = s => Uint8Array.from(atob(String(s)), c => c.charCodeAt(0));
+  const keyIdOf = async k => (await sha256(JSON.stringify([k.x, k.y]))).slice(0, 16);   // 和 tools/pack-keygen.js 同一算法
   async function packKey(base) {
     let seen = null; try { seen = localStorage.getItem('dq-pack-key'); } catch (e) { /* ignore */ }
     let k = null;
     try { const r = await fetch(base + 'rules/updates/public-key.json', { cache: 'no-cache' }); if (r.ok) k = await r.json(); } catch (e) { k = null; }
-    state.packKey = k && k.key ? k.keyId : null; state.packKeyNew = null;
-    if (!k || !k.key) return seen ? { reject: `這台裝置之前看過簽章公鑰（${seen}），現在卻讀不到，為了安全不套用` } : {};
-    if (seen && seen !== k.keyId) { state.packKeyNew = k.keyId; return { reject: `簽章公鑰和這台裝置之前看過的不同（${seen} → ${k.keyId}）；若是正式更換，請在「法規更新」頁確認` }; }
+    state.packKey = null; state.packKeyNew = null;
+    if (!k || !k.key || !k.key.x || !k.key.y) return { reject: seen ? `這台裝置之前看過簽章公鑰（${seen}），現在卻讀不到，為了安全不套用` : '還沒有設定核准者的簽章公鑰，官方更新包一律不套用' };
+    const id = await keyIdOf(k.key);   // 指紋自己算，不採用檔案裡寫的 keyId
+    if (PACK_KEY_PINS.length && !PACK_KEY_PINS.includes(id)) return { reject: `簽章公鑰（${id}）不是這個版本核准的公鑰` };
+    if (!PACK_KEY_PINS.length && seen && seen !== id) { state.packKeyNew = id; return { reject: `簽章公鑰和這台裝置之前看過的不同（${seen} → ${id}）；若是正式更換，請在「法規更新」頁確認` }; }
     try {
-      const key = await crypto.subtle.importKey('jwk', Object.assign({ ext: true }, k.key), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
-      try { localStorage.setItem('dq-pack-key', k.keyId); } catch (e) { /* ignore */ }
+      const key = await crypto.subtle.importKey('jwk', { kty: 'EC', crv: 'P-256', x: k.key.x, y: k.key.y, ext: true }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+      try { localStorage.setItem('dq-pack-key', id); } catch (e) { /* ignore */ }
+      state.packKey = id;
       return { key };
     } catch (e) { return { reject: '簽章公鑰格式不正確' }; }
   }
@@ -73,7 +79,7 @@
             const text = await (await fetch(b + 'rules/updates/' + encodeURIComponent(f), { cache: 'no-cache' })).text();
             if (want && await sha256(text) !== String(want).toLowerCase()) { state.officialRejected.push(`${f}：內容和發布時登記的雜湊值不同`); continue; }
             if (signer.reject) { state.officialRejected.push(`${f}：${signer.reject}`); continue; }
-            if (signer.key && !(ent && ent.sig && await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, signer.key, b64(ent.sig), new TextEncoder().encode(text)))) { state.officialRejected.push(`${f}：沒有核准者的簽章，或簽章不對`); continue; }
+            if (!(signer.key && ent && ent.sig && await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, signer.key, b64(ent.sig), new TextEncoder().encode(text)))) { state.officialRejected.push(`${f}：沒有核准者的簽章，或簽章不對`); continue; }
             const p = DQ.rulePacks.normalize(JSON.parse(text), f);
             const v = DQ.rulePacks.validate(p, Object.assign({}, BASE, { catalog: BASE.catalog.concat(DQ.rulesets.finance.catalog, DQ.master.catalog, DQ.anomaly.catalog) }), packs);
             if (v.errors.length) { state.officialRejected.push(`${f}：${v.errors.join('；')}`); continue; }
@@ -128,6 +134,8 @@
     if (!window.XLSX) { $('#sample-note').textContent = '讀取 Excel 的元件沒有載入成功：工具的 vendor 資料夾可能不完整。請重新下載整個工具資料夾，或改用網址開啟。'; return; }
     let wb;
     const buf = await file.arrayBuffer();
+    const zp = DQ.workbook.zipProblem(buf);
+    if (zp) { $('#sample-note').textContent = `「${file.name}」${zp}，為避免瀏覽器記憶體不足，沒有讀取。請在 Excel 打開後另存新檔，或把資料拆成幾個檔案。`; audit('拒絕檔案', `${file.name}（${zp}）`); return; }
     try { wb = XLSX.read(buf, { type: 'array' }); }
     catch (e) { $('#sample-note').textContent = `「${file.name}」無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次。`; return; }
     const { got, from, blank } = DQ.workbook.slots(XLSX, wb);
@@ -156,6 +164,7 @@
   }
   const notText = name => { $('#sample-note').textContent = `「${name}」看起來不是文字檔（可能是壓縮檔、圖片或其他程式的檔案），沒有讀取。申報資料請放 .txt、.csv 或 Excel 檔。`; };
   async function readFile(fid, file) {
+    if (tooBig(file)) return;
     if (BOOK.test(file.name)) { readWorkbook(file); return; }
     const buf = await file.arrayBuffer();
     if (looksBinary(buf)) { notText(file.name); return; }
@@ -185,10 +194,21 @@
     el.textContent = `「${big.map(f => `${f.name}（${mb(f.size)} MB）`).join('」「')}」檔案較大，檢查約需 ${need.toLocaleString()} MB 記憶體${dev ? `；這台裝置約有 ${dev} GB 記憶體` : ''}。` +
       (tight ? '可能會變慢或沒有回應，建議拆成每個 50 MB 以內的檔案分開檢查，並先關掉其他分頁。' : '記憶體 4 GB 以下的電腦建議拆成每個 50 MB 以內的檔案分開檢查。');
   }
+  // 硬性上限：超過就不讀取 (避免瀏覽器分頁耗盡記憶體)。實測 56 MB 約用 600 MB 記憶體，
+  // 200 MB 約 2.2 GB，已接近一般瀏覽器分頁的上限；大型申報檔請拆檔檢查
+  const MAX_FILE = 200 * 1048576;
+  function tooBig(file) {
+    if (!file || file.size <= MAX_FILE) return false;
+    const mb = Math.round(file.size / 1048576);
+    $('#sample-note').textContent = `「${file.name}」有 ${mb} MB，超過單檔 200 MB 上限，為避免瀏覽器記憶體不足，沒有讀取。請拆成較小的檔案再放入。`;
+    audit('拒絕檔案', `${file.name}（${mb} MB，超過 200 MB 上限）`);
+    return true;
+  }
   async function readMany(files) {
-    sizeNote(files);
+    sizeNote([...files].filter(f => f.size <= MAX_FILE));
     const unknown = [];
     for (const f of files) {
+      if (tooBig(f)) continue;
       if (BOOK.test(f.name)) { readWorkbook(f); continue; }
       let slot = guessSlot(f.name, null);
       if (!slot && /\.txt$/i.test(f.name)) {
@@ -291,7 +311,7 @@
     const ICON = { err: '!', warn: '?', suspect: '…', ok: '✓', fix: '↺' };
     const tile = (cls, k, v, sub) => `<div class="tile ${cls}"><div><span class="k">${k}</span><span class="v">${v}</span><span class="s">${sub}</span></div><span class="tile-i" aria-hidden="true">${ICON[cls] || ''}</span></div>`;
     $('#summary').innerHTML =
-      tile(n('error') ? 'err' : 'ok', SEV.error, n('error'), n('error') ? LB.SEV_HINT.error : '沒有必須修改的地方，可以送出') +
+      tile(n('error') ? 'err' : 'ok', SEV.error, n('error'), n('error') ? LB.SEV_HINT.error : '目前沒有必須修改的地方') +
       tile(n('warning') ? 'warn' : 'ok', SEV.warning, n('warning'), LB.SEV_HINT.warning) +
       tile(n('suspect') ? 'suspect' : 'ok', SEV.suspect, n('suspect'), LB.SEV_HINT.suspect) +
       tile('fix', '可以一鍵修改', fixable, '工具知道正確的值');
@@ -351,7 +371,7 @@
         </div>
         <div class="issue-side">${i.fix ? `<span class="hint">建議改成</span><b class="mono">${esc(String(i.fix.value).slice(0, 24))}</b>${fixable ? '<span class="pill">可一鍵修改</span>' : ''}` : ''}</div>
       </div>`;
-    }).join('') + (more > 0 ? `<p class="empty">還有 ${more.toLocaleString()} 項沒有列出。請用上方的篩選縮小範圍，或按「下載問題清單」查看全部。</p>` : '') : `<p class="empty">${state.all.length ? '沒有符合條件的問題' : '沒有發現任何問題，資料可以送出。'}</p>`;
+    }).join('') + (more > 0 ? `<p class="empty">還有 ${more.toLocaleString()} 項沒有列出。請用上方的篩選縮小範圍，或按「下載問題清單」查看全部。</p>` : '') : `<p class="empty">${state.all.length ? '沒有符合條件的問題' : '目前的檢核沒有發現問題；送件前仍請依正式手冊與主管機關規範確認。'}</p>`;
   }
   // 行號：文字檔為第 N 筆；由 Excel 匯入時換算成 Excel 列號 (第 1 列為標題)；CSV 工作表為檔案中的列號
   function rowLabel(i) {
@@ -793,6 +813,27 @@
       (on.length ? `另套用法規更新：${on.map(x => x.pack.name + (x.pack.version ? ` 第 ${x.pack.version} 版` : '')).join('、')}。` : '');
   }
   activeRules(); renderVersion();
+  // 送給 AI 之前：顯示遮蔽後的實際內容，使用者按「送出」才送 (可選這次開啟期間不再詢問)
+  DQ.ai.confirmSend = (text, counts) => new Promise(resolve => {
+    let skip = false; try { skip = sessionStorage.getItem('dq-ai-preview-skip') === '1'; } catch (e) { /* ignore */ }
+    if (skip) { audit('送出給 AI', `${text.length.toLocaleString()} 字（已設定這次開啟期間不再詢問）`); return resolve(true); }
+    const d = $('#ai-preview'), desc = DQ.pii.describe(counts);
+    $('#ai-preview-note').textContent = `共 ${text.length.toLocaleString()} 字。${desc ? `送出前已遮蔽：${desc}。` : '沒有偵測到需要遮蔽的個資。'}遮蔽無法保證百分之百完整，請確認沒有不該送出的資料。`;
+    $('#ai-preview-text').textContent = text;
+    $('#ai-preview-skip').checked = false;
+    const done = ok => {
+      $('#ai-preview-yes').onclick = $('#ai-preview-no').onclick = d.oncancel = null;
+      if (ok && $('#ai-preview-skip').checked) { try { sessionStorage.setItem('dq-ai-preview-skip', '1'); } catch (e) { /* ignore */ } }
+      if (d.open) d.close();
+      audit('送出給 AI', ok ? `${text.length.toLocaleString()} 字，使用者確認後送出` : '使用者取消，沒有送出');
+      resolve(ok);
+    };
+    $('#ai-preview-yes').onclick = () => done(true);
+    $('#ai-preview-no').onclick = () => done(false);
+    d.oncancel = e => { e.preventDefault(); done(false); };
+    if (d.showModal) d.showModal(); else resolve(window.confirm('要把遮蔽後的內容送給 AI 嗎？'));
+  });
+
   // AI 安全自我測試 (真正的模型)：結果記在畫面與稽核軌跡
   state.selfTests = [];
   $('#btn-ai-selftest').onclick = async () => {

@@ -108,6 +108,7 @@
   // ---------- 匯入／下載 ----------
   $('#file-pack').addEventListener('change', async e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    if (f.size > 2 * 1048576) return note('#pack-note', '規則更新包超過 2 MB，沒有讀取；請確認內容，或拆成較小的更新包。');
     try {
       const pack = P.normalize(JSON.parse(await f.text()), f.name.replace(/\.json$/i, ''));
       const base = Object.assign({}, app.base, { catalog: allCatalog() });

@@ -180,7 +180,7 @@ npm run bench     # 計時：試用資料完整檢核一次的秒數 (另含 1 �
 
 **官方更新包的簽章與審核**：
 
-1. **產生簽章金鑰（只做一次）**：由負責核准法規更新的人在自己的電腦執行 `node tools/pack-keygen.js ~/dq-pack-signing-key.pem`。私鑰留在自己電腦（不可放進 repo），把產生的 `rules/updates/public-key.json` 提交。之後工具只套用用這把私鑰簽過的官方更新包。
+1. **產生簽章金鑰（只做一次）**：由負責核准法規更新的人在自己的電腦執行 `node tools/pack-keygen.js ~/dq-pack-signing-key.pem`。私鑰留在自己電腦（不可放進 repo），把產生的 `rules/updates/public-key.json` 提交，並把印出的公鑰指紋填進 `src/app.js` 的 `PACK_KEY_PINS`。之後工具只套用用這把私鑰簽過的官方更新包；沒有公鑰時一律不套用官方更新包。
 2. **發布**：`node tools/publish-pack.js rules/updates/<檔名>.json --key ~/dq-pack-signing-key.pem`，會檢查格式、登記 SHA-256 並簽章。
 3. **開啟 GitHub 分支保護**：GitHub 的 repository → Settings → Branches → Add branch ruleset（或 Add rule），目標 `main`，勾選：
    - Require a pull request before merging，Required approvals 1，並勾 Require review from Code Owners（`.github/CODEOWNERS` 指定更新包、公鑰與驗證程式的負責人）

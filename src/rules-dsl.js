@@ -30,6 +30,22 @@
   const FN_TEXT = { age: '足歲', years: '相差年數', days: '相差天數', addYearsMinusDay: '加年數減一天', amount: '金額(元)', num: '數值' };
 
   // ---------- 驗證 ----------
+  // matches 的正規表示式來自自訂規則、更新包或 AI，是不可信的輸入：只允許簡單、長度有限的格式，
+  // 不允許分組、交替、反向參照與 * + ? 等不定長量詞，避免寫法不好的式樣讓瀏覽器卡住 (ReDoS)
+  function safeRegex(source) {
+    const s = String(source == null ? '' : source);
+    if (!s || s.length > 120 || /[()|*+?]/.test(s) || /\\[1-9]/.test(s)) return null;
+    const qs = [...s.matchAll(/\{(\d{1,3})(?:,(\d{1,3}))?\}/g)];
+    if ((s.match(/\{/g) || []).length !== qs.length || (s.match(/\}/g) || []).length !== qs.length) return null;
+    let ranges = 0;
+    for (const q of qs) {
+      const min = +q[1], max = q[2] == null ? min : +q[2];
+      if (min > 500 || max > 500 || max < min) return null;
+      if (q[2] != null) ranges++;
+    }
+    if (ranges > 1) return null;
+    try { return new RegExp(s); } catch (e) { return null; }
+  }
   function validateRule(rule, layouts) {
     const errs = [];
     const lay = layouts[rule.file];
@@ -65,7 +81,7 @@
       if (c.pos && !(Array.isArray(c.pos) && c.pos.length === 2 && c.pos.every(Number.isInteger) && c.pos[0] >= 1 && c.pos[1] >= c.pos[0])) errs.push('pos 應為 [起, 迄]');
       if (['in', 'notIn'].includes(c.op) && !Array.isArray(c.values)) errs.push(`${c.op} 需要 values 陣列`);
       if (!NO_VALUE.includes(c.op) && !['in', 'notIn'].includes(c.op) && c.value == null && c.ref == null) errs.push(`${c.op} 需要 value 或 ref`);
-      if (c.op === 'matches') { try { if (String(c.value).length > 200) throw 0; new RegExp(c.value); } catch (e) { errs.push('matches 的格式不正確'); } }
+      if (c.op === 'matches' && !safeRegex(c.value)) errs.push('matches 的格式不安全或不支援：只能用簡單格式 (例如 ^[A-Z]\\d{9}$)，不能用括號、|、*、+、? 與反向參照，重複次數上限 500');
     };
     if (rule.when) walk(rule.when, 0);
     if (rule.assert) walk(rule.assert, 0);
@@ -117,7 +133,7 @@
       case 'isZero': return /^[0\s]*$/.test(String(v)) || Number(v) === 0;
       case 'notZero': return !(/^[0\s]*$/.test(String(v)) || Number(v) === 0);
       case 'isDate': return C.isValidDate(String(v));
-      case 'matches': return new RegExp(c.value).test(String(v));
+      case 'matches': { const re = safeRegex(c.value), t = String(v); return re && t.length <= 1000 ? re.test(t) : null; }
       case 'startsWith': return String(v).trim().startsWith(String(other));
       case 'in': return c.values.some(x => eqv(v, x));
       case 'notIn': return !c.values.some(x => eqv(v, x));
@@ -202,5 +218,5 @@
     return { when: rule.when ? text(rule.when) : '', assert: text(rule.assert) };
   }
 
-  return { OPS, FNS, validateRule, evalCond, extend, runRules, describe, fieldsOf };
+  return { OPS, FNS, safeRegex, validateRule, evalCond, extend, runRules, describe, fieldsOf };
 });

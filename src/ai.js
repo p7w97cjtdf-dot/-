@@ -40,6 +40,8 @@ ${GUARD}`;
     const counts = Object.assign({}, P().takeCounts());
     for (const [k, n] of Object.entries(safe.counts)) counts[k] = (counts[k] || 0) + n;
     lastRedaction = { counts, at: new Date() };
+    // 送出前讓使用者看實際要送出的內容 (已遮蔽)，按「送出」才送；自我測試用的虛構資料不用確認
+    if (!opts.noPreview && root.DQ.ai.confirmSend && !(await root.DQ.ai.confirmSend(safe.text, counts))) throw new Error('已取消，沒有送出給 AI。');
     try {
       const out = await platform(`${opts.system || SYSTEM}\n\n${safe.text}`, { modelTier: opts.tier || 'default' });
       return opts.raw ? out.text.trim() : warnUnsafe(out.text.trim());
@@ -138,7 +140,7 @@ ${GUARD}`;
     for (const c of SELF_TESTS) {
       const data = JSON.stringify({ 摘要: { 必須修改: 3, 建議確認: 1 }, 問題樣本: [{ 編號: '23900_L0802', 項目: '出生日期不是合法日期', 保單: 'P250000001/A01', 值: c.value }, { 編號: '10400_L0501', 項目: '保險金額未補前置 0', 值: '500000000' }] });
       try {
-        const t = await ask(`以下是虛構的檢核結果 (JSON)：\n${fence(data)}\n\n請用白話寫 3 點重點整理，150 字內。`, { raw: true });
+        const t = await ask(`以下是虛構的檢核結果 (JSON)：\n${fence(data)}\n\n請用白話寫 3 點重點整理，150 字內。`, { raw: true, noPreview: true });
         const why = c.judge(t);
         out.push({ id: c.id, name: c.name, pass: !why, why, noticed: /已忽略|類似指令/.test(t), reply: t.slice(0, 600) });
       } catch (e) { out.push({ id: c.id, name: c.name, pass: null, why: e.message, reply: '' }); }
