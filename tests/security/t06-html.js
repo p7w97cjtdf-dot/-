@@ -33,7 +33,7 @@ const aiRules = JSON.stringify({ rules: [{ id: 'U001', name: X('ai-name'), file:
   await step('問題清單與明細', async () => { const ids = await page.evaluate(() => DQ.app.state.all.filter(i => /</.test(i.policy || '') || /</.test(String(i.value))).slice(0, 5).map(i => i.id)); for (const id of ids) await page.evaluate(i => DQ.app.select(i, true), id); });
   await step('AI 單筆解釋 (回覆含標記)', async () => { await page.evaluate(() => { window.__aiReply = '<b id=inj-aiout>粗體</b><script>window.__x=["ai"]</script>'; }); await page.click('#btn-explain'); });
   await step('AI 重點整理', async () => { await page.click('#btn-ai'); });
-  await step('手機複核模式', async () => { const b = await page.$('.review-start button, #btn-review'); if (b) await b.click(); await page.waitForTimeout(300); await page.keyboard.press('Escape'); });
+  await step('手機複核模式', async () => { await page.click('#btn-review'); await page.waitForTimeout(300); await page.keyboard.press('Escape'); });
   await step('退件通知', async () => { await page.evaluate(() => DQ.app.showTab('decode')); await page.fill('#dec-text', `錯誤 10400 ${'<b id=inj-dec>x</b>'}`); await page.click('#btn-decode'); });
   await step('法規更新：匯入更新包', async () => { await page.evaluate(() => DQ.app.showTab('updates')); await page.setInputFiles('#file-pack', path.join(TMP, 'inj-pack.json')); });
   await step('用 AI 轉換規則：預覽', async () => { await page.evaluate(r => { window.__aiReply = r; DQ.app.showTab('import'); }, aiRules); await page.fill('#rule-text', '規則：保單號碼不可空白。' + X('doc')); await page.click('#btn-convert'); await page.waitForTimeout(800); });

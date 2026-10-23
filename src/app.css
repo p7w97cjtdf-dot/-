@@ -823,3 +823,55 @@ body:not(.no-data) main { padding-top: 20px; }
 .ai-preview-skip { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--mut); }
 .ai-preview-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 main > section.hero.home-only { margin-top: 0; }
+
+/* ===== 檢核結果頁精簡版 (依 H.index：三張卡、檢核清單、問題說明) ===== */
+#summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* 手機也直接顯示清單與說明 (不再需要「看全部清單」) */
+body:not(.show-list) #view-check .issues { display: block; }
+@media (max-width: 720px) { body:not(.show-list) #view-check .bench-side { display: block; } }
+.list-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }
+.list-tools select { width: auto; min-width: 110px; }
+.list-tools input[type=search] { flex: 1 1 160px; min-width: 0; }
+.list-tools .btn.small { min-height: 38px; padding: 6px 14px; font-size: 14px; }
+.more-menu { position: relative; }
+.more-menu > summary { list-style: none; cursor: pointer; min-height: 38px; display: inline-flex; align-items: center; padding: 6px 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: #fff; }
+.more-menu > summary::-webkit-details-marker { display: none; }
+.more-menu > summary::after { content: "▾"; margin-left: 6px; font-size: 11px; color: var(--mut); }
+.more-menu[open] > summary { border-color: var(--fg); }
+.more-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 15; min-width: 220px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .12); padding: 6px; display: flex; flex-direction: column; }
+.menu-item { text-align: left; background: none; border: 0; border-radius: 6px; padding: 10px 12px; font: inherit; font-size: 14px; color: var(--fg); cursor: pointer; min-height: 40px; }
+.menu-item:hover, .menu-item:focus-visible { background: var(--accent-soft); }
+.menu-field { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; font-size: 12px; color: var(--mut); border-top: 1px solid var(--line-soft); margin-top: 4px; }
+.action-note:empty { display: none; }
+.action-note { margin: 8px 16px 0; }
+.focus-bar { margin: 8px 16px 0; }
+/* 清單列 */
+.issue-main { gap: 4px; align-items: flex-start; }
+.issue-main .sev-tag { margin-bottom: 2px; }
+.issue-where { margin: 0; font-size: 12px; font-weight: 700; color: #999; }
+.issue-msg { margin: 0; font-size: 15px; font-weight: 700; color: var(--fg); line-height: 1.45; }
+.issue-side { font-size: 13px; color: #555; flex-direction: row; align-items: baseline; gap: 4px; white-space: nowrap; }
+.issue-side b { color: var(--cta-ink2); }
+/* 問題說明 */
+.d-meta { margin: 8px 0 0; font-size: 13px; color: var(--mut); font-weight: 400; }
+.d-meta .mono, .d-meta .fixval { color: var(--fg); }
+.ai-explain { margin-top: 4px; }
+@media (max-width: 720px) {
+  #summary { grid-template-columns: minmax(0, 1fr); }
+  .issue { flex-direction: row; align-items: center; }
+  .issue-side { max-width: 40%; white-space: normal; flex-direction: column; align-items: flex-end; }
+  .more-pop { right: auto; left: 0; }
+}
+#view-check #summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+body:not(.no-data) details.more { display: none; }
+body:not(.no-data) #sample-note { font-size: 12px; }
+.list-tools select, .list-tools input[type=search] { height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; font: inherit; font-size: 14px; background: #fff; color: var(--fg); }
+.list-tools input[type=search]:focus, .list-tools select:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
+@media (max-width: 720px) { #view-check #summary { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 720px) {
+  #view-check #summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  #view-check #summary .tile { padding: 10px; }
+  #view-check #summary .tile .tile-i, #view-check #summary .tile .s { display: none; }
+  #view-check #summary .tile .v { font-size: 22px; }
+  #view-check #summary .tile .k { font-size: 12px; }
+}
