@@ -68,11 +68,14 @@ ${fence(V.fieldGuide(rs, res))}
 4. 以後怎麼避免：資料產生時可以加的檢查。
 每段精簡，用條列，總長度 500 字內。
 
-${V.SPEC}`, { ctx });
+${V.SPEC}
+${V.SPEC_MORE}`, { ctx });
   }
 
   async function explain(rs, res, issue, recon) {
-    const o = P().explainData(rs, res, issue, recon), ctx = P().context(res, recon);
+    const o = P().explainData(rs, res, issue, recon), ctx = P().context(res, recon), V = root.DQ.aiVerify;
+    const lay = rs.layouts[issue.file], want = new Set([...(issue.fields || []), ...P().CONTEXT]);
+    const keys = lay ? lay.fields.filter(f => want.has(f.key)).map(f => `${f.key}=${f.name}(${f.len} 碼)`).join('、') : '';
     return ask(`請解釋下列檢核錯誤，並提出具體修正方式。
 ${fence(`檢核編號：${o.ruleId}（${o.ruleName}，依據：${o.ref}）
 問題：${o.message}
@@ -81,7 +84,9 @@ ${fence(`檢核編號：${o.ruleId}（${o.ruleName}，依據：${o.ref}）
 同一檢核編號本次共 ${o.sameRule} 筆。
 該筆${o.title}的相關欄位：${o.fields}`)}
 
-請用 3~5 點說明：這條規則在檢查什麼、這筆資料為何不通過、正確值應該怎麼判斷 (若可推得請直接給值)、是否可能是系統性問題。200 字內。`, { ctx });
+請用 3~5 點說明：這條規則在檢查什麼、這筆資料為何不通過、正確值應該怎麼判斷 (若可推得請直接給值)、是否可能是系統性問題。200 字內。
+可以用的欄位代號：${keys}
+${V.SPEC_FIX}`, { ctx });
   }
 
   async function decode(text, decoded, res, recon) {
@@ -95,7 +100,8 @@ ${fence(o.brief)}
 請用繁體中文回答 (300 字內，條列)：
 1. 這則退件訊息最可能指的是哪些問題 (說明判斷依據；若是籠統代碼，指出最可能的 1~2 類並說明理由)。
 2. 修正步驟與順序 (指出可一次修正多筆的系統性問題)。
-3. 重新申報前還應檢查什麼，避免再次被退件。`, { ctx });
+3. 重新申報前還應檢查什麼，避免再次被退件。
+${root.DQ.aiVerify.SPEC_LIKELY}`, { ctx });
   }
 
   root.DQ = root.DQ || {};

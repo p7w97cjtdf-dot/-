@@ -369,7 +369,13 @@
     for (const m of t.matchAll(/(?:error|err|錯誤|代碼|code)\s*[:：#]?\s*(\d{3,5})(?!_)/gi)) {
       const n = m[1];
       if ([...codes].some(c => c.startsWith(n))) continue;
-      const exact = MANUAL_CODES[n] ? all.filter(i => i.ruleId === n || i.ruleId.startsWith(n + '_')) : [];
+      const exact = all.filter(i => i.ruleId === n || i.ruleId.startsWith(n + '_'));
+      // 對照表沒有、但這次的檢核結果有「代碼_欄位編號」的問題：直接對應到這些問題
+      if (exact.length && !MANUAL_CODES[n]) {
+        const names = [...new Set(exact.map(i => (catalog.find(r => r.id === i.ruleId) || {}).name).filter(Boolean))].slice(0, 3);
+        add(m[0], '手冊錯誤代碼', `「${n}」對應到這次檢查結果中 ${n}_欄位編號 的問題${names.length ? `（${names.join('、')}）` : ''}。訊息沒有指出欄位與行號，以下列出所有具體位置。`, exact);
+        continue;
+      }
       if (exact.length) {
         add(m[0], '手冊錯誤代碼', `「${n}」是填報手冊「肆、檢核程式項目及代碼表」的錯誤代碼：${MANUAL_CODES[n]}（大項 ${n.slice(0, 3)}）。訊息沒有指出欄位與行號，以下依目前資料重新檢核，列出所有屬於此代碼 (${n}_欄位編號) 的具體位置。`, exact);
         continue;
