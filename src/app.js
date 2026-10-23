@@ -474,7 +474,7 @@
     const ctx = DQ.aiPayload.context(state.res || { data: {} }, reconCtx());
     const p2 = n => String(n).padStart(2, '0'), ts = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
     const rows = [['時間', '動作', '內容', '檔案內容 SHA-256']].concat(state.audit.map(e => [ts(e.at), e.action, DQ.pii.redact(e.detail, ctx).text, e.sha]));
-    const head = `# 申報資料檢核助手 稽核軌跡（${ts(new Date())} 匯出）\r\n# ${$('#rule-version').textContent}\r\n`;
+    const head = `# 申報資料檢核助手 稽核軌跡（${ts(new Date())} 匯出）\r\n# 檢查依據：${$('#rule-version').textContent}\r\n`;
     const d = new Date(); state.auditName = `audit_trail_${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}.csv`;
     download(state.auditName, '\uFEFF' + head + rows.map(r => r.map(q).join(',')).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
   }
@@ -676,15 +676,17 @@
   function renderVersion() {
     const st = DQ.ruleStats.count(), MANUAL = { cancer: '個人癌症保險填報手冊', accident: '新式傷害保險填報手冊' };
     const on = state.packs.filter(x => x.on);
-    $('#rule-version').textContent = `檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度，${st.total} 條）` +
+    $('#rule-version').textContent = `人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度，${st.total} 條）` +
       st.ext.map(e => `、${MANUAL[e.key] || e.name}（${e.version} 年版，${e.n} 條）`).join('') + '。' +
       (on.length ? `另套用法規更新：${on.map(x => x.pack.name + (x.pack.version ? ` 第 ${x.pack.version} 版` : '')).join('、')}。` : '');
   }
   activeRules(); renderVersion();
+  // 首頁的「開始檢核」：還沒放資料時打開選檔視窗；已放資料時重新檢查並捲到結果
+  $('#btn-start').onclick = () => { if (DETAIL.some(k => state.files[k])) { run(); $('#summary').scrollIntoView({ behavior: 'smooth' }); } else $('#file-book').click(); };
   $('#link-updates').onclick = e => { e.preventDefault(); showTab('updates'); };
   document.addEventListener('click', e => { const a = e.target.closest('[data-goto]'); if (a) { e.preventDefault(); showTab(a.dataset.goto); } });
   // 打開時不載入任何資料：只顯示拖放框
   document.body.classList.add('no-data');
-  $('#sample-note').textContent = '還沒有資料。把申報文字檔或 Excel 拖到上方的框。';
+  $('#sample-note').textContent = '';
   if (['check', 'recon', 'decode', 'report', 'rules', 'updates'].includes(hash)) showTab(hash);
 })();

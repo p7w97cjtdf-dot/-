@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>申報資料檢核助手</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="src/app.css">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#FAF6EF">
+<meta name="theme-color" content="#FFFFFF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="檢核助手">
@@ -18,25 +18,62 @@
 <meta name="description" content="保險申報資料檢核：個人壽險、癌症險、傷害險。自動找出錯誤、說明怎麼改，資料只在你的裝置上處理。">
 </head>
 <body>
-<header class="top appbar">
-  <div class="brand">
-    <span class="mark" aria-hidden="true">檢</span>
-    <div>
-      <h1>申報資料檢核助手</h1>
-      <p class="sub">保險申報資料預檢工作台・個人壽險／癌症險／傷害險・資料只在你的電腦上處理，不會上傳</p>
-    </div>
-  </div>
-  <div class="appbar-right">
+<header class="nav" id="top">
+  <div class="nav-in">
+    <a class="nav-brand" href="#top" aria-label="申報資料檢核助手">
+      <span class="nav-mark"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span class="nav-name">CHIQUACH FILING CHECKER</span>
+    </a>
     <span class="run-status" id="run-status" role="status"><i></i><span>尚未放入資料</span></span>
-    <a class="help-link" href="docs/guide.html">使用說明</a>
+    <nav class="nav-links" aria-label="主要連結">
+      <a href="#flow" class="home-only">使用流程</a>
+      <a href="docs/guide.html">完整說明</a>
+      <a href="#basis">檢查依據</a>
+      <label class="nav-cta" for="file-book">上傳資料</label>
+    </nav>
   </div>
 </header>
 
 <main>
+  <section class="hero home-only" aria-labelledby="hero-title">
+    <div class="hero-main">
+      <p class="eyebrow">INSURANCE FILING PRE-CHECK</p>
+      <h1 id="hero-title">申報資料檢核助手</h1>
+      <p class="hero-lead">快速檢查申報資料，先知道哪些欄位需要補正。支援文字檔與 Excel，先檢查再修改，讓你在送件前更快確認資料完整性。</p>
+      <div class="hero-cta">
+        <label class="btn-x primary" for="file-book">上傳資料開始檢核</label>
+        <a class="btn-x" href="docs/guide.html">查看完整使用說明</a>
+      </div>
+      <p class="eyebrow">SUPPORTED DATA</p>
+      <ul class="chips">
+        <li>個人壽險</li><li>癌症險</li><li>傷害險</li><li>職業分類</li><li>會計科目</li><li>Excel 與文字檔</li>
+      </ul>
+    </div>
+    <aside class="hero-card" aria-label="支援資料">
+      <p class="eyebrow">SUPPORTED DATA</p>
+      <h2>支援資料</h2>
+      <dl>
+        <dt>檔案格式</dt><dd>文字檔（.txt）與 Excel（.xlsx / .xls）</dd>
+        <dt>保險類別</dt><dd>個人壽險、癌症險、傷害險、職業分類與會計科目</dd>
+        <dt>檢查依據</dt><dd class="small">人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度）；CRL／CRD、PAL／PAD、OCC 與會計科目。</dd>
+      </dl>
+    </aside>
+  </section>
   <p class="update-notice" id="update-notice" role="status" hidden></p>
-  <section class="imports" aria-label="放入資料">
+  <div class="sec-head home-only">
+    <p class="eyebrow">UPLOAD</p>
+    <h2>上傳資料</h2>
+    <p>拖放或選擇檔案，系統會先幫你判斷資料類型與欄位完整度。</p>
+  </div>
+  <section class="imports upload-card" aria-label="放入資料">
+    <div class="upload-head home-only">
+      <div><h3>拖放檔案到這裡，或按鈕選擇</h3><p>支援文字檔（.txt）與 Excel（.xlsx / .xls）。</p></div>
+      <div class="upload-acts"><label class="btn-x sm" for="file-book">選擇檔案</label><button class="btn-x sm primary" type="button" id="btn-start">開始檢核</button></div>
+    </div>
     <label class="drop big" id="drop-book" for="file-book">
-      <span class="drop-k"><span class="on-desk">把 Excel 檔拖到這裡，或點這裡選擇檔案</span><span class="on-phone">點這裡選擇 Excel 檔</span></span>
+      <span class="drop-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v3a2 2 0 002 2h10a2 2 0 002-2v-3" stroke="#00A3A7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span class="drop-k"><span class="on-desk">將檔案拖到這裡</span><span class="on-phone">點這裡選擇檔案</span></span>
+      <span class="drop-or">或按鈕選擇檔案，支援多檔上傳。</span>
       <span class="drop-h">支援個人壽險、癌症險、傷害險。可以直接放入申報用的文字檔（.txt，例如 LFL、CRL、PAL 開頭的檔案），或 Excel 檔（工作表名稱含「保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數、資產負債表」會自動分好；癌症險、傷害險請在名稱前加「癌症險」「傷害險」），一次放多個檔案也可以。</span>
       <input type="file" id="file-book" accept=".xlsx,.xls,.xlsm,.ods,.txt,.csv" multiple>
     </label>
@@ -59,19 +96,45 @@
         <label class="drop opt" id="drop-AD" for="file-AD"><span class="drop-k">傷害險理賠資料</span><span class="drop-n" id="name-AD">尚未放入</span><span class="drop-h">PAD 開頭的給付檔</span><input type="file" id="file-AD" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
       </div>
     </details>
-    <section class="guide-block" aria-label="使用說明">
-      <ol class="guide-steps">
-        <li><b>放入資料</b><span>申報文字檔或 Excel，拖進上方的框</span></li>
-        <li><b>看結果</b><span>錯在哪一筆、哪個欄位、建議怎麼改</span></li>
-        <li><b>修改並下載</b><span>一鍵修改或逐筆確認，下載改好的檔案與報告</span></li>
-      </ol>
-      <a class="guide-card" href="docs/guide.html">
-        <span class="g-k">第一次使用？</span>
-        <span class="g-t">完整使用說明</span>
-        <span class="g-d">準備資料、看懂結果、修改與下載、手機使用、法規更新、常見問題，以及可以下載的試用資料。</span>
-        <span class="g-go">打開說明 →</span>
-      </a>
-    </section>
+    <div class="upload-info home-only">
+      <div><b>檔案類型</b><span>文字檔 .txt 與 Excel .xlsx / .xls</span></div>
+      <div><b>檢查內容</b><span>欄位對應、資料格式與必填檢查</span></div>
+      <div><b>資料安全</b><span>所有檢查都在你的電腦上進行，資料不會上傳。</span></div>
+    </div>
+  </section>
+
+  <section class="home-only" id="flow" aria-labelledby="flow-title">
+    <div class="sec-head">
+      <p class="eyebrow">HOW IT WORKS</p>
+      <h2 id="flow-title">使用流程</h2>
+      <p>一次看懂上傳、檢核與修改的步驟，讓第一次使用者也能快速上手。</p>
+    </div>
+    <ol class="flow">
+      <li class="f1"><div class="f-top"><span class="f-n">1</span><b>放入資料</b></div><p>上傳申報文字檔或 Excel，系統會先判斷資料類型與欄位對應。</p><ul class="chips sm"><li>文字檔</li><li>Excel</li><li>多檔上傳</li></ul></li>
+      <li class="f2"><div class="f-top"><span class="f-n">2</span><b>看結果</b></div><p>一次看懂哪一筆、哪個欄位需要補正，以及建議的修改方向。</p><ul class="chips sm"><li>錯誤摘要</li><li>欄位對應</li><li>建議修改</li></ul></li>
+      <li class="f3"><div class="f-top"><span class="f-n">3</span><b>修改並下載</b></div><p>可一鍵修改或逐筆確認，完成後下載改好的檔案與檢核報告。</p><ul class="chips sm"><li>一鍵修改</li><li>逐筆確認</li><li>報告下載</li></ul></li>
+    </ol>
+  </section>
+
+  <section class="home-only" aria-labelledby="guide-title">
+    <div class="sec-head">
+      <p class="eyebrow">GUIDE</p>
+      <h2 id="guide-title">完整使用說明</h2>
+      <p>第一次使用？完整說明包含資料準備、檢核結果、修改與下載、手機使用、法規更新與常見問題。</p>
+    </div>
+    <div class="guide-x">
+      <div class="guide-x-main">
+        <p class="eyebrow">FIRST TIME?</p>
+        <h3>完整使用說明</h3>
+        <p>準備資料、看懂結果、修改與下載、手機使用、法規更新、常見問題，以及可以下載的試用資料。</p>
+        <ul class="chips dark"><li>資料準備</li><li>檢核結果</li><li>修改與下載</li><li>手機使用</li><li>法規更新</li><li>常見問題</li></ul>
+      </div>
+      <div class="guide-x-side">
+        <b>打開完整說明</b>
+        <p>包含試用資料與常見問題，幫助你更快上手。</p>
+        <a class="btn-x light" href="docs/guide.html">打開說明 →</a>
+      </div>
+    </div>
   </section>
 
 
@@ -337,12 +400,26 @@
     <button id="tab-rules" aria-selected="false" data-view="rules">檢查項目一覽</button>
   </nav>
   <section id="review" class="review" hidden aria-label="逐筆確認"></section>
+  <section class="legal" id="basis" aria-labelledby="legal-title">
+    <div class="sec-head">
+      <p class="eyebrow">LEGAL &amp; REFERENCES</p>
+      <h2 id="legal-title">使用說明與檢查依據</h2>
+      <p>本工具供申報前自我檢查使用，檢查結果不代表保發中心或主管機關的正式審核；通過檢查不保證不會被退件。</p>
+    </div>
+    <div class="legal-box">
+      <div class="l1"><h3>使用說明</h3><p class="disclaimer">本工具供申報前自我檢查使用，檢查結果不代表保發中心或主管機關的正式審核；通過檢查不保證不會被退件。規則依下列手冊整理，可能與主辦單位最新版本有出入，請以正式手冊與退件通知為準。</p></div>
+      <div class="l2"><h3>檢查依據</h3><p id="rule-version">人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度）。</p></div>
+      <div class="l3"><h3>資料安全與參考連結</h3><p>所有檢查都在你的電腦上進行，資料不會上傳。會計科目為示範用的簡化版。AI 說明只在線上版提供。</p>
+        <p class="legal-links"><a href="docs/guide.html">使用說明</a><span aria-hidden="true">·</span><a href="#updates" data-goto="updates">法規更新</a><span aria-hidden="true">·</span><a href="docs/limits.html">限制與風險說明</a></p></div>
+    </div>
+  </section>
 </main>
 
-<footer class="foot">
-  <p class="disclaimer"><b>使用說明：</b>本工具供申報前自我檢查使用，檢查結果不代表保發中心或主管機關的正式審核；通過檢查不保證不會被退件。規則依下列手冊整理，可能與主辦單位最新版本有出入，請以正式手冊與退件通知為準。</p>
-  <p id="rule-version">檢查依據：人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度）。</p>
-  <p>所有檢查都在你的電腦上進行，資料不會上傳。會計科目為示範用的簡化版。AI 說明只在線上版提供。<a href="docs/guide.html">使用說明</a>・<a href="#updates" id="link-updates">法規更新</a>・<a href="docs/limits.html">限制與風險說明</a></p>
+<footer class="foot-x">
+  <div class="foot-in">
+    <span>© 2025 申報資料檢核助手</span>
+    <nav aria-label="頁尾連結"><a href="docs/guide.html">使用說明</a><a href="#updates" id="link-updates">法規更新</a><a href="docs/limits.html">限制與風險</a></nav>
+  </div>
 </footer>
 
 <!-- 讀取 PDF、Word、Excel 的元件放在 vendor/，和工具同一個網站提供 (不從外部網站即時載入，避免被竄改的程式碼讀到申報資料) -->
