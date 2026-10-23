@@ -137,12 +137,7 @@
   <section id="view-check" class="view">
     <div class="summary" id="summary"></div>
     <p class="hidden-note" id="hidden-note" role="status" hidden></p>
-    <p class="summary-note hint" id="summary-note"></p>
-    <div class="review-start">
-      <button id="btn-review" class="btn cta">逐筆確認問題</button>
-      <span class="hint">一次看一個問題，決定要不要改；手機上最好用。</span>
-      <button id="btn-list" class="btn ghost list-toggle" aria-expanded="false">看全部清單</button>
-    </div>
+    <p class="summary-note hint" id="summary-note" hidden></p>
     <div class="bench">
       <div class="bench-main">
 
@@ -152,30 +147,32 @@
 
         <div class="issues card">
           <div class="card-head">
-            <div><h2>找到的問題</h2><p class="hint">點任一項，右側會說明錯在哪裡、依據哪條規定、建議怎麼改</p></div>
+            <div><h2>檢核清單</h2><p class="hint">點選項目，右側會顯示問題說明與建議修正方式</p></div>
             <span class="count-pill" id="issue-count"></span>
           </div>
-          <div class="filters">
-            <div class="filter-row">
-              <select id="f-sev" aria-label="狀況"><option value="">全部狀況</option><option value="error">必須修改</option><option value="warning">建議確認</option><option value="suspect">請人工判斷</option></select>
-              <select id="f-file" aria-label="資料"><option value="">全部資料</option></select>
-              <select id="f-cat" aria-label="問題類型" hidden><option value="">全部問題類型</option></select>
-              <input id="f-q" type="search" placeholder="搜尋保單號碼、欄位或文字…">
-            </div>
-            <p class="focus-bar" id="focus-bar" hidden></p>
-            <div class="actions">
-              <button id="btn-fix" class="btn cta">一鍵修改所有可修的地方</button>
-              <button id="btn-dl-csv" class="btn ghost">下載問題清單</button>
-              <button id="btn-dl-report" class="btn ghost">下載報告</button>
-              <button id="btn-dl-audit" class="btn ghost">匯出稽核軌跡</button>
-              <button id="btn-dl-fixed" class="btn ghost">下載改好的保單資料</button>
-              <button id="btn-dl-reject" class="btn ghost" hidden>下載有問題的資料列</button>
-              <button id="btn-ai" class="btn ghost ai-btn" title="會把檢查結果送給 AI（Claude）整理；個人資料會先遮蔽">請 AI 整理重點</button>
-              <span class="hint" id="action-note"></span>
-            </div>
-            <p class="ai-notice">按「請 AI 整理重點」會把檢查結果送給 AI（Claude）；身分證號、姓名、地址、電話、Email 會先遮蔽，送出前再檢查一次，仍有疑似個資就不會送出。</p>
+          <div class="list-tools">
+            <select id="f-sev" aria-label="狀況"><option value="">全部</option><option value="error">必須修改</option><option value="warning">建議確認</option><option value="suspect">請人工判斷</option></select>
+            <input id="f-q" type="search" placeholder="搜尋保單號碼或文字" aria-label="搜尋">
+            <button id="btn-fix" class="btn cta small">一鍵修改全部</button>
+            <details class="more-menu">
+              <summary>更多</summary>
+              <div class="more-pop">
+                <button id="btn-dl-fixed" class="menu-item" type="button">下載改好的資料</button>
+                <button id="btn-dl-csv" class="menu-item" type="button">下載問題清單</button>
+                <button id="btn-dl-report" class="menu-item" type="button">下載檢核報告</button>
+                <button id="btn-dl-audit" class="menu-item" type="button">匯出稽核軌跡</button>
+                <button id="btn-dl-reject" class="menu-item" type="button" hidden>下載有問題的資料列</button>
+                <button id="btn-review" class="menu-item" type="button">逐筆確認（適合手機）</button>
+                <button id="btn-ai" class="menu-item ai-btn" type="button" title="會把檢查結果送給 AI（Claude）整理；送出前會先遮蔽個資並讓你確認內容">請 AI 整理重點</button>
+                <label class="menu-field">只看這份資料<select id="f-file" aria-label="資料"><option value="">全部資料</option></select></label>
+                <select id="f-cat" aria-label="問題類型" hidden><option value="">全部問題類型</option></select>
+              </div>
+            </details>
           </div>
-          <div class="issue-list" id="issue-list" role="list" aria-label="找到的問題"></div>
+          <p class="focus-bar" id="focus-bar" hidden></p>
+          <p class="hint action-note" id="action-note" role="status"></p>
+          <div class="issue-list" id="issue-list" role="list" aria-label="檢核清單"></div>
+          <button id="btn-list" class="btn ghost list-toggle" type="button" aria-expanded="true" hidden>收起清單</button>
         </div>
       </div>
       <aside class="bench-side">

@@ -27,6 +27,9 @@ async function open(opts) {
     if (!window.__keepPreview) try { sessionStorage.setItem('dq-ai-preview-skip', '1'); } catch (e) { /* ignore */ }
     window.claude = { use: async k => k === 'sample' ? async prompt => { window.__sent.push(prompt); return { text: window.__aiReply || 'AI 回覆（測試）' }; } : { save: async () => {} } };
   });
+  // 收在「更多」選單裡的按鈕：點之前先打開選單 (和使用者操作一樣)
+  const click = page.click.bind(page);
+  page.click = async (sel, o) => { await page.evaluate(q => { const el = document.querySelector(q), m = el && el.closest('details.more-menu'); if (m) m.open = true; }, sel).catch(() => {}); return click(sel, o); };
   await page.goto(opts.url); await page.waitForTimeout(800);
   return { browser, ctx, page, log, ROOT };
 }
