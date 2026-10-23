@@ -202,6 +202,26 @@ claude.ai 線上版是單一檔案，改為把這些元件直接打包進檔案 
 
 測試：`tests/security.test.js` 新增正規表示式與壓縮炸彈測試；`tests/security/t02-sent.js` 測試送出前確認視窗 (顯示內容等於實際送出內容、按取消不送出)；`tests/security/t03-packs.js` 測試沒有公鑰時不套用。
 
+## Dify 紅隊掃描回應 (2026-10-23)
+
+用 Dify 對打包後的單一 HTML 做的自動掃描。逐項查證原始碼後的結論：
+
+| 掃描結果 | 查證 | 處理 |
+|---|---|---|
+| 缺少內容安全政策 (CSP) | **屬實** | **已加上**：`index.html` 的 CSP 只允許同網站的程式檔 (`script-src 'self'`)，**不允許內嵌程式與 `eval`** (掃描建議的範本保留了 `'unsafe-inline' 'unsafe-eval'`，等於沒有擋，不採用)；唯一一段內嵌程式 (程式檔沒載入時的提示) 以 sha256 個別允許。只能連線到同網站、官方法規更新來源 (GitHub Pages) 與 Dify 雲端版 (`connect-src`)；禁止 `<object>`、更改 `<base>`、表單送出。原本寫在頁面裡的啟動程式移到 `src/boot.js`。Vercel 另以回應標頭加上 `frame-ancestors 'none'` 與 `X-Frame-Options: DENY`，禁止別的網站把工具嵌在框架裡 (這兩項只能用標頭設定) |
+| innerHTML 有 49 處以上，可能被注入 | **不成立**：每一處寫入的使用者資料、檔名、AI 回覆都先經過 `esc()` 跳脫；T06 已用含 `<img onerror>`、`<script>` 的檔案實測畫面、報告、手機複核、規則預覽 | 維持現狀；CSP 禁止內嵌程式後，即使漏掉一處，注入的程式也不會執行 (第二道防線) |
+| SheetJS、JSZip 使用 `eval` / `new Function` | **不成立**：工具用的 `xlsx.core.min.js` 沒有 `eval` 也沒有 `new Function`，也沒有使用 JSZip。PDF 元件 (pdf.js) 有一處可選的 `eval` 加速，Word 元件 (mammoth) 有 `new Function` | 讀 PDF 時關閉 pdf.js 的 eval 加速 (`isEvalSupported: false`)；CSP 不允許 eval。實測 CSP 下 Excel、PDF、Word 都能正常讀取 |
+| Service Worker 可能快取或攔截資料 | **不成立**：`sw.js` 只快取同網站的程式檔與字型，不快取上傳的資料 (檔案在瀏覽器記憶體中讀取，不經網路)；快取有版本號，更新時清掉舊版；只在 https 或本機註冊 | 版本號更新為 `dq-v13` |
+| Google Fonts 沒有 SRI 完整性檢查 | **屬實但影響小**：Google Fonts 的 CSS 會依瀏覽器回傳不同內容，無法使用 SRI；字型檔只能畫字，CSP 也不允許它載入程式 | 維持；組織不允許外部連線時可改用系統字型 (見下方建議 4) |
+| 可能用 `location` 導向到其他網站 | **不成立**：程式裡沒有改寫 `location` 的地方；外部連結都是固定網址並加 `rel="noopener"` | 不需處理 |
+| 建議用 DOMPurify / Trusted Types | 工具不顯示任何外部 HTML (AI 回覆也是先跳脫再顯示)，加入 DOMPurify 只多一個要維護的元件 | 暫不採用；CSP 已擋下內嵌程式 |
+| 建議把 SheetJS 移到 Web Worker | 屬於效能改善 (大檔案時畫面不卡)，不是安全問題；目前 56 MB 實測可用 | 列入日後改善 |
+
+注意：
+- **自架的 Dify**：CSP 只允許連到 `https://api.dify.ai`。自架的 Dify 要由部署者把網址加進 `index.html` 的 `connect-src` (見 `docs/dify-setup.md`)；沒加時「AI 服務設定」存檔就會說明原因，不會等到送出才失敗。
+- **claude.ai 線上版**：打包成單一 HTML 時不帶這個 CSP (所有程式都內嵌在頁面中)，改由 claude.ai 平台本身的安全政策限制，頁面無法連到任何外部網址 (T01)。
+- 測試：`tests/security.test.js` 檢查 CSP 不含 `unsafe-eval`、每段內嵌程式的 sha256 都在允許清單、頁面沒有 `onclick=` 之類的內嵌事件；瀏覽器實測 CSP 下內嵌程式、`eval`、`new Function`、連到未列出的網址都被擋下，檢核、一鍵修改、報告、下載、PDF/Word 匯入、Dify 都正常；`t10-dify.js` 測試不在允許清單的 Dify 網址會被拒絕。
+
 ## 尚未處理的建議事項
 
 1. **產生簽章金鑰** (T03)：由核准法規更新的人執行 `node tools/pack-keygen.js`，把產生的 `rules/updates/public-key.json` 提交；決定私鑰保管人與更換流程。
