@@ -16,6 +16,7 @@ node tests/security/t05-prompt.js    # AI 提示注入：指令只出現在 <資
 node tests/security/t06-html.js      # HTML 注入：畫面、報告、手機複核、規則預覽、CSV
 node tests/security/t07-stress.js    # 檔案壓力測試 (SIZES=1000,20000,100000 可調整張數)
 node tests/security/t08-output.js    # 輸出正確性：一鍵修改後下載的檔案重新檢查要和畫面一致
+node tests/security/t09-insights.js  # AI 洞見驗證：AI 說的原因與筆數要經工具用原始資料驗證
 ```
 
 預設使用 `samples/excel/試用資料_含錯誤.xlsx`；可用 `SAMPLE=` 指定其他檔案。測試產生的暫存檔放在系統暫存資料夾 (`TMPDIR_T=` 可指定)。

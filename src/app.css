@@ -788,3 +788,20 @@ body:not(.no-data) .legal .sec-head h2 { font-size: 22px; }
 html { scroll-padding-top: 88px; }
 body:not(.no-data) main { padding-top: 20px; }
 @media (max-width: 700px) { html { scroll-padding-top: 72px; } }
+
+/* AI 洞見驗證 */
+.insights { white-space: normal; margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+.insights h4 { margin: 0 0 4px; font-size: 15px; }
+.insights ol { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
+.ins { border: 1px solid var(--line); border-left: 4px solid #999; border-radius: 8px; padding: 10px 14px; background: #fff; }
+.ins p { margin: 6px 0 0; font-size: 14px; line-height: 1.6; }
+.ins-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ins-st { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: #EEE; color: #444; }
+.ins.verified { border-left-color: var(--teal); }
+.ins.verified .ins-st { background: var(--teal-soft); color: var(--teal-ink); }
+.ins.mismatch { border-left-color: var(--warn); }
+.ins.mismatch .ins-st { background: var(--warn-soft); color: var(--warn); }
+.ins.refuted { border-left-color: var(--err); }
+.ins.refuted .ins-st { background: var(--err-soft); color: var(--err); }
+.ins .linkish { margin-top: 6px; }
+.focus-bar { margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--teal-soft); color: var(--teal-ink); font-size: 14px; }

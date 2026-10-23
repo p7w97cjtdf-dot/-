@@ -52,17 +52,23 @@ ${GUARD}`;
 
   const P = () => root.DQ.aiPayload;
 
+  // 回傳 AI 的原始回覆；第 2 點的共同原因附在 JSON 裡，由 ai-verify.js 用原始資料驗證後才顯示筆數
   async function summarize(rs, res, recon) {
-    const data = P().summaryData(root.DQ, rs, res, recon), ctx = P().context(res, recon);
+    const data = P().summaryData(root.DQ, rs, res, recon), ctx = P().context(res, recon), V = root.DQ.aiVerify;
     return ask(`以下是本次法規申報資料的檢核結果 (JSON)，包含個人壽險申報明細檢核、與上游系統控制總數對帳、上年度期末結轉、資產負債表勾稽：
 ${fence(data)}
 
+可以用來寫檢查條件的欄位：
+${fence(V.fieldGuide(rs, res))}
+
 請用白話寫一份重點整理，依序包含：
 1. 整體狀況：一句話說明資料的狀況，以及如果直接送出，被退件的可能性 (高／中／低) 與原因。
-2. 問題主要出在哪裡：歸成 3~5 類可能的共同原因 (例如：轉檔時少補了 0、民國年和西元年混用、各系統結帳日不同)，每類說明影響幾筆。分成「要改資料」和「只是結帳日或算法不同、寫說明就好」兩種。
+2. 問題主要出在哪裡：歸成 3~5 類可能的共同原因 (例如：轉檔時少補了 0、民國年和西元年混用、各系統結帳日不同)，分成「要改資料」和「只是結帳日或算法不同、寫說明就好」兩種。這一段不要寫筆數 (筆數由工具驗證後顯示)。
 3. 先改什麼：建議的修改順序和理由。
 4. 以後怎麼避免：資料產生時可以加的檢查。
-每段精簡，用條列，總長度 500 字內。`, { ctx });
+每段精簡，用條列，總長度 500 字內。
+
+${V.SPEC}`, { ctx });
   }
 
   async function explain(rs, res, issue, recon) {
