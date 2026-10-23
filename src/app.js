@@ -41,6 +41,22 @@
     const h = state.disabledCount || {}, ids = Object.keys(h), n = ids.reduce((t, k) => t + h[k], 0);
     return n ? `注意：法規更新停用了 ${ids.length} 項檢查（${ids.slice(0, 5).join('、')}${ids.length > 5 ? '…' : ''}），隱藏了 ${n} 個問題；如果更新包的來源不確定，請到「法規更新」關掉後重新檢查。` : '';
   }
+  // 官方更新包的簽章公鑰 (rules/updates/public-key.json)：有公鑰時，只套用用對應私鑰簽過的更新包。
+  // 這台裝置曾經看過公鑰、之後卻讀不到或換了一把，就不套用任何官方更新包 (避免被拿掉公鑰繞過簽章)
+  const b64 = s => Uint8Array.from(atob(String(s)), c => c.charCodeAt(0));
+  async function packKey(base) {
+    let seen = null; try { seen = localStorage.getItem('dq-pack-key'); } catch (e) { /* ignore */ }
+    let k = null;
+    try { const r = await fetch(base + 'rules/updates/public-key.json', { cache: 'no-cache' }); if (r.ok) k = await r.json(); } catch (e) { k = null; }
+    state.packKey = k && k.key ? k.keyId : null; state.packKeyNew = null;
+    if (!k || !k.key) return seen ? { reject: `這台裝置之前看過簽章公鑰（${seen}），現在卻讀不到，為了安全不套用` } : {};
+    if (seen && seen !== k.keyId) { state.packKeyNew = k.keyId; return { reject: `簽章公鑰和這台裝置之前看過的不同（${seen} → ${k.keyId}）；若是正式更換，請在「法規更新」頁確認` }; }
+    try {
+      const key = await crypto.subtle.importKey('jwk', Object.assign({ ext: true }, k.key), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+      try { localStorage.setItem('dq-pack-key', k.keyId); } catch (e) { /* ignore */ }
+      return { key };
+    } catch (e) { return { reject: '簽章公鑰格式不正確' }; }
+  }
   async function loadOfficial() {
     const bases = location.protocol.startsWith('http') ? [''] : [];
     bases.push('https://p7w97cjtdf-dot.github.io/-/');  // 單一檔案的線上版：改從公開網站讀取
@@ -49,12 +65,15 @@
         const idx = await (await fetch(b + 'rules/updates/index.json', { cache: 'no-cache' })).json();
         const packs = [];
         state.officialRejected = [];
+        const signer = await packKey(b);
         for (const ent of idx.packs || []) {
           // index.json 的每一項可以是檔名，或 { file, sha256 }：有 sha256 時內容必須完全相同 (被改過就不套用)
           const f = typeof ent === 'string' ? ent : ent && ent.file, want = ent && ent.sha256;
           try {
             const text = await (await fetch(b + 'rules/updates/' + encodeURIComponent(f), { cache: 'no-cache' })).text();
             if (want && await sha256(text) !== String(want).toLowerCase()) { state.officialRejected.push(`${f}：內容和發布時登記的雜湊值不同`); continue; }
+            if (signer.reject) { state.officialRejected.push(`${f}：${signer.reject}`); continue; }
+            if (signer.key && !(ent && ent.sig && await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, signer.key, b64(ent.sig), new TextEncoder().encode(text)))) { state.officialRejected.push(`${f}：沒有核准者的簽章，或簽章不對`); continue; }
             const p = DQ.rulePacks.normalize(JSON.parse(text), f);
             const v = DQ.rulePacks.validate(p, Object.assign({}, BASE, { catalog: BASE.catalog.concat(DQ.rulesets.finance.catalog, DQ.master.catalog, DQ.anomaly.catalog) }), packs);
             if (v.errors.length) { state.officialRejected.push(`${f}：${v.errors.join('；')}`); continue; }
@@ -145,7 +164,7 @@
   }
   for (const fid of SLOTS) {
     const input = $('#file-' + fid), drop = $('#drop-' + fid);
-    input.addEventListener('change', () => input.files[0] && readFile(fid, input.files[0]));
+    input.addEventListener('change', () => { if (input.files[0]) { sizeNote(input.files); readFile(fid, input.files[0]); } });
     drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
     drop.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove('over'); for (const f of e.dataTransfer.files) readFile(guessSlot(f.name, fid), f); });
@@ -153,7 +172,21 @@
   // 上方的大框：Excel 依工作表名稱分配；文字檔、CSV 依檔名判斷是哪一份資料
   // 檔名看不出來時，依第一行的長度判斷是哪一種申報檔
   const BY_LENGTH = Object.fromEntries(DETAIL.filter(k => rs.layouts[k]).map(k => [rs.layouts[k].recordLength, k]));
+  // 大檔案提醒：實測 56 MB (14.7 萬筆) 約用 600 MB 記憶體，約為檔案大小的 11 倍 (安全測試 T07)
+  const BIG = 40 * 1048576;
+  function sizeNote(files) {
+    const big = [...files].filter(f => f.size > BIG);
+    const el = $('#size-note');
+    el.hidden = !big.length;
+    if (!big.length) return;
+    const mb = n => Math.round(n / 1048576), need = mb(big.reduce((t, f) => t + f.size, 0) * 11), dev = navigator.deviceMemory;   // deviceMemory：GB (部分瀏覽器才有)
+    const tight = dev && need > dev * 1024 * 0.25;
+    el.className = 'size-note' + (tight ? ' tight' : '');
+    el.textContent = `「${big.map(f => `${f.name}（${mb(f.size)} MB）`).join('」「')}」檔案較大，檢查約需 ${need.toLocaleString()} MB 記憶體${dev ? `；這台裝置約有 ${dev} GB 記憶體` : ''}。` +
+      (tight ? '可能會變慢或沒有回應，建議拆成每個 50 MB 以內的檔案分開檢查，並先關掉其他分頁。' : '記憶體 4 GB 以下的電腦建議拆成每個 50 MB 以內的檔案分開檢查。');
+  }
   async function readMany(files) {
+    sizeNote(files);
     const unknown = [];
     for (const f of files) {
       if (BOOK.test(f.name)) { readWorkbook(f); continue; }
@@ -711,6 +744,22 @@
       (on.length ? `另套用法規更新：${on.map(x => x.pack.name + (x.pack.version ? ` 第 ${x.pack.version} 版` : '')).join('、')}。` : '');
   }
   activeRules(); renderVersion();
+  // AI 安全自我測試 (真正的模型)：結果記在畫面與稽核軌跡
+  state.selfTests = [];
+  $('#btn-ai-selftest').onclick = async () => {
+    const out = $('#ai-selftest'), b = $('#btn-ai-selftest');
+    if (!DQ.ai.available()) { out.textContent = DQ.ai.OFFLINE; return; }
+    b.disabled = true; out.textContent = 'AI 測試中（3 題，約 30 秒）…';
+    try {
+      const r = await DQ.ai.selfTest();
+      state.selfTests.push(...r);
+      for (const x of r) audit('AI 安全測試', `${x.name}：${x.pass === true ? '通過' : x.pass === false ? '沒通過（' + x.why + '）' : '沒有完成（' + x.why + '）'}`);
+      const done = state.selfTests.filter(x => x.pass != null), fail = done.filter(x => !x.pass).length;
+      out.innerHTML = `<ul class="st-list">${r.map(x => `<li class="${x.pass === true ? 'ok' : x.pass === false ? 'bad' : ''}"><b>${x.pass === true ? '通過' : x.pass === false ? '沒通過' : '沒有完成'}</b>　${esc(x.name)}${x.why ? `：${esc(x.why)}` : ''}${x.pass && x.noticed ? '（AI 有提醒資料中有指令，已忽略）' : ''}<details><summary>看 AI 的回答</summary><p>${esc(x.reply)}</p></details></li>`).join('')}</ul>
+        <p class="hint">這次開啟後累計測了 ${done.length} 題，${fail ? `<b>${fail} 題沒通過</b>，AI 的說明請更謹慎看待（檢查結果不受影響）` : '全部通過'}。</p>`;
+    } catch (e) { out.textContent = e.message; }
+    b.disabled = false;
+  };
   // 首頁的「開始檢核」：還沒放資料時打開選檔視窗；已放資料時重新檢查並捲到結果
   $('#btn-start').onclick = () => { if (DETAIL.some(k => state.files[k])) { run(); $('#summary').scrollIntoView({ behavior: 'smooth' }); } else $('#file-book').click(); };
   $('#link-updates').onclick = e => { e.preventDefault(); showTab('updates'); };

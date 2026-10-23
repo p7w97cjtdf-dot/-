@@ -30,8 +30,9 @@ async function scenario(name, opts, act) {
   out.push(await scenario('自行匯入停用包，按「確定」', { acceptDialogs: true }, imp));
   // 官方清單：同一個停用包，分別是 雜湊不符 / 雜湊相符 / 停用不存在的檢查
   const text = JSON.stringify(evil), bad = JSON.stringify(Object.assign({}, evil, { id: 'bad', disable: ['NO_SUCH_RULE'] }));
-  const serve = idx => (u, r) => {
+  const serve = (idx, pk) => (u, r) => {
     if (u.startsWith(OFF + 'index.json')) { r.fulfill({ contentType: 'application/json', body: JSON.stringify(idx) }); return true; }
+    if (u.startsWith(OFF + 'public-key.json')) { pk ? r.fulfill({ contentType: 'application/json', body: JSON.stringify(pk) }) : r.fulfill({ status: 404, body: '' }); return true; }
     if (u.startsWith(OFF + 'p.json')) { r.fulfill({ contentType: 'application/json', body: text }); return true; }
     if (u.startsWith(OFF + 'bad.json')) { r.fulfill({ contentType: 'application/json', body: bad }); return true; }
   };
@@ -39,6 +40,18 @@ async function scenario(name, opts, act) {
   out.push(await scenario('官方包被竄改 (雜湊不符)', { serve: serve({ packs: [{ file: 'p.json', sha256: sha(text + ' ') }] }) }, reload));
   out.push(await scenario('官方包雜湊相符', { serve: serve({ packs: [{ file: 'p.json', sha256: sha(text) }] }) }, reload));
   out.push(await scenario('官方包停用不存在的檢查', { serve: serve({ packs: ['bad.json'] }) }, reload));
+  // 數位簽章：有公鑰時只接受核准者簽過的更新包
+  const kp = () => { const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }); const j = publicKey.export({ format: 'jwk' }); return { privateKey, pk: { keyId: crypto.createHash('sha256').update(j.x + j.y).digest('hex').slice(0, 16), key: { kty: j.kty, crv: j.crv, x: j.x, y: j.y } } }; };
+  const A = kp(), B = kp();
+  const sign = (k, t) => crypto.sign('sha256', Buffer.from(t), { key: k, dsaEncoding: 'ieee-p1363' }).toString('base64');
+  const good = { file: 'p.json', sha256: sha(text), sig: sign(A.privateKey, text) };
+  out.push(await scenario('簽章正確', { serve: serve({ packs: [good] }, A.pk) }, reload));
+  out.push(await scenario('有公鑰但更新包沒有簽章', { serve: serve({ packs: [{ file: 'p.json', sha256: sha(text) }] }, A.pk) }, reload));
+  out.push(await scenario('用別人的私鑰簽章', { serve: serve({ packs: [Object.assign({}, good, { sig: sign(B.privateKey, text) })] }, A.pk) }, reload));
+  // 同一台裝置：先看過公鑰 A，之後公鑰被拿掉或換成 B
+  const seenA = async (t, pk) => { await t.page.evaluate(() => DQ.app.loadOfficial()); await t.page.waitForTimeout(800); };
+  out.push(await scenario('看過公鑰後公鑰被拿掉', { serve: serve({ packs: [good] }, A.pk) }, async t => { await t.page.evaluate(() => localStorage.setItem('dq-pack-key', 'x')); await t.ctx.unrouteAll(); await t.ctx.route(/^https?:\/\//, r => serve({ packs: [good] }, null)(r.request().url(), r) || r.abort()); await seenA(t); }));
+  out.push(await scenario('公鑰被換成另一把', { serve: serve({ packs: [Object.assign({}, good, { sig: sign(B.privateKey, text) })] }, B.pk) }, async t => { await t.page.evaluate(k => localStorage.setItem('dq-pack-key', k), A.pk.keyId); await seenA(t); }));
   console.log(JSON.stringify(out, null, 2));
   if (process.argv[2]) fs.writeFileSync(process.argv[2], JSON.stringify(out, null, 2));
 })();

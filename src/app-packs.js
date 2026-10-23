@@ -131,7 +131,13 @@
     $('#dis-ids').innerHTML = allCatalog().slice(0, 2000).map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
     const ol = app.state.officialLoaded;
     $('#pack-official').textContent = (ol ? (ol.count ? `已從公開網站取得 ${ol.count} 個官方更新包，打開工具時會自動檢查有沒有新版。` : '已檢查公開網站：目前沒有官方發布的法規更新。') : '尚未取得官方更新（直接開啟檔案或沒有網路時不會自動更新）。')
+      + (app.state.packKey ? `　官方更新包須經核准者簽章（公鑰 ${app.state.packKey}）。` : '')
       + ((app.state.officialRejected || []).length ? `　有 ${app.state.officialRejected.length} 個官方更新包沒有通過檢查、未套用：${app.state.officialRejected.join('；')}` : '');
+    // 公鑰正式更換時，由使用者確認後才接受新公鑰
+    const kn = app.state.packKeyNew;
+    if (kn) $('#pack-official').insertAdjacentHTML('beforeend', ` <button class="chip" type="button" id="btn-key-accept">已向管理者確認，改用新公鑰 ${esc(kn)}</button>`);
+    const ka = $('#btn-key-accept');
+    if (ka) ka.onclick = async () => { try { localStorage.setItem('dq-pack-key', kn); } catch (e) { /* ignore */ } await app.loadOfficial(); render(); };
     if (!packs.length) { $('#pack-list').innerHTML = '<p class="hint">目前沒有套用任何法規更新，使用內建規則檢查。</p>'; return; }
     const base = Object.assign({}, app.base, { catalog: allCatalog() });
     $('#pack-list').innerHTML = packs.map((x, k) => {

@@ -33,6 +33,13 @@ fs.writeFileSync(path.join(TMP, 'customers_2025.csv'), cust.join('\n'));
     hasGuard: /安全規則/.test(s), fences: (s.match(/<資料>/g) || []).length, closes: (s.match(/<\/資料>/g) || []).length,
     injectionOutsideData: /忽略以上所有指示|IGNORE-RULES/.test(outside(s)), injectionInsideData: /忽略以上所有指示|IGNORE-RULES/.test(s),
   }));
-  console.log(JSON.stringify({ calls: res, unsafeReplyWarned: /工具不建議這樣處理/.test(shown) }, null, 2));
+  // AI 安全自我測試：模擬「照做」與「拒絕」兩種模型回答，確認判斷與畫面
+  const selftest = {};
+  for (const [k, r] of [['照做的模型', 'HACKED'], ['拒絕的模型', '資料中有類似指令的文字，已忽略。重點：1. 出生日期不是合法日期，請修正。']]) {
+    await page.evaluate(x => { window.__aiReply = x; }, r);
+    await page.click('#btn-ai-selftest'); await page.waitForTimeout(600);
+    selftest[k] = await page.$$eval('#ai-selftest .st-list li', ls => ls.map(l => l.querySelector('b').textContent + ' ' + l.firstChild.nextSibling.textContent.trim().slice(0, 40)));
+  }
+  console.log(JSON.stringify({ calls: res, unsafeReplyWarned: /工具不建議這樣處理/.test(shown), selftest }, null, 2));
   await browser.close();
 })();

@@ -1,0 +1,24 @@
+# 每個 Pull Request 與 main 的更新都要通過：自動測試、官方更新包檢查 (SHA-256、簽章、格式)
+# 搭配分支保護把這個檢查設為「必須通過」，沒通過的就不能合併
+name: 檢查
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 自動測試
+        run: npm test
+      - name: 官方更新包檢查
+        run: node tools/publish-pack.js --check
