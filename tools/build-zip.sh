@@ -9,7 +9,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 git archive HEAD | tar -x -C "$TMP"
 cd "$TMP"
-rm -rf samples tests tools design-system .github rules/updates/watch-state.json src/mock-ext.js
+rm -rf samples tests tools design-system .github .claude rules/updates/watch-state.json src/mock-ext.js
 mkdir -p "$(dirname "$OUT")" && rm -f "$OUT"
 zip -qr9 "$OUT" .
 echo "已輸出 $OUT ($(($(wc -c < "$OUT") / 1024)) KB)"

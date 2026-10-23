@@ -3,3 +3,4 @@ rules/source/
 tools/
 design-system/
 node_modules/
+.claude/

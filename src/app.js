@@ -107,10 +107,36 @@
   // ---------- 檔案 ----------
   const SLOTS = ['L', 'D', 'prior', 'control', 'statement', 'products', 'customers', 'CL', 'CD', 'AL', 'AD'];
   const DETAIL = ['L', 'D', 'CL', 'CD', 'AL', 'AD'];  // 固定長度的明細檔 (依規則集檢查)
-  function setFile(fid, name, text, fromSheet) {
+  // 「已放入的資料」：每一份資料來自哪個檔案 / 工作表、幾筆；這次沒有用到的工作表與原因
+  state.src = {}; state.notes = [];
+  function clearFiles() {
+    for (const k of SLOTS) { delete state.files[k]; $('#name-' + k).textContent = '尚未放入'; }
+    state.src = {};
+  }
+  const recCount = k => { const n = state.files[k].text.split(/\r?\n/).filter(l => l.trim()).length; return DETAIL.includes(k) || k === 'prior' ? n : Math.max(0, n - 1); };
+  // 沒有用到的工作表：同一個檔案、同樣原因的合併成一列 (例：a.xlsx「說明」「錯誤解答」)
+  function unused() {
+    const g = new Map();
+    for (const n of state.notes) { const m = n.source.match(/^(.*?)(「.*」)$/), key = n.why + '\u0000' + (m ? m[1] : n.source); if (!g.has(key)) g.set(key, { why: n.why, file: m ? m[1] : '', parts: [] }); g.get(key).parts.push(m ? m[2] : n.source); }
+    return [...g.values()].map(x => [x.why, [x.file + x.parts.join('')]]);
+  }
+  function renderMap() {
+    const el = $('#data-map'), have = SLOTS.filter(k => state.files[k]);
+    el.hidden = !have.length && !state.notes.length;
+    if (el.hidden) return;
+    const row = (k, src, n, cls) => `<li class="dm-row${cls ? ' ' + cls : ''}"><b class="dm-k">${esc(k)}</b><span class="dm-src">${esc(src)}</span><span class="dm-n">${n}</span></li>`;
+    el.innerHTML = `<div class="dm-head"><b>${have.length ? `這次檢查的資料（${have.length} 份）` : '這次沒有可以檢查的資料'}</b>${have.length ? '<button class="linkish" type="button" id="btn-clear-files">清除，重新放入</button>' : ''}</div>
+      <ul class="dm-list">${have.map(k => row(SLOT_NAME[k] || k, state.src[k] || state.files[k].name, `${recCount(k).toLocaleString()} 筆`)).join('')}
+      ${unused().map(([why, srcs]) => row('沒有使用', srcs.join('、'), why, 'dm-off')).join('')}</ul>
+      ${have.length && !DETAIL.some(k => state.files[k]) ? '<p class="dm-foot">還需要保單資料或理賠資料（壽險、癌症險或傷害險）才能開始檢查。</p>' : ''}
+      ${!have.length ? '<p class="dm-foot">之前放入的資料與結果已清除。請放入有資料的檔案（第一列是欄位名稱，從第二列開始每列一筆）。</p>' : ''}`;
+    const b = $('#btn-clear-files'); if (b) b.onclick = () => { clearFiles(); state.notes = []; $('#sample-note').textContent = ''; run(); };
+  }
+  function setFile(fid, name, text, fromSheet, srcName) {
     // CSV 依欄位定義轉成固定長度 (去年保單資料和保單資料同格式)
     const lay = DETAIL.includes(fid) ? rs.layouts[fid] : fid === 'prior' ? rs.layouts.L : null;
     if (lay && /\.csv$/i.test(name)) { text = DQ.csvToFixedWidth(text, lay); name = name.replace(/\.csv$/i, '.txt'); }
+    state.src[fid] = srcName || name;
     state.files[fid] = { name, text, fromSheet: !!fromSheet };
     audit('放入資料', `${SLOT_NAME[fid] || fid}：${name}（${text.split(/\r?\n/).filter(Boolean).length.toLocaleString()} 行）`, text);
     $('#name-' + fid).textContent = name;
@@ -137,19 +163,24 @@
     let wb;
     const buf = await file.arrayBuffer();
     const zp = DQ.workbook.zipProblem(buf);
-    if (zp) { $('#sample-note').textContent = `「${file.name}」${zp}，為避免瀏覽器記憶體不足，沒有讀取。請在 Excel 打開後另存新檔，或把資料拆成幾個檔案。`; audit('拒絕檔案', `${file.name}（${zp}）`); return; }
+    // 一個 Excel 是一整套資料：放入新的 Excel 就取代之前放入的資料；讀不到資料時也清掉舊結果，避免畫面還留著上一份的結果
+    const fail = msg => { clearFiles(); $('#sample-note').textContent = msg; run(); };
+    if (zp) { audit('拒絕檔案', `${file.name}（${zp}）`); return fail(`「${file.name}」${zp}，為避免瀏覽器記憶體不足，沒有讀取。請在 Excel 打開後另存新檔，或把資料拆成幾個檔案。`); }
     try { wb = XLSX.read(buf, { type: 'array' }); }
-    catch (e) { $('#sample-note').textContent = `「${file.name}」無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次。`; return; }
-    const { got, from, blank } = DQ.workbook.slots(XLSX, wb);
-    if (!got.L && !got.D && blank.length) { $('#sample-note').textContent = `「${file.name}」的工作表只有標題列、還沒有資料。請從第二列開始填入保單資料或理賠資料，再放進來。`; return; }
-    if (!Object.keys(got).length) { $('#sample-note').textContent = `「${file.name}」裡找不到可以辨識的工作表。工作表名稱需包含：保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數或資產負債表`; return; }
+    catch (e) { return fail(`「${file.name}」無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次。`); }
+    const { got, from, blank, skipped } = DQ.workbook.slots(XLSX, wb);
+    for (const name of blank) state.notes.push({ source: `${file.name}「${name}」`, why: '只有標題列，沒有資料' });
+    for (const x of skipped) state.notes.push({ source: `${file.name}「${x.name}」`, why: x.why });
+    if (!DETAIL.some(k => got[k]) && blank.length) return fail(`「${file.name}」的工作表只有標題列、還沒有資料，沒有可以檢查的內容。請從第二列開始填入保單資料或理賠資料，再放進來。`);
+    if (!Object.keys(got).length) return fail(`「${file.name}」裡找不到可以辨識的工作表。工作表名稱需包含：保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數或資產負債表（癌症險、傷害險在前面加上類別）`);
+    clearFiles();
     const fs = DQ.workbook.files(got);
-    for (const [slot, f] of Object.entries(fs)) { state.files[slot] = f; $('#name-' + slot).textContent = `工作表「${from[slot]}」`; }
+    for (const [slot, f] of Object.entries(fs)) { state.files[slot] = f; state.src[slot] = `${file.name}「${from[slot]}」`; $('#name-' + slot).textContent = `工作表「${from[slot]}」`; }
     audit('放入資料', `${file.name}：${Object.keys(fs).map(k => `${from[k]}（${fs[k].text.split(/\r?\n/).filter(Boolean).length.toLocaleString()} 行）`).join('、')}`, null);
     const entry = state.audit[state.audit.length - 1];
     if (window.crypto && crypto.subtle) crypto.subtle.digest('SHA-256', buf).then(b => { entry.sha = [...new Uint8Array(b)].map(v => v.toString(16).padStart(2, '0')).join(''); }).catch(() => {});
     state.key = state.reconKey = state.masterKey = state.anomalyKey = null;
-    $('#sample-note').textContent = `已讀取「${file.name}」的 ${Object.keys(got).length} 張工作表：${Object.keys(got).map(k => from[k]).join('、')}`;
+    $('#sample-note').textContent = '';   // 讀到哪些工作表列在「這次檢查的資料」
     run();
   }
   // 文字檔與 CSV：先當 UTF-8 讀，失敗時改用 Big5 (Windows 的 Excel「另存 CSV」預設是 Big5)
@@ -208,6 +239,7 @@
     return true;
   }
   async function readMany(files) {
+    state.notes = [];
     sizeNote([...files].filter(f => f.size <= MAX_FILE));
     const unknown = [];
     for (const f of files) {
@@ -227,6 +259,8 @@
       }
       if (slot) readFile(slot, f); else unknown.push(f.name);
     }
+    for (const n of unknown) state.notes.push({ source: n, why: '看不出是哪一份資料' });
+    if (unknown.length) renderMap();
     if (unknown.length) {
       $('#sample-note').textContent = `看不出「${unknown.join('」「')}」是哪一份資料（CSV 的第一列要是欄位名稱，例如「公司代號、保單編號…」；文字檔每行長度要符合申報格式），請展開下方「分別放入各份資料」，放進對應的格子。`;
       document.querySelector('details.more').open = true;
@@ -246,9 +280,11 @@
   function run() {
     const f = state.files;
     // 沒有保單資料也沒有理賠資料時無法檢查：說明還缺什麼，不顯示「0 個問題」
+    renderMap();
     if (!DETAIL.some(k => f[k])) {
       document.body.classList.add('no-data');
-      $('#sample-note').textContent = `已放入：${Object.keys(f).filter(k => f[k]).map(k => SLOT_NAME[k]).join('、')}。還需要保單資料或理賠資料 (壽險、癌症險或傷害險) 才能開始檢查。`;
+      // 已放入的資料與還缺什麼列在「這次檢查的資料」；什麼都沒放入時保留上方的原因說明
+      if (Object.keys(f).some(k => f[k])) $('#sample-note').textContent = '';
       return;
     }
     document.body.classList.remove('no-data');
@@ -320,7 +356,7 @@
     const fixable = all.filter(i => i.fix && state.res.issues.includes(i)).length;
     const ICON = { err: '!', warn: '?', suspect: '…', ok: '✓', fix: '↺' };
     // 卡片只放名稱與數字 (細項放在滑鼠停留的說明裡)，不一次塞太多資訊
-    const tile = (cls, k, v, sub) => `<div class="tile ${cls}" title="${esc(sub)}"><div><span class="k">${k}</span><span class="v">${v}</span></div><span class="tile-i" aria-hidden="true">${ICON[cls] || ''}</span></div>`;
+    const tile = (cls, k, v, sub) => `<div class="tile ${cls}" title="${esc(sub)}"><div><span class="k">${k}</span><span class="v">${v}</span></div><span class="tile-i" hidden></span></div>`;
     const nRec0 = Object.values(s.byFile).reduce((t, b) => t + b.records, 0), nBad0 = Object.values(s.byFile).reduce((t, b) => t + b.badRecords, 0);
     const pending = n('error') + n('warning');
     // 三張卡：資料正確的比例、待修正的問題、可以一鍵修改的問題
@@ -409,6 +445,10 @@
     const list = filtered(), open = state.all.filter(i => i.severity !== 'suspect').length;
     $('#issue-count').textContent = state.all.length ? (list.length === state.all.length ? `${open} 項待處理` : `顯示 ${list.length} / ${state.all.length} 項`) : '沒有問題';
     $('#issue-count').className = 'count-pill' + (state.all.some(i => i.severity === 'error') ? ' err' : '');
+    // 這次最需要注意的事：最常出現的必須修改問題
+    const top = {}; for (const i of state.all) if (i.severity === 'error') (top[i.ruleId] = top[i.ruleId] || { n: 0, msg: i.ruleName || i.message }).n++;
+    const best = Object.values(top).sort((a, b) => b.n - a.n)[0], tm = best && best.msg, tn = best && best.n;
+    $('#list-hint').textContent = tm ? `最多的是「${tm.length > 26 ? tm.slice(0, 25) + '…' : tm}」${tn} 項・點選項目看說明` : '點選項目，右側會顯示問題說明與建議修正方式';
     // 問題很多時只畫前 500 項 (一次畫幾萬項會讓瀏覽器卡住)；其餘用篩選或下載問題清單查看
     const SHOW = 500, more = list.length - SHOW;
     $('#issue-list').innerHTML = list.length ? list.slice(0, SHOW).map(i => {
@@ -463,7 +503,7 @@
     const el = $('#detail');
     const i = state.res && state.all.find(x => x.id === state.sel);
     if (!i) {
-      el.innerHTML = `<div class="detail-head"><div class="d-title"><span class="d-ico" aria-hidden="true">i</span><div><h3>詳細說明</h3><p class="hint">點清單中任一個問題</p></div></div></div>
+      el.innerHTML = `<div class="detail-head"><div class="d-title"><div><h3>詳細說明</h3><p class="hint">點清單中任一個問題</p></div></div></div>
         <p class="hint">這裡會說明問題在哪裡、依據哪一條規定、建議怎麼改。</p>`;
       return;
     }
@@ -480,7 +520,7 @@
     const fixable = i.fix && state.res.issues.includes(i);
     el.innerHTML = `
       <div class="detail-head">
-        <div class="d-title"><span class="d-ico" aria-hidden="true">i</span><div><h3>詳細說明</h3><p class="hint">${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}</p></div></div>
+        <div class="d-title"><div><h3>詳細說明</h3><p class="hint">${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}</p></div></div>
         <span class="sev-pill ${i.severity}">${SEV[i.severity]}</span>
       </div>
       <section class="d-sec"><p class="d-label">問題說明</p>

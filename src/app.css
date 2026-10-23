@@ -965,3 +965,35 @@ body.no-ai #view-check .ai-explain { display: none; }
 }
 #view-check .issue { scroll-margin-top: 72px; }
 #view-check .more-pop .menu-item { font-size: 13px; padding: 8px 10px; }
+
+/* ===== 這次檢查的資料：每份資料來自哪個檔案、工作表，幾筆；沒有用到的列出原因 ===== */
+.data-map { margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; text-align: left; }
+.dm-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #F1F5F9; font-size: 14px; }
+.dm-head .linkish { font-size: 13px; }
+.dm-list { list-style: none; margin: 0; padding: 4px 0; }
+.dm-row { display: grid; grid-template-columns: minmax(96px, 9em) minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 40px; padding: 4px 16px; font-size: 14px; }
+.dm-row + .dm-row { border-top: 1px solid #F4F4F4; }
+.dm-k { font-weight: 700; color: var(--fg); }
+.dm-src { color: #64748B; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-n { font-variant-numeric: tabular-nums; text-align: right; color: var(--fg); white-space: nowrap; }
+.dm-off .dm-k, .dm-off .dm-n { color: #94A3B8; font-weight: 600; }
+.dm-off .dm-n { white-space: normal; font-size: 13px; max-width: 22em; }
+.dm-foot { margin: 0; padding: 10px 16px 12px; font-size: 13px; color: var(--warn); border-top: 1px solid #F1F5F9; }
+@media (max-width: 720px) {
+  .dm-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 0; padding: 8px 16px; }
+  .dm-src { grid-column: 1 / -1; grid-row: 2; font-size: 12px; white-space: normal; }
+}
+
+/* ===== taste-skill（工作畫面規則）：卡片不放圖示方塊、選取列用中性底色、邊框或陰影擇一、字不小於 11px ===== */
+#view-check #summary .tile, #view-check .issues.card, #view-check .detail.card { box-shadow: none; }
+#view-check #summary .tile .tile-i[hidden] { display: none; }
+#view-check #summary .tile .v { font-size: 20px; font-weight: 700; }
+#view-check #summary .tile.err .v { font-size: 26px; }
+#view-check #summary .tile .k { font-size: 12px; color: #6B7280; }
+#view-check .issue.sel { background: #F1F3F5; border-left-color: transparent; }
+#view-check .issue.sel .issue-msg { color: #000; }
+#view-check .detail-head .hint { font-size: 12px; }
+#view-check .detail-foot .btn.cta { background: #111; border-color: #111; color: #fff; }
+.dm-off .dm-src { white-space: normal; }
+body:not(.no-data) .imports .data-map { margin-top: 12px; }
+.samples:has(#sample-note:empty):has(#size-note[hidden]) { display: none; }
