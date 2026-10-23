@@ -353,6 +353,35 @@
     const names = DQ.report.fieldLabel(rs, i).replace(/欄\d+ /g, '').split('、').filter(Boolean);
     return names.length > 2 ? `${names.slice(0, 2).join('、')} 等 ${names.length} 欄` : names.join('、');
   }
+  // 清單右側的值寫成人看得懂的樣子：「保險金額：5,000,000 元」「出生日期：1991/02/30」「原幣別：TWD → NTD」
+  function niceVal(f, v) {
+    v = String(v == null ? '' : v).trim();
+    if (!v) return '（空白）';
+    if (f && f.type === '9' && f.len === 18 && /^\d+$/.test(v)) return `${(Number(v) / 100).toLocaleString('zh-TW', { maximumFractionDigits: 2 })} 元`;
+    if (f && /Date$|^birthDate$/.test(f.key)) return /^0+$/.test(v) ? v : v.replace(/\b(\d{4})(\d{2})(\d{2})\b/g, '$1/$2/$3');
+    return v.replace(/\s+/g, ' ');
+  }
+  function sideText(i, val, fixable) {
+    const lay = rs.layouts[i.file];
+    const fs = lay ? (i.fields || []).map(k => lay.field(k)).filter(Boolean) : [];
+    // 欄位名稱去掉括號說明；去掉後同名時保留括號 (例如原幣金額／臺幣金額)
+    const short = fs.map(f => f.name.replace(/\(.*?\)|（.*?）/g, ''));
+    const names = fs.map((f, k) => short.indexOf(short[k]) !== short.lastIndexOf(short[k]) ? f.name : short[k]);
+    const cut = t => t.length > 38 ? t.slice(0, 37) + '…' : t;
+    // 能一鍵修改：寫要改的欄位、這筆資料目前的值、改成的值；只是補 0 或空白時寫「調整格式」
+    if (fixable) {
+      const f = lay && lay.field(i.fix.field), rec = (state.res.data[i.file] || []).find(r => r._line === i.line);
+      const now = niceVal(f, rec && f ? rec[f.key] : val), to = niceVal(f, i.fix.value);
+      const name = f ? f.name.replace(/\(.*?\)|（.*?）/g, '') : '';
+      return esc(`${name ? name + '：' : ''}${cut(now)}`) + ` <span class="to">${now === to ? '（調整格式）' : '→ ' + esc(cut(to))}</span>`;
+    }
+    if (!val) return '';
+    // 多個欄位一起比對 (值以 / 或 vs 等分隔)：逐一寫出「欄位 值」
+    const parts = val.split(/\s*(?:\/| vs |≤|≥|<|>)\s*/);
+    if (fs.length > 1 && parts.length === fs.length) return esc(cut(fs.map((f, k) => `${names[k]} ${niceVal(f, parts[k])}`).join('・')));
+    const label = names[0] || shortFields(i).split(/[、 ]/)[0] || '內容';
+    return esc(cut(`${label ? label + '：' : ''}${niceVal(fs[0], val)}`));
+  }
   function renderTable() {
     const fb = $('#focus-bar');
     fb.hidden = !state.focus;
@@ -365,8 +394,8 @@
     $('#issue-list').innerHTML = list.length ? list.slice(0, SHOW).map(i => {
       const val = String(i.value == null ? '' : i.value).trim();
       const fixable = i.fix && state.res.issues.includes(i);
-      // 一列只放：狀態、位置、問題、右側一個值 (能一鍵修改時是建議值，否則是目前的值)
-      const side = fixable ? `建議改成 <b class="mono">${esc(String(i.fix.value).trim().slice(0, 20))}</b>` : val ? `<span class="mono">${esc(val.slice(0, 20))}</span>` : '';
+      // 一列只放：狀態、位置、問題、右側一句「欄位：值」(金額加千分位、日期加斜線；能一鍵修改時加上改成的值)
+      const side = sideText(i, val, fixable);
       return `<div class="issue ${i.severity}${state.sel === i.id ? ' sel' : ''}" data-id="${i.id}" role="listitem" tabindex="0">
         <div class="issue-main">
           <span class="sev-tag ${i.severity}">${SEV[i.severity]}</span>

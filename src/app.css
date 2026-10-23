@@ -875,3 +875,7 @@ body:not(.no-data) #sample-note { font-size: 12px; }
   #view-check #summary .tile .v { font-size: 22px; }
   #view-check #summary .tile .k { font-size: 12px; }
 }
+/* 清單右側：「欄位：值」，和問題同樣好讀的字 */
+.issue-side { font-size: 14px; font-weight: 600; color: #444; white-space: normal; max-width: 38%; text-align: right; display: block; line-height: 1.5; }
+.issue-side .to { color: var(--cta-ink2); white-space: nowrap; }
+@media (max-width: 720px) { .issue-side { max-width: 45%; font-size: 13px; } }
