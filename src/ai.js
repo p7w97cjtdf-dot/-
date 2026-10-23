@@ -29,6 +29,15 @@ ${GUARD}`;
   // ---------- Dify：聊天助手應用的 API (POST {網址}/chat-messages，blocking 模式) ----------
   // 網址只接受 https (或本機 http://localhost)，避免把資料送到沒有加密的位址
   const okUrl = u => /^https:\/\/[^\s/]+/i.test(u) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(u);
+  // 網站的內容安全政策 (CSP) 只允許連到列出的網址：自架 Dify 要先由部署者加進 index.html 的 connect-src
+  function cspAllows(u) {
+    const m = root.document && root.document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+    const d = m && (m.getAttribute('content').split(';').map(x => x.trim().split(/\s+/)).find(x => x[0] === 'connect-src') || null);
+    if (!d) return true;
+    let o; try { o = new URL(u); } catch (e) { return false; }
+    return d.slice(1).some(src => (src === "'self'" && root.location && o.origin === root.location.origin) ||
+      src.replace(/\/+$/, '') === o.origin || (/:\*$/.test(src) && o.origin.startsWith(src.slice(0, -1))));
+  }
   function difyConfig() {
     const c = root.DQ_AI_CONFIG && root.DQ_AI_CONFIG.provider === 'dify' ? root.DQ_AI_CONFIG : (() => { try { return JSON.parse(localStorage.getItem('dq-dify') || 'null'); } catch (e) { return null; } })();
     return c && c.url && c.key && okUrl(String(c.url).trim()) ? { url: String(c.url).trim().replace(/\/+$/, ''), key: String(c.key).trim() } : null;
@@ -40,7 +49,7 @@ ${GUARD}`;
       try {
         r = await fetch(`${c.url}/chat-messages`, { method: 'POST', signal: ctl.signal, headers: { Authorization: `Bearer ${c.key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ inputs: {}, query: text, response_mode: 'blocking', user: 'filing-checker' }) });
-      } catch (e) { throw new Error(e.name === 'AbortError' ? 'Dify 超過 2 分鐘沒有回應，請稍後再試。' : `連不到 Dify（${c.url}）：請確認網址正確、網路可以連線，以及 Dify 允許這個網站呼叫 (CORS)。`); }
+      } catch (e) { throw new Error(e.name === 'AbortError' ? 'Dify 超過 2 分鐘沒有回應，請稍後再試。' : `連不到 Dify（${c.url}）：請確認網址正確、網路可以連線，Dify 允許這個網站呼叫 (CORS)，以及網址已列在網站安全設定 (CSP) 的 connect-src。`); }
       finally { clearTimeout(timer); }
       if (r.status === 401) throw new Error('Dify 的 API 金鑰不正確或已失效，請到「AI 服務設定」更新。');
       if (r.status === 429) { const e = new Error('Dify 使用太頻繁，請稍等一下再試。'); throw e; }
@@ -62,6 +71,7 @@ ${GUARD}`;
     if (c) {
       if (!okUrl(String(c.url || '').trim())) throw new Error('網址要以 https:// 開頭（本機測試可用 http://localhost）。');
       if (!String(c.key || '').trim()) throw new Error('請填入 Dify 應用的 API 金鑰。');
+      if (!cspAllows(String(c.url).trim())) throw new Error(`網站的安全設定 (CSP) 不允許連到 ${new URL(String(c.url).trim()).origin}：自架的 Dify 請部署者把這個網址加進 index.html 的 connect-src (見 docs/dify-setup.md)。`);
       localStorage.setItem('dq-dify', JSON.stringify({ url: String(c.url).trim(), key: String(c.key).trim() }));
     } else localStorage.removeItem('dq-dify');
     const d = difyConfig();

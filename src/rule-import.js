@@ -17,7 +17,7 @@
     const pdfjs = root.pdfjsLib || globalThis.pdfjsLib;
     if (!pdfjs) throw new Error('PDF 解析元件未載入，請確認網路連線，或改貼上文字');
     pdfjs.GlobalWorkerOptions.workerSrc = pdfjs.GlobalWorkerOptions.workerSrc || root.DQ_PDF_WORKER || 'vendor/pdf.worker.min.js';
-    const doc = await pdfjs.getDocument({ data: buf }).promise;
+    const doc = await pdfjs.getDocument({ data: buf, isEvalSupported: false }).promise;
     const a = Math.max(1, from || 1), b = Math.min(doc.numPages, to || doc.numPages);
     const pages = [];
     for (let p = a; p <= b; p++) {
@@ -41,7 +41,7 @@
     const pdfjs = root.pdfjsLib || globalThis.pdfjsLib;
     if (!pdfjs) return null;
     pdfjs.GlobalWorkerOptions.workerSrc = pdfjs.GlobalWorkerOptions.workerSrc || root.DQ_PDF_WORKER || 'vendor/pdf.worker.min.js';
-    return (await pdfjs.getDocument({ data: buf.slice(0) }).promise).numPages;
+    return (await pdfjs.getDocument({ data: buf.slice(0), isEvalSupported: false }).promise).numPages;
   }
 
   // ---------- 切段 (以頁或段落為界，每段約 7,000 字) ----------

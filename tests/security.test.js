@@ -141,3 +141,19 @@ test('紅隊：Excel 壓縮炸彈在讀取前擋下，正常的 Excel 不受影�
   assert.match(W.zipProblem(bomb), /900 MB/);
   assert.strictEqual(W.zipProblem(Buffer.from('not a zip')), '');   // 不是 ZIP (例如 .xls)，交給 Excel 元件判斷
 });
+
+test('紅隊：CSP 只允許同網站程式檔與指定的內嵌提示，不允許 eval', () => {
+  const crypto = require('crypto');
+  const html = read('index.html');
+  const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/)[1];
+  assert.doesNotMatch(csp, /unsafe-eval/);
+  assert.match(csp, /script-src 'self' 'sha256-[^']+';/);
+  assert.match(csp, /object-src 'none'/);
+  // 每一段內嵌程式都要在 CSP 允許清單裡 (改了提示文字要重新算 sha256)
+  const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+  assert.ok(inline.length >= 1);
+  for (const s of inline) assert.ok(csp.includes(`'sha256-${crypto.createHash('sha256').update(s, 'utf8').digest('base64')}'`), '內嵌程式的 sha256 不在 CSP 裡');
+  assert.doesNotMatch(html, /\son[a-z]+=/i);   // 不用 onclick= 之類的內嵌事件
+  const vercel = JSON.parse(read('vercel.json'));
+  assert.ok(JSON.stringify(vercel).includes("frame-ancestors 'none'"));
+});

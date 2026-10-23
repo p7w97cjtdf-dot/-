@@ -46,6 +46,8 @@
 
 工具只接受 `https://` 開頭的網址（本機測試可用 `http://localhost`）。
 
+**自架的 Dify（不是 `https://api.dify.ai`）**：檢核工具的網站安全設定 (CSP) 只允許連到列出的網址，請部署者在 `index.html` 開頭找到 `Content-Security-Policy`，在 `connect-src` 後面加上你們的 Dify 網址 (只寫到網域，例如 `https://dify.your-company.com`) 再重新部署。沒有加時，按「儲存並使用」會顯示「網站的安全設定 (CSP) 不允許連到…」。
+
 ## 5. 安全注意事項
 
 - **金鑰存在這台電腦的瀏覽器**（localStorage），只有用這台電腦、這個瀏覽器的人用得到。共用電腦用完請按「清除」。
