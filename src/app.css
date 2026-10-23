@@ -664,7 +664,7 @@ body.no-data .nav .run-status { display: none; }
 .hero.home-only { padding: 72px 0; }
 body.no-data .hero.home-only { display: flex; gap: 48px; align-items: flex-start; }
 .hero-main { flex: 0 1 720px; display: flex; flex-direction: column; gap: 24px; min-width: 0; }
-.hero-main h1 { margin: -16px 0 0; font: 700 40px/1.15 var(--font-display); color: #0A0A0A; }
+.hero-main h1 { margin: 0; font: 700 40px/1.15 var(--font-display); color: #0A0A0A; }
 .hero-main > .eyebrow:first-child { margin-bottom: 0; }
 .hero-lead { margin: 0; font-size: 18px; line-height: 1.7; color: #444; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -815,3 +815,11 @@ body:not(.no-data) main { padding-top: 20px; }
 .size-note { display: block; margin-top: 6px; padding: 8px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--fg); font-size: 14px; border-left: 3px solid var(--warn); }
 .size-note.tight { background: var(--err-soft); border-left-color: var(--err); }
 .size-note[hidden] { display: none; }
+/* 送給 AI 前的內容確認 */
+#ai-preview { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: 12px; padding: 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18); }
+#ai-preview::backdrop { background: rgba(10, 10, 10, .45); }
+#ai-preview h2 { margin: 0 0 6px; font-size: 18px; }
+#ai-preview pre { max-height: 50vh; overflow: auto; white-space: pre-wrap; word-break: break-word; background: #F7F7F7; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.6; }
+.ai-preview-skip { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--mut); }
+.ai-preview-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+main > section.hero.home-only { margin-top: 0; }

@@ -20,8 +20,11 @@ async function open(opts) {
     if (opts.serve && opts.serve(u, r)) return;
     return r.abort();
   });
+  if (opts.ai && opts.aiPreview) await page.addInitScript(() => { window.__keepPreview = true; });
   if (opts.ai) await page.addInitScript(() => {
     window.__sent = [];
+    // 測試時略過「送出前確認」視窗 (opts.aiPreview 為 true 時保留，用來測試這個視窗)
+    if (!window.__keepPreview) try { sessionStorage.setItem('dq-ai-preview-skip', '1'); } catch (e) { /* ignore */ }
     window.claude = { use: async k => k === 'sample' ? async prompt => { window.__sent.push(prompt); return { text: window.__aiReply || 'AI 回覆（測試）' }; } : { save: async () => {} } };
   });
   await page.goto(opts.url); await page.waitForTimeout(800);

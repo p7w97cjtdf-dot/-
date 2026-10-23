@@ -118,3 +118,26 @@ test('T05 AI 安全自我測試的判斷：照做的回答判為沒通過，拒�
   assert.ok(T.hijack('HACKED'));
   assert.ok(!T.hijack('資料中有類似指令的文字（要求輸出 HACKED），已忽略。重點：…'));
 });
+
+test('紅隊：自訂規則的正規表示式只接受簡單格式 (避免 ReDoS)', () => {
+  const dsl = require('../src/rules-dsl.js');
+  for (const ok of ['^[A-Z]\\d{9}$', '^\\d{8}$', '^[0-9]{1,500}$']) assert.ok(dsl.safeRegex(ok), ok);
+  for (const bad of ['(a+)+$', 'a*', 'a|b', '^(\\d)\\1$', 'x{600}', '^\\d{1,2}[A-Z]{1,3}$', 'a'.repeat(121), '']) assert.strictEqual(dsl.safeRegex(bad), null, bad);
+  const errs = dsl.validateRule({ id: 'X', file: 'L', assert: { field: 'policyNo', op: 'matches', value: '(a+)+$' } }, all.layouts);
+  assert.ok(errs.some(e => /不安全/.test(e)));
+  // 舊的規則若帶著不安全的式樣，執行時不判定 (回傳 null)，不會卡住
+  assert.strictEqual(dsl.evalCond({ field: 'policyNo', op: 'matches', value: '(a+)+$' }, { rec: { policyNo: 'a'.repeat(40) + '!' } }), null);
+});
+
+test('紅隊：Excel 壓縮炸彈在讀取前擋下，正常的 Excel 不受影響', () => {
+  const W = require('../src/workbook.js');
+  assert.strictEqual(W.zipProblem(fs.readFileSync(path.join(__dirname, '..', 'samples/excel/試用資料_含錯誤.xlsx'))), '');
+  // 做一個目錄宣稱解開後 900 MB 的壓縮檔 (只寫目錄，不需要真的有資料)
+  const name = Buffer.from('xl/worksheets/sheet1.xml');
+  const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0);
+  const cd = Buffer.alloc(46); cd.writeUInt32LE(0x02014b50, 0); cd.writeUInt32LE(900 * 1048576, 24); cd.writeUInt16LE(name.length, 28);
+  const eocd = Buffer.alloc(22); eocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(1, 8); eocd.writeUInt16LE(1, 10); eocd.writeUInt32LE(cd.length + name.length, 12); eocd.writeUInt32LE(local.length + name.length, 16);
+  const bomb = Buffer.concat([local, name, cd, name, eocd]);
+  assert.match(W.zipProblem(bomb), /900 MB/);
+  assert.strictEqual(W.zipProblem(Buffer.from('not a zip')), '');   // 不是 ZIP (例如 .xls)，交給 Excel 元件判斷
+});

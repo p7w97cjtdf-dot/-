@@ -28,7 +28,7 @@ const XLSX_DIRTY = process.env.SAMPLE || path.join(ROOT, 'samples', 'excel', '�
     // 單筆解釋送出的欄位名稱
     const fields = (sent[1].match(/該筆[^\n]*的相關欄位：([^\n]*)/) || ['', ''])[1].split('；').map(x => x.split('=')[0].replace(/^\d+\./, ''));
     out.ai = { networkDuringAi: log.requests.slice(n0).filter(r => !r.url.startsWith('file:')).map(r => `${r.method} ${r.url}`), calls: sent.length, bytes: sent.map(s => s.length), explainFields: fields,
-      summaryKeys: Object.keys(JSON.parse(sent[0].slice(sent[0].indexOf('{'), sent[0].lastIndexOf('}') + 1))) };
+      summaryKeys: Object.keys(JSON.parse(sent[0].match(/<資料>\n(\{[\s\S]*?\})\n<\/資料>/)[1])) };
     await browser.close();
   }
   // 3) 規則更新：官方更新包清單 (本機網站)

@@ -101,5 +101,34 @@
     return out;
   }
 
-  return { SHEET_SLOT, NAMES, sheets, extSheets, slots, files };
+  // .xlsx 是壓縮檔：讀取前先看壓縮檔目錄，算出解開後的總大小與檔案數 (不實際解壓)。
+  // 小檔案解開後膨脹成幾 GB 的「壓縮炸彈」會讓瀏覽器卡死，超過上限就不讀取。不是 ZIP 格式 (例如舊版 .xls) 回傳 null
+  const ZIP_MAX_BYTES = 800 * 1048576, ZIP_MAX_ENTRIES = 5000;
+  function zipStats(buf) {
+    const u8 = new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    if (u8.length < 22 || dv.getUint32(0, true) !== 0x04034b50) return null;
+    let eocd = -1;
+    for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    if (eocd < 0) return { bad: '找不到壓縮檔目錄' };
+    const entries = dv.getUint16(eocd + 10, true), cdOff = dv.getUint32(eocd + 16, true);
+    if (entries === 0xffff || cdOff === 0xffffffff) return { bad: '超大型壓縮格式 (ZIP64)' };
+    let p = cdOff, total = 0, n = 0;
+    while (n < entries && p + 46 <= u8.length && dv.getUint32(p, true) === 0x02014b50) {
+      const size = dv.getUint32(p + 24, true);
+      if (size === 0xffffffff) return { bad: '超大型壓縮格式 (ZIP64)' };
+      total += size; n++;
+      p += 46 + dv.getUint16(p + 28, true) + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+    }
+    if (n !== entries) return { bad: '壓縮檔目錄不完整' };
+    return { entries: n, total, ratio: total / Math.max(1, u8.length) };
+  }
+  function zipProblem(buf) {
+    const z = zipStats(buf);
+    if (!z) return '';
+    if (z.bad) return z.bad;
+    if (z.entries > ZIP_MAX_ENTRIES) return `內含 ${z.entries} 個檔案，超過 ${ZIP_MAX_ENTRIES} 個`;
+    if (z.total > ZIP_MAX_BYTES) return `解開後有 ${Math.round(z.total / 1048576)} MB，超過 ${ZIP_MAX_BYTES / 1048576} MB`;
+    return '';
+  }
+  return { SHEET_SLOT, NAMES, sheets, extSheets, slots, files, zipStats, zipProblem };
 });

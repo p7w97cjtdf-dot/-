@@ -19,7 +19,8 @@
 
   // ---------- 讀取文件 ----------
   $('#file-rule').addEventListener('change', async e => {
-    const f = e.target.files[0]; if (!f) return;
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    if (f.size > 25 * 1048576) return note('#conv-note', '規則文件超過 25 MB，沒有讀取；請只選取相關章節，或拆成較小的文件。');
     $('#name-rule').textContent = f.name; st.source = f.name;
     $('#imp-pages').hidden = true;
     try {
@@ -128,7 +129,8 @@
   };
   $('#btn-dl-rules').onclick = () => app.download('custom_rules.json', JSON.stringify(st.reviewed.filter(r => r.enabled).map(r => r.rule), null, 2), 'application/json');
   $('#file-rules-json').addEventListener('change', async e => {
-    const f = e.target.files[0]; if (!f) return;
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    if (f.size > 2 * 1048576) return note('#conv-note', '規則備份超過 2 MB，沒有讀取；請確認內容，或拆成較小的檔案。');
     try {
       const data = JSON.parse(await f.text());
       st.source = f.name; st.unconvertible = data.unconvertible || [];

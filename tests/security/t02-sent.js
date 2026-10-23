@@ -10,7 +10,7 @@ for (const f of ['LFL01_2025.txt', 'LFD01_2025.txt']) fs.copyFileSync(path.join(
 const csv = fs.readFileSync(path.join(ROOT, 'samples/dirty/客戶資料_2025.csv'), 'utf8');
 fs.writeFileSync(path.join(TMP, 'customers_2025.csv'), csv);
 const rows = csv.trim().split('\n').slice(1).map(l => l.split(','));
-const known = { ids: [...new Set(rows.map(r => r[3]))], names: [...new Set(rows.map(r => r[4]))], addrs: [...new Set(rows.map(r => r[8]))] };
+var known = { ids: [...new Set(rows.map(r => r[3]))], names: [...new Set(rows.map(r => r[4]))], addrs: [...new Set(rows.map(r => r[8]))] };
 // 退件訊息裡貼上的虛構個資 (各種寫法)
 const planted = ['被保險人：陳美玲', 'Ｆ２２３４５６７８９', 'F 223 456 789', '0933-222-111', '+886 933 222 111', '(04)2345-6789#12', 'chen.ml@example.com', '高雄市苓雅區四維三路2號5樓', '生日：1985/03/09', '4111-1111-1111-1111'];
 const raw = ['陳美玲', 'F223456789', '0933222111', '23456789', 'chen.ml@', '四維三路2號', '1985/03/09', '1111-1111-1111-1111'];
@@ -34,4 +34,17 @@ const raw = ['陳美玲', 'F223456789', '0933222111', '23456789', 'chen.ml@', '�
   };
   console.log(JSON.stringify({ calls: sent.length, chars: sent.map(s => s.length), leak, note: (note || '').slice(0, 120), sampleDecode: (sent[sent.length - 1].match(/<資料>\n錯誤代碼[^\n]*/) || [''])[0].slice(0, 400) }, null, 2));
   await browser.close();
+  // 送出前確認視窗：顯示的就是實際要送出的內容；按取消就不送
+  {
+    const t = await open({ ai: true, aiPreview: true });
+    await t.page.setInputFiles('#file-book', ['LFL01_2025.txt', 'LFD01_2025.txt', 'customers_2025.csv'].map(f => path.join(TMP, f))); await t.page.waitForTimeout(2500);
+    await t.page.click('#btn-ai'); await t.page.waitForTimeout(400);
+    const shown = await t.page.evaluate(() => ({ open: document.querySelector('#ai-preview').open, text: document.querySelector('#ai-preview-text').textContent, note: document.querySelector('#ai-preview-note').textContent }));
+    await t.page.click('#ai-preview-no'); await t.page.waitForTimeout(300);
+    const cancelled = await t.page.evaluate(() => ({ sent: window.__sent.length, msg: document.querySelector('#ai-out').textContent }));
+    await t.page.click('#btn-ai'); await t.page.waitForTimeout(300); await t.page.click('#ai-preview-yes'); await t.page.waitForTimeout(500);
+    const sent = await t.page.evaluate(() => window.__sent);
+    console.log(JSON.stringify({ preview: { open: shown.open, note: shown.note, rawIdsInPreview: known.ids.filter(x => shown.text.includes(x)).length, sameAsSent: sent.length === 1 && sent[0].endsWith(shown.text) }, cancelled, sentAfterConfirm: sent.length }, null, 2));
+    await t.browser.close();
+  }
 })();
