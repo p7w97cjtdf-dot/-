@@ -79,6 +79,7 @@
     </label>
     <div class="samples">
       <span class="hint" id="sample-note"></span>
+      <span class="size-note" id="size-note" role="status" hidden></span>
     </div>
     <details class="more">
       <summary>分別放入各份資料（進階）</summary>
@@ -411,6 +412,11 @@
       <div class="l1"><h3>使用說明</h3><p class="disclaimer">本工具供申報前自我檢查使用，檢查結果不代表保發中心或主管機關的正式審核；通過檢查不保證不會被退件。規則依下列手冊整理，可能與主辦單位最新版本有出入，請以正式手冊與退件通知為準。</p></div>
       <div class="l2"><h3>檢查依據</h3><p id="rule-version">人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度）。</p></div>
       <div class="l3"><h3>資料安全與參考連結</h3><p>所有檢查都在你的電腦上進行，資料不會上傳。會計科目為示範用的簡化版。AI 說明只在線上版提供。</p>
+        <div class="selftest">
+          <button class="btn-x sm" type="button" id="btn-ai-selftest">測試 AI 會不會被資料裡的指令影響</button>
+          <span class="hint">只有 claude.ai 線上版可用。用虛構資料送出 3 種藏在資料裡的指令，自動檢查 AI 有沒有照做；建議每次更新後測 3 次。</span>
+          <div id="ai-selftest" role="status"></div>
+        </div>
         <p class="legal-links"><a href="docs/guide.html">使用說明</a><span aria-hidden="true">·</span><a href="#updates" data-goto="updates">法規更新</a><span aria-hidden="true">·</span><a href="docs/limits.html">限制與風險說明</a></p></div>
     </div>
   </section>

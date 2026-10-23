@@ -178,6 +178,17 @@ npm run bench     # 計時：試用資料完整檢核一次的秒數 (另含 1 �
 2. **法遵確認**：判斷是否影響申報，在「法規更新」頁建立更新包並試跑。
 3. **自動發布到所有人**：更新包放進 `rules/updates/`、登記在 `rules/updates/index.json`，併入 main 後，每個人打開工具時自動套用最新版，畫面會提示一次；個人可以在本機關閉，但不能刪除官方更新。
 
+**官方更新包的簽章與審核**：
+
+1. **產生簽章金鑰（只做一次）**：由負責核准法規更新的人在自己的電腦執行 `node tools/pack-keygen.js ~/dq-pack-signing-key.pem`。私鑰留在自己電腦（不可放進 repo），把產生的 `rules/updates/public-key.json` 提交。之後工具只套用用這把私鑰簽過的官方更新包。
+2. **發布**：`node tools/publish-pack.js rules/updates/<檔名>.json --key ~/dq-pack-signing-key.pem`，會檢查格式、登記 SHA-256 並簽章。
+3. **開啟 GitHub 分支保護**：GitHub 的 repository → Settings → Branches → Add branch ruleset（或 Add rule），目標 `main`，勾選：
+   - Require a pull request before merging，Required approvals 1，並勾 Require review from Code Owners（`.github/CODEOWNERS` 指定更新包、公鑰與驗證程式的負責人）
+   - Require status checks to pass，選「檢查」（`.github/workflows/ci.yml`：自動測試與 `publish-pack.js --check`）
+   - Block force pushes
+
+   開啟後，任何人（包括管理者）都要經負責人審核、檢查通過才能合併到 main。
+
 不讓程式直接依網頁內容改規則：法規文字需要解讀（適用對象、生效日、例外），未經確認就上線的錯誤規則可能擋下整批正確資料或漏抓錯誤。
 
 格式說明在 `src/rule-packs.js`，示範檔 `rules/updates/example-2026-format-change.json`（假設保留欄位第 1 碼改為「數位投保註記」）。每筆資料總長度改變時仍需更新程式。

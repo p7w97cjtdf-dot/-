@@ -1,0 +1,8 @@
+# 官方法規更新包、簽章公鑰、載入與驗證更新包的程式：合併前必須由負責人審核
+# (需在 GitHub 的 Settings → Branches 開啟「Require review from Code Owners」才會強制)
+/rules/updates/        @p7w97cjtdf-dot
+/tools/publish-pack.js @p7w97cjtdf-dot
+/tools/pack-keygen.js  @p7w97cjtdf-dot
+/src/rule-packs.js     @p7w97cjtdf-dot
+/src/app.js            @p7w97cjtdf-dot
+/.github/              @p7w97cjtdf-dot
