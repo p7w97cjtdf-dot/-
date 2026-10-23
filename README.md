@@ -80,6 +80,7 @@ AI 說明**不需要 API key**：只在 claude.ai 的線上版提供，使用開
 
 - **連結 GitHub（建議）**：在 vercel.com 選「Add New → Project」，匯入這個 repository，按「Deploy」。之後每次併入 main 都會自動更新網站。
 - **用命令列**：安裝 Vercel CLI（`npm i -g vercel`）後，在專案資料夾執行 `vercel`（預覽）或 `vercel --prod`（正式）。
+- **上傳壓縮檔**：執行 `sh tools/build-zip.sh`，產生只含執行所需檔案的 `dist/filing-validation-assistant.zip`（1MB 以下，不含試用資料與測試），解壓縮後可直接部署，或雙擊 `index.html` 使用。
 
 部署後檢核工具在網站根目錄（`/`），使用說明在 `/docs/guide.html`，介紹頁在 `/docs/`。
 
