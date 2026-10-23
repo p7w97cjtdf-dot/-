@@ -293,6 +293,8 @@
     }
     state.all = state.res.issues.concat(state.extra.filter(i => !state.res.issues.includes(i)));
     state.sel = null; state.aiSummary = null; state.aiInsights = null; state.aiChecks = null; state.focus = null;   // 資料變了，AI 的結論要重新產生與驗證
+    // 寬螢幕：右側直接顯示第一個問題的說明 (不留空白的說明欄)
+    if (window.matchMedia('(min-width: 1101px)').matches) { const first = filtered()[0]; if (first) state.sel = first.id; }
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
     { const c = sev => state.all.filter(i => i.severity === sev).length, h = Object.values(state.disabledCount || {}).reduce((t, n) => t + n, 0);
       audit('檢查', `必須修改 ${c('error')}、建議確認 ${c('warning')}、請人工判斷 ${c('suspect')}${h ? `；停用的檢查隱藏 ${h} 個` : ''}`); }
@@ -311,12 +313,14 @@
   // 摘要：四個重點數字；其他資訊 (耗時、範例錯誤找到幾個) 放在下方一行小字
   // 只要有一筆要修改就不能顯示 100%：無條件捨去到小數一位 (29,395 筆中 52 筆有問題 → 99.8%，不是四捨五入成 100%)
   const okPct = (n, bad) => !bad ? '100' : String(Math.min(99.9, Math.floor((n - bad) / n * 1000) / 10));
+  let tileBtns = null;
   function renderSummary() {
     const s = state.res.summary, all = state.all;
     const n = sev => all.filter(i => i.severity === sev).length;
     const fixable = all.filter(i => i.fix && state.res.issues.includes(i)).length;
     const ICON = { err: '!', warn: '?', suspect: '…', ok: '✓', fix: '↺' };
-    const tile = (cls, k, v, sub) => `<div class="tile ${cls}"><div><span class="k">${k}</span><span class="v">${v}</span><span class="s">${sub}</span></div><span class="tile-i" aria-hidden="true">${ICON[cls] || ''}</span></div>`;
+    // 卡片只放名稱與數字 (細項放在滑鼠停留的說明裡)，不一次塞太多資訊
+    const tile = (cls, k, v, sub) => `<div class="tile ${cls}" title="${esc(sub)}"><div><span class="k">${k}</span><span class="v">${v}</span></div><span class="tile-i" aria-hidden="true">${ICON[cls] || ''}</span></div>`;
     const nRec0 = Object.values(s.byFile).reduce((t, b) => t + b.records, 0), nBad0 = Object.values(s.byFile).reduce((t, b) => t + b.badRecords, 0);
     const pending = n('error') + n('warning');
     // 三張卡：資料正確的比例、待修正的問題、可以一鍵修改的問題
@@ -324,6 +328,13 @@
       tile(nBad0 ? 'warn' : 'ok', '資料正確比例', nRec0 ? `${okPct(nRec0, nBad0)}%` : '—', `已檢查 ${nRec0.toLocaleString()} 筆資料`) +
       tile(n('error') ? 'err' : 'ok', '待修正問題', `${pending} 項`, `必須修改 ${n('error')}・建議確認 ${n('warning')}${n('suspect') ? `・請人工判斷 ${n('suspect')}` : ''}`) +
       tile('fix', '可以一鍵修改', `${fixable} 項`, '工具知道正確的值');
+    // 「一鍵修改」放在第三張卡片上；改完之後換成「下載改好的資料」
+    // (重畫卡片會清掉裡面的按鈕，所以記住按鈕本身，每次移進卡片或收回備用區)
+    tileBtns = tileBtns || { fix: $('#btn-fix'), got: $('#btn-get-fixed') };
+    const t3 = $('#summary .tile.fix'), changed = state.changed && state.changed.size;
+    const btn = fixable ? tileBtns.fix : changed ? tileBtns.got : null;
+    for (const b of Object.values(tileBtns)) if (b !== btn) $('#tile-btns').appendChild(b);
+    if (btn) { t3.querySelector('.tile-i').replaceWith(btn); t3.classList.add('has-btn'); }
     const recs = Object.entries(s.byFile).map(([fid, b]) => `${SHEET[fid]} ${b.records} 筆`).join('、');
     const allMst = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
     const found = state.key ? `　範例刻意放的錯誤找到：保單與理賠 ${hitCount(state.key)}/${state.key.length}、客戶與商品 ${state.masterKey.filter(k => allMst.some(i => i.ruleId === k.ruleId && i.policy === k.policy)).length}/${state.masterKey.length}。` : '';
@@ -390,6 +401,8 @@
     return esc(cut(`${label ? label + '：' : ''}${niceVal(fs[0], val)}`));
   }
   function renderTable() {
+    // 手機上說明會插在選取的那一項下面：重畫清單前先放回右側欄
+    if ($('#issue-list').contains($('#detail'))) $('.bench-side').appendChild($('#detail'));
     const fb = $('#focus-bar');
     fb.hidden = !state.focus;
     if (state.focus) fb.innerHTML = `只看 AI 原因「${esc(state.focus.label)}」驗證到的資料 <button class="linkish" type="button" id="btn-focus-off">顯示全部</button>`;
@@ -426,8 +439,8 @@
   function select(id, quiet) {
     state.sel = id; renderTable(); renderDetail();
     const r = $(`#issue-list [data-id="${id}"]`); if (r && !quiet) r.scrollIntoView({ block: 'nearest' });
-    // 手機 / 窄螢幕：詳情在清單下方，選取後捲到詳情
-    if (!quiet && window.matchMedia('(max-width: 1100px)').matches) $('#detail').scrollIntoView({ block: 'start', behavior: 'smooth' });
+    // 手機 / 窄螢幕：說明直接展開在選取的那一項下面 (不用捲到整張清單的最下面)
+    if (window.matchMedia('(max-width: 1100px)').matches && r) { r.after($('#detail')); if (!quiet) r.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
   }
 
   function ruler(lay, raw, hitFields) {
@@ -450,8 +463,8 @@
     const el = $('#detail');
     const i = state.res && state.all.find(x => x.id === state.sel);
     if (!i) {
-      el.innerHTML = `<div class="detail-head"><div><h3>詳細說明</h3><p class="hint">點清單中任一個問題</p></div></div>
-        <p class="hint">這裡會說明問題在哪裡、依據哪一條規定、建議怎麼改；需要時可以展開那一行的原始資料。</p>`;
+      el.innerHTML = `<div class="detail-head"><div class="d-title"><span class="d-ico" aria-hidden="true">i</span><div><h3>詳細說明</h3><p class="hint">點清單中任一個問題</p></div></div></div>
+        <p class="hint">這裡會說明問題在哪裡、依據哪一條規定、建議怎麼改。</p>`;
       return;
     }
     const lay = rs.layouts[i.file] || { title: i.sheet, recordLength: -1, fields: [], field: () => null, keyOf: () => '' };
@@ -467,18 +480,16 @@
     const fixable = i.fix && state.res.issues.includes(i);
     el.innerHTML = `
       <div class="detail-head">
-        <div><h3>詳細說明</h3><p class="hint">${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}</p></div>
-        <span class="sev-tag ${i.severity}">${SEV[i.severity]}</span>
+        <div class="d-title"><span class="d-ico" aria-hidden="true">i</span><div><h3>詳細說明</h3><p class="hint">${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}</p></div></div>
+        <span class="sev-pill ${i.severity}">${SEV[i.severity]}</span>
       </div>
       <section class="d-sec"><p class="d-label">問題說明</p>
-        <div class="d-box ${i.severity}"><b>${esc(i.message)}</b>
-          <p class="d-meta">${esc(DQ.report.fieldLabel(rs, i).replace(/欄\d+ /g, '') || '-')}${i.value !== '' ? `：<span class="mono">${esc(String(i.value).replace(/ /g, '·'))}</span>` : ''}</p></div></section>
+        <div class="d-box ${i.severity}"><b>${esc(i.message)}</b></div></section>
       <section class="d-sec"><p class="d-label">建議修正方式</p>
         <div class="d-box plain">${esc(i.suggestion || '請人工確認')}
           ${i.fix ? `<p class="d-meta">建議值：<b class="mono fixval">${esc(i.fix.value)}</b></p>` : ''}</div></section>
       <section class="d-sec"><p class="d-label">依據的規定</p>
-        <div class="d-box basis"><b>${esc(i.ruleName || LB.cat(i.category))}</b>
-          <p class="d-meta"><span class="mono">${esc(i.ruleId)}</span>${i.ref ? `・${esc(i.ref)}` : ''}</p></div></section>
+        <div class="d-box basis">${esc(i.ruleName || LB.cat(i.category))}（檢核編號 <span class="mono">${esc(i.ruleId)}</span>${i.ref ? `・${esc(i.ref)}` : ''}）</div></section>
       ${rec ? `<details class="raw"><summary>顯示原始資料${range}</summary>
         <p class="hint">左邊數字是第幾個字；「·」代表空白；黃色是有問題的地方。</p>
         <div class="ruler">${ruler(lay, rec._raw, i.fields)}</div>
@@ -553,6 +564,7 @@
     return { total, before, after };
   }
   $('#btn-fix').onclick = () => applyFix(null);
+  $('#btn-get-fixed').onclick = () => $('#btn-dl-fixed').click();
   // 使用者自己的檔名若含中文，去掉中文字，避免存成「download」
   const safeName = (name, fallback) => { const n = String(name || '').replace(/[^\x21-\x7e]/g, ''); return /^[^.]+\.\w+$/.test(n) ? n : fallback; };
   // 下載改過的明細檔 (沒有改過時下載保單資料)

@@ -885,3 +885,83 @@ body:not(.no-data) #sample-note { font-size: 12px; }
 .ai-settings label { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 13px; color: var(--mut); }
 .ai-settings input { height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; font: inherit; font-size: 14px; color: var(--fg); }
 .ai-settings-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+/* ===== 檢核結果頁：依 H.index 版面 (尺寸與間距照檔案；配色沿用本工具) ===== */
+#view-check .bench { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 24px; }
+#view-check .bench-main { gap: 16px; }
+/* 三張卡：名稱 11px、數字 18px、右側圖示 */
+#view-check #summary { gap: 16px; margin-bottom: 24px; }
+#view-check #summary .tile { padding: 16px; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); align-items: center; }
+#view-check #summary .tile .k { font-size: 11px; font-weight: 700; color: #94A3B8; letter-spacing: 0; text-transform: none; }
+#view-check #summary .tile .v { font-size: 18px; font-weight: 800; line-height: 1.4; margin-top: 2px; color: #0F172A; font-family: var(--font-body); }
+#view-check #summary .tile.err .v { color: var(--err); }
+#view-check #summary .tile .tile-i { width: auto; height: auto; padding: 6px 10px; border-radius: 8px; font-size: 14px; }
+#view-check #summary .tile .tile-btn { flex: none; min-height: 34px; padding: 6px 14px; font-size: 12px; font-weight: 700; border-radius: 8px; white-space: nowrap; }
+/* 清單卡 */
+#view-check .issues.card { border: 1px solid var(--line); border-radius: 12px; overflow: visible; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+#view-check .card-head { padding: 16px; background: #F8FAFC; border-bottom: 1px solid #F1F5F9; border-radius: 12px 12px 0 0; }
+#view-check .card-head h2 { font-size: 14px; font-weight: 700; color: #0F172A; }
+#view-check .card-head .hint { font-size: 12px; color: #64748B; margin: 0; }
+#view-check .head-r { display: flex; align-items: center; gap: 8px; flex: none; }
+#view-check .count-pill { font-size: 12px; padding: 2px 10px; }
+#view-check .more-menu > summary { min-height: 28px; padding: 2px 10px; font-size: 12px; font-weight: 700; border-radius: 999px; color: #475569; }
+#view-check .more-pop { min-width: 240px; gap: 4px; padding: 8px; }
+#view-check .menu-h { margin: 6px 6px 2px; font-size: 11px; font-weight: 700; color: #94A3B8; }
+#view-check .menu-input { width: 100%; height: 34px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; font: inherit; font-size: 13px; background: #fff; color: var(--fg); box-sizing: border-box; }
+#view-check .issue-list { max-height: 480px; overflow-y: auto; border-radius: 0 0 12px 12px; }
+#view-check .issue { padding: 16px; gap: 16px; border-bottom: 1px solid #F1F5F9; border-left: 4px solid transparent; box-shadow: none; }
+#view-check .issue:hover { background: #F8FAFC; }
+#view-check .issue.sel { background: var(--cta-soft); border-left-color: var(--cta); box-shadow: none; }
+#view-check .issue-main { gap: 4px; }
+#view-check .issue-main .sev-tag { margin: 0; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+#view-check .issue-where { font-size: 12px; font-weight: 700; color: #94A3B8; }
+#view-check .issue-msg { font-size: 14px; font-weight: 700; color: #0F172A; line-height: 1.5; }
+#view-check .issue-side { font-size: 12px; font-weight: 600; color: #475569; }
+#view-check .action-note:empty, #view-check .focus-bar[hidden] { display: none; }
+#view-check .action-note { margin: 0; padding: 10px 16px; border-bottom: 1px solid #F1F5F9; font-size: 12px; }
+/* 右側詳細說明 */
+#view-check .bench-side { top: 16px; }
+#view-check .detail.card { padding: 24px; gap: 0; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); max-height: calc(100vh - 32px); }
+#view-check .detail-head { align-items: center; padding-bottom: 16px; border-bottom: 1px solid #F1F5F9; }
+#view-check .d-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#view-check .d-ico { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--teal-soft); color: var(--teal-ink); font-weight: 800; font-family: Georgia, serif; font-style: italic; }
+#view-check .detail-head h3 { font-size: 14px; font-weight: 700; color: #0F172A; margin: 0; }
+#view-check .detail-head .hint { font-size: 10px; color: #94A3B8; margin: 1px 0 0; }
+.sev-pill { flex: none; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.sev-pill.error { background: var(--err-soft); color: var(--err); }
+.sev-pill.warning { background: var(--warn-soft); color: var(--warn); }
+.sev-pill.suspect { background: var(--suspect-soft); color: var(--suspect); }
+#view-check .d-sec { gap: 0; padding-top: 16px; }
+#view-check .d-label { margin: 0 0 6px; font-size: 12px; font-weight: 800; color: #94A3B8; letter-spacing: .05em; }
+#view-check .d-box { padding: 14px; border-radius: 12px; font-size: 12px; line-height: 1.625; color: #0F172A; }
+#view-check .d-box.plain { background: #F8FAFC; border-color: #E2E8F0; font-weight: 600; color: #1E293B; }
+#view-check .d-box .d-meta { margin: 6px 0 0; font-size: 12px; }
+#view-check .detail details.raw { margin-top: 16px; }
+#view-check .ai-explain { margin-top: 12px; font-size: 12px; }
+#view-check .detail-foot { margin-top: 24px; padding-top: 16px; border-top: 1px solid #F1F5F9; }
+#view-check .detail-foot .linkish { font-size: 12px; font-weight: 700; color: #64748B; }
+#view-check .detail-foot .btn { min-height: 34px; padding: 8px 20px; font-size: 12px; font-weight: 700; border-radius: 8px; }
+@media (max-width: 1100px) {
+  #view-check .bench { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  #view-check #summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+  #view-check #summary .tile { padding: 12px; flex-direction: column; align-items: flex-start; gap: 8px; }
+  #view-check #summary .tile .tile-i { display: none; }
+  #view-check #summary .tile .tile-btn { min-height: 30px; padding: 4px 10px; }
+  #view-check .card-head { flex-wrap: wrap; }
+  #view-check .card-head .hint { display: none; }
+  #view-check .issue-list { max-height: none; }
+  #view-check .detail.card { padding: 18px; max-height: none; }
+}
+#view-check #summary { margin-bottom: 0; }
+#view-check .detail details.raw > summary { font-size: 12px; font-weight: 700; color: #64748B; }
+#view-check .ai-explain:has(.ask:empty) { margin-top: 8px; }
+body.no-ai #view-check .ai-explain { display: none; }
+#view-check .detail-foot { margin-top: 16px; }
+@media (max-width: 1100px) {
+  #view-check .issue-list > #detail { margin: 0 12px 12px; border-color: var(--cta); position: static; max-height: none; }
+  #view-check .bench-side:empty { display: none; }
+}
+#view-check .issue { scroll-margin-top: 72px; }
+#view-check .more-pop .menu-item { font-size: 13px; padding: 8px 10px; }
