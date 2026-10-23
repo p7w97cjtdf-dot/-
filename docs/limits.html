@@ -86,7 +86,7 @@ td.num, th.num { text-align: right; font-family: var(--mono); white-space: nowra
       <tr><td>新增檢查規則</td><td>AI 把文字規則（例如公司內部核保規則）轉成工具可執行的檢查</td><td>手冊改版或公司自訂規則時，不必改程式。轉好的規則會先在正確資料上試跑，經人確認後才啟用。</td></tr>
     </tbody>
   </table></div>
-  <p>AI 功能只在 claude.ai 線上版提供，使用開啟者自己的 Claude 帳號，<b>不需要 API key</b>；直接開啟網頁（含 GitHub Pages）時 AI 按鈕會隱藏，其餘功能完整可用。</p>
+  <p>AI 功能可以用兩種方式提供：claude.ai 線上版使用開啟者自己的 Claude 帳號，<b>不需要 API key</b>；或在「AI 服務設定」填入公司自己的 Dify（金鑰只存在該瀏覽器，送出的內容會經過 Dify 再到 Dify 設定的模型供應商）。兩種都沒有時 AI 按鈕會隱藏，其餘功能完全相同。</p>
 
   <h2><small>04 VALIDATION</small>驗證結果</h2>
   <p>每次修改後執行自動測試（<span class="mono">npm test</span> 與瀏覽器測試頁 <span class="mono">tests/run.html</span>）：</p>

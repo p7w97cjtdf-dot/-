@@ -402,6 +402,14 @@
       <div class="l1"><h3>使用說明</h3><p class="disclaimer">本工具供申報前自我檢查使用，檢查結果不代表保發中心或主管機關的正式審核；通過檢查不保證不會被退件。規則依下列手冊整理，可能與主辦單位最新版本有出入，請以正式手冊與退件通知為準。</p></div>
       <div class="l2"><h3>檢查依據</h3><p id="rule-version">人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度）。</p></div>
       <div class="l3"><h3>資料安全與參考連結</h3><p>一般檢核都在你的電腦上進行，資料不會上傳。只有你按下 AI 相關的按鈕時，必要的摘要、欄位或規則文字才會送到 Claude，送出前會先遮蔽可辨識的個資，並讓你先看過內容；遮蔽無法保證百分之百完整，請勿送入未經核准的機密資料。不使用 AI 也能完成所有檢查。會計科目為示範用的簡化版。AI 說明只在線上版提供。</p>
+        <details class="ai-settings" id="ai-settings">
+          <summary>AI 服務設定（使用自己公司的 Dify）</summary>
+          <p class="hint">填入 Dify「聊天助手」應用的 API 網址與金鑰後，AI 功能會改用你的 Dify。金鑰只存在這台電腦的瀏覽器；送出前仍會遮蔽個資並讓你確認內容。<a href="https://github.com/p7w97cjtdf-dot/-/blob/main/docs/dify-setup.md" target="_blank" rel="noopener">設定步驟與要貼進 Dify 的提示詞</a>。</p>
+          <label>API 網址<input id="dify-url" type="url" placeholder="https://api.dify.ai/v1" autocomplete="off"></label>
+          <label>API 金鑰<input id="dify-key" type="password" placeholder="app-…" autocomplete="off"></label>
+          <div class="ai-settings-acts"><button class="btn-x sm primary" type="button" id="btn-dify-save">儲存並使用</button><button class="btn-x sm" type="button" id="btn-dify-test">測試連線</button><button class="btn-x sm" type="button" id="btn-dify-clear">清除</button></div>
+          <p class="hint" id="dify-note" role="status"></p>
+        </details>
         <div class="selftest">
           <button class="btn-x sm" type="button" id="btn-ai-selftest">測試 AI 會不會被資料裡的指令影響</button>
           <span class="hint">只有 claude.ai 線上版可用。用虛構資料送出 3 種藏在資料裡的指令，自動檢查 AI 有沒有照做；建議每次更新後測 3 次。</span>

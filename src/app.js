@@ -807,13 +807,29 @@
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.view));
   const hash = (location.hash || '').slice(1);
 
-  // AI 只在線上版可用 (使用開啟者自己的 Claude 帳號)；在電腦上直接開啟時說明原因
-  DQ.ai.ready.then(ok => {
+  // AI 服務：claude.ai 線上版 (開啟者自己的 Claude 帳號) 或「AI 服務設定」裡的 Dify；都沒有時隱藏 AI 按鈕
+  const INTRO0 = INTRO;
+  const aiReady = ok => {
     document.body.classList.toggle('no-ai', !ok);
     const was = $('#ai-out').textContent === INTRO;
-    INTRO = ok ? INTRO + '（使用你自己的 Claude 帳號，第一次使用時會詢問是否允許。）' : DQ.ai.OFFLINE;
+    INTRO = !ok ? DQ.ai.OFFLINE : DQ.ai.providerName() === 'Dify' ? INTRO0 + '（使用「AI 服務設定」裡的 Dify。）' : INTRO0 + '（使用你自己的 Claude 帳號，第一次使用時會詢問是否允許。）';
     if (was && !$('#ai-box').hidden) $('#ai-out').textContent = INTRO;
-  });
+    const d = DQ.ai.difyConfig();
+    $('#dify-note').textContent = d ? `目前使用 Dify：${d.url}` : DQ.ai.providerName() === 'Claude' ? '目前使用 claude.ai 的 Claude；填入 Dify 後會改用 Dify。' : '尚未設定。';
+  };
+  DQ.ai.ready.then(aiReady);
+  { const d = DQ.ai.difyConfig(); if (d) { $('#dify-url').value = d.url; $('#ai-settings').open = false; } }
+  $('#btn-dify-save').onclick = async () => {
+    try { await DQ.ai.setDify({ url: $('#dify-url').value, key: $('#dify-key').value }); $('#dify-key').value = ''; aiReady(true); audit('AI 服務設定', `改用 Dify：${DQ.ai.difyConfig().url}`); }
+    catch (e) { $('#dify-note').textContent = e.message; }
+  };
+  $('#btn-dify-clear').onclick = async () => { const ok = await DQ.ai.setDify(null); $('#dify-url').value = ''; $('#dify-key').value = ''; aiReady(ok); audit('AI 服務設定', '清除 Dify 設定'); };
+  // 測試連線：只送一句固定的話，不含任何資料
+  $('#btn-dify-test').onclick = async () => {
+    if (DQ.ai.providerName() !== 'Dify') { $('#dify-note').textContent = '請先按「儲存並使用」。'; return; }
+    $('#dify-note').textContent = '連線中…';
+    try { const t = await DQ.ai.ping(); $('#dify-note').textContent = `連線成功，Dify 回覆：「${t.slice(0, 40)}」`; } catch (e) { $('#dify-note').textContent = e.message; }
+  };
 
   // 提供給規則匯入分頁使用
   DQ.app = {
@@ -848,7 +864,8 @@
     let skip = false; try { skip = sessionStorage.getItem('dq-ai-preview-skip') === '1'; } catch (e) { /* ignore */ }
     if (skip) { audit('送出給 AI', `${text.length.toLocaleString()} 字（已設定這次開啟期間不再詢問）`); return resolve(true); }
     const d = $('#ai-preview'), desc = DQ.pii.describe(counts);
-    $('#ai-preview-note').textContent = `共 ${text.length.toLocaleString()} 字。${desc ? `送出前已遮蔽：${desc}。` : '沒有偵測到需要遮蔽的個資。'}遮蔽無法保證百分之百完整，請確認沒有不該送出的資料。`;
+    const dest = DQ.ai.providerName() === 'Dify' ? `Dify（${DQ.ai.difyConfig().url}）` : DQ.ai.providerName() || 'AI';
+    $('#ai-preview-note').textContent = `將送到 ${dest}，共 ${text.length.toLocaleString()} 字。${desc ? `送出前已遮蔽：${desc}。` : '沒有偵測到需要遮蔽的個資。'}遮蔽無法保證百分之百完整，請確認沒有不該送出的資料。`;
     $('#ai-preview-text').textContent = text;
     $('#ai-preview-skip').checked = false;
     const done = ok => {

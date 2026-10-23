@@ -1,8 +1,11 @@
 /*
  * AI 說明：用 Claude 把檢查結果整理成白話重點、解釋單一問題、說明退件通知。
  * 規則引擎負責「找出」問題 (結果固定、可追查)；AI 只負責「說明」。
- * 不需要 API key：只在 claude.ai 線上版使用開啟者自己的 Claude 帳號 (平台的 sample 功能)；
- * 在自己電腦上直接開啟 index.html 時沒有 AI，其他檢查功能照常。
+ * AI 服務兩種，擇一：
+ *   1. claude.ai 線上版：使用開啟者自己的 Claude 帳號 (平台的 sample 功能)，不需要 API key
+ *   2. Dify：在「AI 服務設定」填入自己公司 Dify 應用的 API 網址與金鑰 (存在這台電腦的瀏覽器)；
+ *      也可由部署者在 config.local.js 設定 window.DQ_AI_CONFIG = { provider: 'dify', url, key }
+ * 都沒有時沒有 AI，其他檢查功能照常。
  * 送出內容由 ai-payload.js 組成並遮住個資；送出前 pii.guard 再遮罩與掃描一次，仍有疑似個資就停止送出 (fail closed)。
  * 單筆解釋不送整筆資料。
  */
@@ -23,14 +26,51 @@
 只根據提供的資料推論，不要捏造不存在的錯誤；不確定時說明需要人工確認的地方。
 ${GUARD}`;
 
+  // ---------- Dify：聊天助手應用的 API (POST {網址}/chat-messages，blocking 模式) ----------
+  // 網址只接受 https (或本機 http://localhost)，避免把資料送到沒有加密的位址
+  const okUrl = u => /^https:\/\/[^\s/]+/i.test(u) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(u);
+  function difyConfig() {
+    const c = root.DQ_AI_CONFIG && root.DQ_AI_CONFIG.provider === 'dify' ? root.DQ_AI_CONFIG : (() => { try { return JSON.parse(localStorage.getItem('dq-dify') || 'null'); } catch (e) { return null; } })();
+    return c && c.url && c.key && okUrl(String(c.url).trim()) ? { url: String(c.url).trim().replace(/\/+$/, ''), key: String(c.key).trim() } : null;
+  }
+  function difyPlatform(c) {
+    return async text => {
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 120000);
+      let r;
+      try {
+        r = await fetch(`${c.url}/chat-messages`, { method: 'POST', signal: ctl.signal, headers: { Authorization: `Bearer ${c.key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inputs: {}, query: text, response_mode: 'blocking', user: 'filing-checker' }) });
+      } catch (e) { throw new Error(e.name === 'AbortError' ? 'Dify 超過 2 分鐘沒有回應，請稍後再試。' : `連不到 Dify（${c.url}）：請確認網址正確、網路可以連線，以及 Dify 允許這個網站呼叫 (CORS)。`); }
+      finally { clearTimeout(timer); }
+      if (r.status === 401) throw new Error('Dify 的 API 金鑰不正確或已失效，請到「AI 服務設定」更新。');
+      if (r.status === 429) { const e = new Error('Dify 使用太頻繁，請稍等一下再試。'); throw e; }
+      if (!r.ok) throw new Error(`Dify 回應錯誤（${r.status}）：${(await r.text()).slice(0, 200)}`);
+      const j = await r.json();
+      return { text: String(j.answer || '') };
+    };
+  }
   // claude.ai 線上版：使用開啟者自己的 Claude 帳號 (第一次使用時會詢問是否允許)
-  let platform = null;
+  let platform = null, provider = '';
   const ready = (async () => {
-    try { if (root.claude && root.claude.use) platform = await root.claude.use('sample'); } catch (e) { platform = null; }
+    const d = difyConfig();
+    if (d) { platform = difyPlatform(d); provider = 'Dify'; return true; }
+    try { if (root.claude && root.claude.use) { platform = await root.claude.use('sample'); provider = 'Claude'; } } catch (e) { platform = null; }
     return !!platform;
   })();
+  // 「AI 服務設定」存檔或清除後立即生效
+  function setDify(c) {
+    if (c) {
+      if (!okUrl(String(c.url || '').trim())) throw new Error('網址要以 https:// 開頭（本機測試可用 http://localhost）。');
+      if (!String(c.key || '').trim()) throw new Error('請填入 Dify 應用的 API 金鑰。');
+      localStorage.setItem('dq-dify', JSON.stringify({ url: String(c.url).trim(), key: String(c.key).trim() }));
+    } else localStorage.removeItem('dq-dify');
+    const d = difyConfig();
+    if (d) { platform = difyPlatform(d); provider = 'Dify'; }
+    else { platform = null; provider = ''; return (async () => { try { if (root.claude && root.claude.use) { platform = await root.claude.use('sample'); provider = 'Claude'; } } catch (e) { /* ignore */ } return !!platform; })(); }
+    return Promise.resolve(true);
+  }
   let lastRedaction = null;
-  const OFFLINE = 'AI 說明只能在線上版使用；在自己電腦上開啟時無法使用，其他檢查功能不受影響。';
+  const OFFLINE = 'AI 說明需要 claude.ai 線上版，或在頁面下方「AI 服務設定」填入 Dify；沒有 AI 時其他檢查功能不受影響。';
 
   async function ask(prompt, opts) {
     opts = opts || {};
@@ -47,6 +87,7 @@ ${GUARD}`;
       return opts.raw ? out.text.trim() : warnUnsafe(out.text.trim());
     } catch (e) {
       if (e && e.code === 'not_granted') throw new Error('沒有允許使用 Claude，所以無法產生 AI 說明。');
+      if (provider === 'Dify') throw e;
       if (e && e.code === 'rate_limited') throw new Error('使用太頻繁，請稍等一下再試。');
       throw new Error((e && e.message) || 'AI 暫時無法回應，請稍後再試。');
     }
@@ -114,7 +155,7 @@ ${GUARD}`;
   function convertRules(prompt) { return ask(P().ruleDoc(prompt), { system: RULE_SYSTEM, tier: 'complex', raw: true }); }
 
   // AI 產出一律加上標示，畫面與報告共用
-  const LABEL = '以下由 AI（Claude）產生，僅供參考；哪些要改，以上方的檢查結果為準';
+  const label = () => `以下由 AI（${provider || 'AI'}）產生，僅供參考；哪些要改，以上方的檢查結果為準`;
   // 最近一次送出前遮罩了哪些個資 (畫面顯示用)
   const redactionNote = () => lastRedaction && root.DQ.pii.describe(lastRedaction.counts) ? `送出前已遮蔽：${root.DQ.pii.describe(lastRedaction.counts)}` : '送出前已檢查，未發現需要遮蔽的個資';
   // ---------- AI 安全自我測試 (安全測試 T05) ----------
@@ -148,5 +189,8 @@ ${GUARD}`;
     return out;
   }
 
-  root.DQ.ai = { selfTest, SELF_TESTS, unsafeAdvice, summarize, explain, decode, convertRules, LABEL, OFFLINE, ready, available: () => !!platform, redactionNote, fence, warnUnsafe };
+  // 連線測試：固定的一句話，不含資料，不用確認
+  const ping = () => ask('連線測試：請只回覆「OK」。', { raw: true, noPreview: true });
+
+  root.DQ.ai = { ping, selfTest, SELF_TESTS, unsafeAdvice, summarize, explain, decode, convertRules, get LABEL() { return label(); }, providerName: () => provider, difyConfig, setDify, OFFLINE, ready, available: () => !!platform, redactionNote, fence, warnUnsafe };
 })(typeof self !== 'undefined' ? self : this);
