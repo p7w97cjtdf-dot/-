@@ -265,7 +265,7 @@
       const d = cat.find(c => c.id === i.ruleId); if (d && !i.ruleName) { i.ruleName = d.name; i.ref = i.ref || d.ref; }
     }
     state.all = state.res.issues.concat(state.extra.filter(i => !state.res.issues.includes(i)));
-    state.sel = null; state.aiSummary = null; state.aiInsights = null; state.focus = null;   // 資料變了，AI 的結論要重新產生與驗證
+    state.sel = null; state.aiSummary = null; state.aiInsights = null; state.aiChecks = null; state.focus = null;   // 資料變了，AI 的結論要重新產生與驗證
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
     { const c = sev => state.all.filter(i => i.severity === sev).length, h = Object.values(state.disabledCount || {}).reduce((t, n) => t + n, 0);
       audit('檢查', `必須修改 ${c('error')}、建議確認 ${c('warning')}、請人工判斷 ${c('suspect')}${h ? `；停用的檢查隱藏 ${h} 個` : ''}`); }
@@ -442,7 +442,17 @@
       const out = $('#explain-out');
       if (!DQ.ai.available()) { out.textContent = DQ.ai.OFFLINE; return; }
       out.textContent = 'AI 說明中…';
-      try { showAI(out, await DQ.ai.explain(rs, state.res, i, reconCtx())); } catch (e) { out.textContent = e.message; }
+      try {
+        const got = DQ.aiVerify.split(await DQ.ai.explain(rs, state.res, i, reconCtx()));
+        // AI 建議的值：改進副本重新檢查；系統性問題：用同一檢核編號的筆數判定
+        const files = Object.fromEntries(DETAIL.filter(k => state.files[k]).map(k => [k, state.files[k]]));
+        const fx = DQ.aiVerify.verifyFix(got.fix, i, rs, files), sys = DQ.aiVerify.verifySystemic(got.systemic, state.res.issues.filter(x => x.ruleId === i.ruleId).length);
+        audit('AI 洞見驗證', `${SHEET[i.file] || i.file} ${rowLabel(i)} ${i.ruleId} 建議值「${fx.value == null ? '—' : fx.value}」：${VS[fx.status]}${fx.why ? '（' + fx.why + '）' : ''}`);
+        const fxBody = fx.status === 'invalid' ? [`<span class="hint">${esc(fx.why)}</span>`] : fx.why ? [esc(fx.why)] :
+          [`把${esc(fx.fieldName)}從「${esc(fx.before)}」改成「${esc(fx.value)}」，在資料副本重新檢查：${fx.solved ? '這個問題消失' : '這個問題仍然存在'}${fx.newIssues.length ? `，但多了 ${fx.newIssues.length} 個新問題` : fx.solved ? '，也沒有產生新問題' : ''}`].concat(fx.newIssues.map(x => `<span class="hint">新問題：${esc(x)}</span>`));
+        const sysBody = [sys.claim == null ? 'AI 沒有判斷是否為系統性問題' : `AI 說${sys.claim ? '是' : '不是'}系統性問題`, `同一檢核編號本次共 ${sys.sameRule} 筆（3 筆以上視為系統性）`];
+        showAI(out, got.text, null, vBlock('AI 的建議・工具驗證', [vItem(fx.status, '建議的正確值', fxBody), vItem(sys.status, '是否為系統性問題', sysBody)], ''));
+      } catch (e) { out.textContent = e.message; }
     };
   }
 
@@ -621,13 +631,37 @@
     if (!state.decoded) decodeNow();
     if (!DQ.ai.available()) { out.textContent = DQ.ai.OFFLINE; return; }
     out.className = 'ai-out'; out.textContent = 'AI 正在閱讀退件通知…';
-    try { showAI(out, await DQ.ai.decode($('#dec-text').value, state.decoded, state.res, reconCtx())); out.className = 'ai-out done'; } catch (e) { out.textContent = e.message; }
+    try {
+      const got = DQ.aiVerify.split(await DQ.ai.decode($('#dec-text').value, state.decoded, state.res, reconCtx()));
+      const lk = DQ.aiVerify.verifyLikely(got.likely, state.decoded, state.res);
+      for (const x of lk) audit('AI 洞見驗證', `退件最可能指「${x.title}」（${x.ruleIds.join('、') || '—'}）：${VS[x.status]}${x.count != null ? `，定位到 ${x.count} 筆` : ''}`);
+      const items = lk.map(x => vItem(x.status, x.title, x.status === 'invalid' ? [`<span class="hint">${esc(x.why)}</span>`] :
+        [`${x.claim != null ? `AI 估計 ${x.claim} 筆 → ` : ''}<b>這則退件訊息定位到 ${x.count} 筆</b>（${esc(x.ruleIds.join('、'))}）`, x.count ? '' : `<span class="hint">${x.inData ? `資料中有 ${x.inData} 筆這類問題，但退件訊息沒有指到` : '這次的資料沒有這類問題'}</span>`].filter(Boolean)));
+      showAI(out, got.text, null, vBlock('AI 判斷的退件原因・核對定位結果', items, 'AI 沒有指出可以核對的檢核編號，上面的判斷都只是推測。'));
+      out.className = 'ai-out done';
+    } catch (e) { out.textContent = e.message; }
   };
 
   // ---------- AI ----------
   const reconCtx = () => ({ ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod });
   // AI 回覆一律加上「AI 產出」標示
-  function showAI(out, text, insights) { out.innerHTML = `<div class="ai-tag">${esc(DQ.ai.LABEL)}</div><div class="ai-text">${esc(text)}</div>${insights ? insightsHTML(insights) : ''}<p class="ai-redact">${esc(DQ.ai.redactionNote())}</p>`; }
+  function showAI(out, text, insights, checks) { out.innerHTML = `<div class="ai-tag">${esc(DQ.ai.LABEL)}</div><div class="ai-text">${esc(text)}</div>${insights ? insightsHTML(insights) : ''}${checks || ''}<p class="ai-redact">${esc(DQ.ai.redactionNote())}</p>`; }
+  // 驗證結果共用的一列
+  const VS = { verified: '已驗證', mismatch: '部分成立', refuted: '不成立', invalid: '無法驗證（推測）' };
+  const vItem = (st, title, body, extra) => `<li class="ins ${st}"><div class="ins-top"><span class="ins-st">${VS[st]}</span><b>${esc(title)}</b></div>${body.map(b => `<p>${b}</p>`).join('')}${extra || ''}</li>`;
+  const vBlock = (h, items, empty) => `<div class="insights"><h4>${h}</h4>${items.length ? `<ol>${items.join('')}</ol>` : `<p class="hint">${empty}</p>`}</div>`;
+  // 重點整理的第 1、3、4 點：風險、修改順序、預防檢查
+  function summaryChecksHTML(c) {
+    if (!c) return '';
+    const r = c.risk;
+    const risk = vItem(r.status, '整體狀況：退件可能性', [r.claim ? `AI 說「${esc(r.claim)}」，工具判定「${esc(r.tool)}」` : `${esc(r.why)}；工具判定「${esc(r.tool)}」`, '<span class="hint">工具的判定：有「必須修改」為高，只有「建議確認」為中，都沒有為低。</span>']);
+    const pri = c.priorities.map(p => vItem(p.status, `第 ${p.order} 優先：${p.ruleIds.join('、') || (p.unknown || []).join('、') || '（未指定）'}`,
+      [`理由：${esc(p.reason || '（沒寫）')}${p.note ? `　${esc(p.note)}` : ''}`, p.why ? `<span class="hint">${esc(p.why)}</span>` : `實際：${esc(p.fact)}`]));
+    const pre = c.preventions.map((p, k) => vItem(p.status, p.title, p.status === 'invalid' ? [`<span class="hint">${esc(p.errors.join('；'))}</span>`] :
+      [`試跑 ${p.checked.toLocaleString()} 筆：抓到現有問題 <b>${p.caught}</b> / ${p.target} 筆，誤報（沒有任何問題的資料被擋下）<b>${p.falseAlarm}</b> 筆`, `<span class="hint">檢查條件：${esc(SHEET[p.file] || p.file)}的資料應該 ${esc(p.text)}</span>`],
+      p.caught && !state.customRules.some(x => x.name === p.title) ? `<button class="linkish" type="button" data-add-prev="${k}">加入成為自訂檢查（建議確認）</button>` : ''));
+    return vBlock('整體狀況・工具判定', [risk], '') + vBlock('先改什麼・用數字檢查 AI 的理由', pri, 'AI 沒有提供可以檢查的修改順序。') + vBlock('以後怎麼避免・預防檢查拿現在的資料試跑', pre, 'AI 沒有提供可以試跑的預防檢查。');
+  }
   // AI 提出的共同原因 → 工具用原始資料驗證的結果 (第 3 級：只有驗證過的筆數才顯示為事實)
   function insightsHTML(list) {
     const V = DQ.aiVerify;
@@ -644,6 +678,16 @@
       </li>`).join('')}</ol></div>`;
   }
   $('#ai-out').addEventListener('click', e => {
+    const add = e.target.closest('[data-add-prev]');
+    if (add && state.aiChecks) {
+      // 加入預防檢查：重新檢查後保留 AI 的整理 (資料沒變，只多了檢查)
+      const p = state.aiChecks.preventions[+add.dataset.addPrev], keep = { s: state.aiSummary, i: state.aiInsights, c: state.aiChecks };
+      DQ.app.setCustomRules(state.customRules.concat(p.rule));
+      audit('加入檢查', `AI 提出、經試跑驗證的預防檢查「${p.title}」（抓到 ${p.caught}/${p.target}、誤報 ${p.falseAlarm}）`);
+      Object.assign(state, { aiSummary: keep.s, aiInsights: keep.i, aiChecks: keep.c });
+      $('#ai-box').hidden = false; const out = $('#ai-out'); out.className = 'ai-out done'; showAI(out, keep.s, keep.i, summaryChecksHTML(keep.c)); renderReport();
+      return;
+    }
     const b = e.target.closest('[data-focus]'); if (!b || !state.aiInsights) return;
     const x = state.aiInsights[+b.dataset.focus];
     state.focus = { file: x.file, lines: new Set(x.lines), rules: new Set(x.ruleIds), label: x.title };
@@ -659,14 +703,19 @@
       const got = DQ.aiVerify.split(await DQ.ai.summarize(rs, state.res, reconCtx()));
       state.aiSummary = got.text;
       state.aiInsights = DQ.aiVerify.verify(got.insights, rs, state.res);
+      const V = DQ.aiVerify;
+      state.aiChecks = { risk: V.verifyRisk(got.risk, state.res), priorities: V.verifyPriorities(got.priorities, state.res), preventions: V.verifyPreventions(got.preventions, rs, state.res) };
+      audit('AI 洞見驗證', `退件可能性：AI 說 ${state.aiChecks.risk.claim || '—'}，工具判定 ${state.aiChecks.risk.tool}（${VS[state.aiChecks.risk.status]}）`);
+      for (const p of state.aiChecks.priorities) audit('AI 洞見驗證', `修改順序 ${p.order}：${p.ruleIds.join('、') || '—'}／${p.reason || '—'}（${VS[p.status]}${p.fact ? '；' + p.fact : ''}）`);
+      for (const p of state.aiChecks.preventions) audit('AI 洞見驗證', `預防檢查「${p.title}」：${VS[p.status]}${p.status === 'invalid' ? '' : `（抓到 ${p.caught}/${p.target}、誤報 ${p.falseAlarm}）`}`);
       for (const x of state.aiInsights) audit('AI 洞見驗證', `${DQ.aiVerify.STATUS[x.status]}：${x.title}${x.status === 'invalid' ? '' : `（AI 估計 ${x.claim == null ? '—' : x.claim} 筆，實際 ${x.count} 筆；條件：${x.text}）`}`);
-      out.className = 'ai-out done'; showAI(out, state.aiSummary, state.aiInsights); renderReport();
+      out.className = 'ai-out done'; showAI(out, state.aiSummary, state.aiInsights, summaryChecksHTML(state.aiChecks)); renderReport();
     } catch (e) { out.textContent = e.message; }
     $('#btn-ai').disabled = false;
   };
 
   // ---------- 報告 / 規則 ----------
-  function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, aiInsights: state.aiInsights, hidden: hiddenNote(), totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
+  function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, aiInsights: state.aiInsights, aiChecks: state.aiChecks, hidden: hiddenNote(), totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
   function renderReport() { $('#report-frame').srcdoc = reportHTML(); }
   // 手冊頁碼 (rules/rules.js)：PDF 頁碼與頁面上印的頁碼
   const SRCDOC = { rules: '檢核規則手冊', manual: '填報手冊' };

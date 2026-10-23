@@ -96,7 +96,7 @@ th{position:sticky;top:0;background:var(--bg);font-weight:600}.num{text-align:ri
 <h1>資料檢查報告｜${esc(rs.name)}</h1>
 <div class="meta">產生時間：${esc(new Date(res.generatedAt).toLocaleString('zh-TW'))}　資料：${Object.entries(res.meta).map(([k, m]) => esc(m.name || rs.layouts[k].title)).join('、')}${opts.elapsed != null ? `　檢查花了 ${(opts.elapsed / 1000).toFixed(2)} 秒` : ''}${(rs.products || [rs]).filter(p => Object.keys(res.meta).some(k => p.layouts && p.layouts[k])).map((p, i) => `${i ? '、' : '<br>規則依據：'}${esc(p.name)}${/\d{4}/.test(p.name) ? '' : `（${esc(p.version)} 年版手冊）`}`).join('')}${(opts.packs || []).length ? `<br>另套用法規更新：${opts.packs.map(p => esc(p.name + (p.version ? ` 第 ${p.version} 版` : '') + (p.basis ? `（${p.basis}）` : ''))).join('、')}` : ''}${opts.hidden ? `<br><b class="hidden-note">${esc(opts.hidden)}</b>` : ''}${Object.values(s.byFile).some(b => b.truncated) ? '<br><b>問題太多，只列出前一部分 (之後的資料沒有檢查完)；檔案可能整個格式不對，請先修正最常見的問題再檢查一次。</b>' : ''}</div>
 <div class="cards">${fileCards}<div class="card"><div class="k">${SEV.error}</div><div class="v err">${T ? T.error : s.errors}</div><div class="s">${LB.SEV_HINT.error}</div></div><div class="card"><div class="k">${SEV.warning}</div><div class="v warn">${T ? T.warning : s.warnings}</div><div class="s">${LB.SEV_HINT.warning}</div></div><div class="card"><div class="k">${SEV.suspect}</div><div class="v" style="color:#0e7490">${T ? T.suspect : s.suspects || 0}</div><div class="s">${LB.SEV_HINT.suspect}</div></div><div class="card"><div class="k">可以一鍵修改</div><div class="v">${s.fixable}</div><div class="s">工具知道正確的值</div></div></div>
-${opts.aiSummary ? `<h2>AI 整理的重點 <span class="ai-tag">AI 產生</span></h2><p class="meta">以下由 AI（Claude）依檢查結果產生，送出前已遮住姓名、身分證號和地址；僅供參考，哪些要改以檢查結果為準。</p><div class="ai">${esc(opts.aiSummary)}</div>${insightTable(opts.aiInsights)}` : ''}
+${opts.aiSummary ? `<h2>AI 整理的重點 <span class="ai-tag">AI 產生</span></h2><p class="meta">以下由 AI（Claude）依檢查結果產生，送出前已遮住姓名、身分證號和地址；僅供參考，哪些要改以檢查結果為準。</p><div class="ai">${esc(opts.aiSummary)}</div>${insightTable(opts.aiInsights)}${checkTable(opts.aiChecks)}` : ''}
 ${reconHTML(opts.recon)}
 <h2>保單與理賠資料：各類問題的數量</h2>${cats.map(([c, n]) => `<div class="bar"><span>${esc(c)}</span><i style="width:${Math.max(2, n / maxCat * 60)}%"></i><span>${n}</span></div>`).join('')}
 <h2>最常出現的問題</h2><div class="scroll"><table><thead><tr><th>檢查項目</th><th>狀況</th><th class="num">次數</th><th>例子</th><th>建議怎麼改</th></tr></thead><tbody>
@@ -112,6 +112,15 @@ ${tops.map(t => `<tr><td>${esc(t.name)}</td><td><span class="sev ${t.severity}">
     if (!list) return '';
     if (!list.length) return '<p class="meta">AI 沒有提供可以檢查的條件，上面的原因都只是推測。</p>';
     return `<h3>AI 提出的共同原因・驗證結果</h3><p class="meta">AI 先提出原因與檢查條件，工具再用原始資料逐筆驗證；筆數以工具實際算出的為準。</p><div class="scroll"><table><thead><tr><th>結果</th><th>原因</th><th class="num">AI 估計</th><th class="num">實際筆數</th><th>檢查條件</th></tr></thead><tbody>${list.map(x => `<tr><td>${INS[x.status]}</td><td>${esc(x.title)}</td><td class="num">${x.claim == null ? '—' : x.claim}</td><td class="num">${x.status === 'invalid' ? '—' : x.count}</td><td>${x.status === 'invalid' ? esc(x.errors.join('；')) : esc((SHEET[x.file] || x.file) + '的' + x.text) + (x.issueLines ? `；解釋了 ${esc(x.ruleIds.join('、'))} 問題的 ${Math.round(x.coverage * 100)}%` : '')}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+  // 重點整理第 1、3、4 點的驗證：退件可能性、修改順序的理由、預防檢查試跑
+  const VS = { verified: '已驗證', mismatch: '部分成立', refuted: '不成立', invalid: '無法驗證（推測）' };
+  function checkTable(c) {
+    if (!c) return '';
+    const rows = [[VS[c.risk.status], '退件可能性', c.risk.claim ? `AI 說「${c.risk.claim}」，工具判定「${c.risk.tool}」` : `工具判定「${c.risk.tool}」（AI 沒有說明）`]]
+      .concat(c.priorities.map(p => [VS[p.status], `修改順序 ${p.order}：${p.ruleIds.join('、') || '—'}`, `理由「${p.reason || '—'}」；${p.why || '實際：' + p.fact}`]))
+      .concat(c.preventions.map(p => [VS[p.status], `預防檢查：${p.title}`, p.status === 'invalid' ? p.errors.join('；') : `抓到現有問題 ${p.caught}/${p.target} 筆，誤報 ${p.falseAlarm} 筆（條件：${(SHEET[p.file] || p.file)}的資料應該 ${p.text}）`]));
+    return `<h3>AI 的判斷與建議・驗證結果</h3><div class="scroll"><table><thead><tr><th>結果</th><th>項目</th><th>工具驗證</th></tr></thead><tbody>${rows.map(r => `<tr>${r.map(x => `<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   }
   function reconHTML(r) {
     if (!r) return '';

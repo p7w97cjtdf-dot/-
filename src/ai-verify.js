@@ -17,9 +17,9 @@
  */
 (function (root, factory) {
   const isNode = typeof module === 'object' && module.exports;
-  const m = factory(isNode ? require('./rules-dsl.js') : root.DQ.dsl);
+  const m = factory(isNode ? require('./rules-dsl.js') : root.DQ.dsl, isNode ? require('./core.js') : root.DQ);
   if (isNode) module.exports = m; else { root.DQ = root.DQ || {}; root.DQ.aiVerify = m; }
-})(typeof self !== 'undefined' ? self : this, function (dsl) {
+})(typeof self !== 'undefined' ? self : this, function (dsl, C) {
   'use strict';
   const MAX = 8;                          // 最多驗證幾個原因
   const STATUS = { verified: '已驗證', mismatch: '原因成立、數字不對', refuted: '不成立', invalid: '無法驗證（推測）' };
@@ -30,9 +30,12 @@
     let m = s.match(/```json\s*([\s\S]*?)```/i), json = null, text = s;
     if (m) { json = m[1]; text = s.replace(m[0], ''); }
     else { const i = s.lastIndexOf('{"insights"'); if (i >= 0) { const j = s.lastIndexOf('}'); json = s.slice(i, j + 1); text = s.slice(0, i) + s.slice(j + 1); } }
-    let insights = [];
-    if (json) { try { const o = JSON.parse(json); insights = Array.isArray(o.insights) ? o.insights : []; } catch (e) { insights = []; } }
-    return { text: text.replace(/\n{3,}/g, '\n\n').trim(), insights: insights.slice(0, MAX) };
+    let o = {};
+    if (json) { try { o = JSON.parse(json) || {}; } catch (e) { o = {}; } }
+    const arr = k => Array.isArray(o[k]) ? o[k].slice(0, MAX) : [];
+    return { text: text.replace(/\n{3,}/g, '\n\n').trim(), insights: arr('insights'), risk: typeof o.risk === 'string' ? o.risk : null,
+      priorities: arr('priorities'), preventions: arr('preventions'), fix: o.fix && typeof o.fix === 'object' ? o.fix : null,
+      systemic: typeof o.systemic === 'boolean' ? o.systemic : null, likely: arr('likely'), json: o };
   }
 
   // 只允許單筆比對 (不用 prev.)，不允許 matches (AI 寫的正規表示式可能很慢)
@@ -92,5 +95,121 @@
 取欄位的一部分用 "pos":[起,迄] (從 1 算起)；欄位代號只能用下面清單裡的。
 工具會用原始資料逐筆驗證這些條件，算出實際筆數；寫不成條件的原因不要列進 JSON。`;
 
-  return { split, verify, check, fieldGuide, SPEC, STATUS, MAX };
+  // ---------- 整體狀況：退件風險由工具依檢查結果判定，再和 AI 說的比對 ----------
+  // 高：有「必須修改」(違反手冊規則，送出會被退件)；中：只有「建議確認」；低：都沒有
+  function riskOf(res) {
+    const n = s => res.issues.filter(i => i.severity === s).length;
+    return n('error') ? '高' : n('warning') ? '中' : '低';
+  }
+  function verifyRisk(claim, res) {
+    const tool = riskOf(res), c = /高|中|低/.exec(String(claim || '')); 
+    if (!c) return { status: 'invalid', tool, claim: null, why: 'AI 沒有說明風險高低' };
+    return { status: c[0] === tool ? 'verified' : 'refuted', tool, claim: c[0] };
+  }
+
+  // ---------- 先改什麼：AI 的理由用數字檢查 ----------
+  const REASONS = ['影響最多', '可一鍵修改', '會連帶其他錯誤'];
+  function verifyPriorities(list, res) {
+    const by = new Map();
+    for (const i of res.issues) if (i.severity !== 'suspect') { if (!by.has(i.ruleId)) by.set(i.ruleId, []); by.get(i.ruleId).push(i); }
+    const rank = [...by.entries()].sort((a, b) => b[1].length - a[1].length).map(x => x[0]);
+    return (list || []).slice(0, MAX).map((p, k) => {
+      const ids = (Array.isArray(p.ruleIds) ? p.ruleIds : []).map(String).filter(id => by.has(id));
+      const out = { order: k + 1, ruleIds: ids, unknown: (p.ruleIds || []).filter(id => !by.has(String(id))), reason: String(p.reason || ''), note: String(p.note || '').slice(0, 120) };
+      if (!ids.length) return Object.assign(out, { status: 'invalid', why: '指定的檢核編號這次沒有出現' });
+      const items = ids.flatMap(id => by.get(id)), fix = items.filter(i => i.fix).length;
+      out.count = items.length; out.fixable = fix; out.rank = Math.min(...ids.map(id => rank.indexOf(id) + 1));
+      const lines = new Set(items.filter(i => i.line).map(i => i.file + ':' + i.line));
+      const other = new Set(res.issues.filter(i => i.line && !ids.includes(i.ruleId) && i.severity !== 'suspect' && lines.has(i.file + ':' + i.line)).map(i => i.file + ':' + i.line));
+      out.cooccur = lines.size ? other.size / lines.size : 0;
+      if (out.reason.includes('影響最多')) { out.status = out.rank <= 3 ? 'verified' : 'refuted'; out.fact = `筆數排第 ${out.rank}（${out.count} 筆）`; }
+      else if (out.reason.includes('一鍵')) { out.status = fix / items.length >= 0.8 ? 'verified' : fix ? 'mismatch' : 'refuted'; out.fact = `${items.length} 筆中 ${fix} 筆可以一鍵修改`; }
+      else if (out.reason.includes('連帶')) { out.status = out.cooccur >= 0.5 ? 'verified' : out.cooccur ? 'mismatch' : 'refuted'; out.fact = `這些資料列有 ${Math.round(out.cooccur * 100)}% 同時有其他問題`; }
+      else { out.status = 'invalid'; out.fact = `${items.length} 筆`; out.why = `理由「${out.reason || '（沒寫）'}」無法用資料檢查；可檢查的理由：${REASONS.join('、')}`; }
+      return out;
+    });
+  }
+
+  // ---------- 以後怎麼避免：AI 提出的預防檢查，拿現在的資料試跑 ----------
+  // 條件是「正確的資料應該符合的條件」；不符合的資料列 = 這條檢查會擋下的資料
+  function verifyPreventions(list, rs, res) {
+    return (list || []).slice(0, MAX).map(p => {
+      const out = { title: String(p.title || '（沒有標題）').slice(0, 80), file: p.file, condition: p.condition || null, ruleIds: Array.isArray(p.ruleIds) ? p.ruleIds.map(String) : [], errors: [] };
+      const lay = rs.layouts[p.file];
+      if (!lay || !res.data[p.file]) out.errors.push(`資料「${p.file}」不在這次檢查的檔案裡`);
+      if (!p.condition) out.errors.push('沒有提供可以檢查的條件');
+      if (!out.errors.length) out.errors.push(...badOps(p.condition), ...dsl.validateRule({ id: 'P', file: p.file, scope: 'record', assert: p.condition }, rs.layouts));
+      if (out.errors.length) return Object.assign(out, { status: 'invalid' });
+      out.text = dsl.describe({ file: p.file, assert: p.condition }, rs.layouts).assert;
+      const recs = res.data[p.file].filter(r => r._raw.length === lay.recordLength);
+      const flagged = recs.filter(r => dsl.evalCond(p.condition, { rec: r }) === false);
+      const ids = new Set(out.ruleIds);
+      const bad = new Set(res.issues.filter(i => i.file === p.file && i.line && i.severity === 'error' && (!ids.size || ids.has(i.ruleId))).map(i => i.line));
+      const anyIssue = new Set(res.issues.filter(i => i.file === p.file && i.line).map(i => i.line));
+      out.caught = flagged.filter(r => bad.has(r._line)).length;
+      out.falseAlarm = flagged.filter(r => !anyIssue.has(r._line)).length;
+      out.flagged = flagged.length; out.target = bad.size; out.checked = recs.length;
+      out.status = !out.caught ? 'refuted' : out.falseAlarm ? 'mismatch' : 'verified';
+      out.rule = { id: 'P-' + Math.random().toString(36).slice(2, 8).toUpperCase(), name: out.title, file: p.file, scope: 'record', severity: 'warning', assert: p.condition,
+        message: `不符合預防檢查：${out.title}`, suggestion: '確認這筆資料是否正確', source: 'AI 提出、經工具試跑驗證的預防檢查' };
+      return out;
+    });
+  }
+
+  // ---------- 單筆解釋：AI 建議的正確值，改進副本重新檢查 ----------
+  // files：{ 檔案代號: { name, text } }；只看明細檔規則在這一筆的結果
+  function verifyFix(fix, issue, rs, files) {
+    const out = { field: fix && fix.field, value: fix && fix.value != null ? String(fix.value) : null };
+    const lay = rs.layouts[issue.file], f = lay && out.field && lay.field(out.field);
+    if (!fix) return Object.assign(out, { status: 'invalid', why: 'AI 沒有提出可以試的正確值' });
+    if (!f) return Object.assign(out, { status: 'invalid', why: `欄位「${out.field}」不存在` });
+    if (!files[issue.file] || !issue.line) return Object.assign(out, { status: 'invalid', why: '這個問題不在明細資料裡，無法試改' });
+    if (out.value.length > f.len) return Object.assign(out, { status: 'refuted', why: `「${out.value}」超過欄位長度 ${f.len} 碼` });
+    const lines = files[issue.file].text.split(/\r?\n/), raw = lines[issue.line - 1];
+    if (raw == null || raw.length !== lay.recordLength) return Object.assign(out, { status: 'invalid', why: '這一筆長度不對，無法拆欄試改' });
+    out.fieldName = f.name; out.before = raw.substr(f.start - 1, f.len).trim();
+    lines[issue.line - 1] = raw.slice(0, f.start - 1) + C.pad(f, out.value) + raw.slice(f.start - 1 + f.len);
+    const keys = Object.keys(files).filter(k => rs.layouts[k]);
+    const run = map => C.validate(rs, Object.fromEntries(keys.map(k => [k, map[k]]))).issues.filter(i => i.file === issue.file && i.line === issue.line);
+    const before = run(files), after = run(Object.assign({}, files, { [issue.file]: Object.assign({}, files[issue.file], { text: lines.join('\n') }) }));
+    const key = i => i.ruleId + '|' + i.message;
+    const had = new Set(before.map(key));
+    out.solved = !after.some(i => i.ruleId === issue.ruleId);
+    out.newIssues = after.filter(i => !had.has(key(i))).map(i => `${i.ruleId} ${i.message}`).slice(0, 5);
+    out.remaining = after.filter(i => i.severity === 'error').length;
+    out.status = out.solved && !out.newIssues.length ? 'verified' : out.solved ? 'mismatch' : 'refuted';
+    return out;
+  }
+  function verifySystemic(claim, sameRule) {
+    const tool = sameRule >= 3;
+    return { status: claim == null ? 'invalid' : claim === tool ? 'verified' : 'refuted', claim, tool, sameRule };
+  }
+
+  // ---------- 退件說明：AI 說最可能是哪幾類問題，核對工具的定位結果 ----------
+  function verifyLikely(list, decoded, res) {
+    const located = new Map();
+    for (const f of decoded.findings || []) for (const g of f.groups || []) located.set(g.ruleId, (located.get(g.ruleId) || 0) + g.items.length);
+    return (list || []).slice(0, MAX).map(x => {
+      const ids = (Array.isArray(x.ruleIds) ? x.ruleIds : []).map(String);
+      const out = { title: String(x.title || ids.join('、')).slice(0, 80), ruleIds: ids, claim: Number.isFinite(+x.claim) && x.claim != null ? +x.claim : null };
+      if (!ids.length) return Object.assign(out, { status: 'invalid', why: '沒有指出檢核編號' });
+      out.count = ids.reduce((t, id) => t + (located.get(id) || 0), 0);
+      out.inData = res.issues.filter(i => ids.includes(i.ruleId)).length;
+      const close = out.claim == null || Math.abs(out.claim - out.count) <= Math.max(2, out.count * 0.2);
+      out.status = !out.count ? 'refuted' : close ? 'verified' : 'mismatch';
+      return out;
+    });
+  }
+
+  const SPEC_MORE = `JSON 裡另外加上：
+"risk": "高、中 或 低"（第 1 點說的退件可能性）,
+"priorities": [{"ruleIds":["檢核編號"],"reason":"影響最多 或 可一鍵修改 或 會連帶其他錯誤","note":"一句話"}]（第 3 點的修改順序，依先後排列）,
+"preventions": [{"title":"一句話","file":"資料代號","condition":條件,"ruleIds":["想預防的檢核編號"]}]（第 4 點的預防檢查：條件寫成「正確的資料應該符合」，工具會拿現在的資料試跑，看能抓到幾筆現有問題、會不會誤報）`;
+  const SPEC_FIX = `最後附上 \`\`\`json 區塊：{"fix":{"field":"欄位代號","value":"你建議的正確值"},"systemic":true 或 false}
+fix 寫不出確定的值就省略；工具會把這個值試改進資料副本重新檢查，確認這筆是否通過。systemic 表示你是否認為這是系統性問題。`;
+  const SPEC_LIKELY = `最後附上 \`\`\`json 區塊：{"likely":[{"title":"一句話","ruleIds":["檢核編號"],"claim":你估計的筆數}]}
+列出你認為這則退件訊息最可能指的問題 (1~3 類)；工具會核對這些檢核編號是否在定位結果裡、實際有幾筆。`;
+
+  return { split, verify, check, fieldGuide, riskOf, verifyRisk, verifyPriorities, verifyPreventions, verifyFix, verifySystemic, verifyLikely,
+    SPEC, SPEC_MORE, SPEC_FIX, SPEC_LIKELY, STATUS, MAX, REASONS };
 });
