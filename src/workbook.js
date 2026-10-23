@@ -60,25 +60,27 @@
   // 兩張工作表都像保單資料、又沒有名稱可判斷時，日期較早的那張當作去年保單資料
   // 只有標題列 (例如還沒填的空白範本) 的工作表視為沒有資料，列在 blank
   function slots(XLSX, wb) {
-    const got = {}, from = {}, unknown = [], blank = [];
+    const got = {}, from = {}, unknown = [], blank = [], skipped = [];   // skipped：沒有用到的工作表 (名稱、原因)
     const toCsv = name => XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false, rawNumbers: true });
     const hasRows = csv => csv.split(/\r?\n/).filter(l => l.replace(/,/g, '').trim()).length > 1;
     for (const name of wb.SheetNames) {
       const hit = SHEET_SLOT.find(([k]) => name.includes(k));
       if (hit && !got[hit[1]]) { const c = toCsv(name); if (hasRows(c)) { got[hit[1]] = c; from[hit[1]] = name; } else blank.push(name); }
       else if (!hit) unknown.push(name);
+      else skipped.push({ name, why: `和「${from[hit[1]]}」是同一種資料，只用第一張` });
     }
     for (const name of unknown) {
       const head = (XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false })[0]) || [];
       let slot = bySignature(head);
       if (slot === 'L' && got.L) slot = got.prior ? null : 'prior';
       if (slot && !got[slot]) { const c = toCsv(name); if (hasRows(c)) { got[slot] = c; from[slot] = name; } else blank.push(name); }
+      else skipped.push({ name, why: slot ? '同一種資料已經有一張' : '不是申報資料（例如說明頁）' });
     }
     if (got.L && got.prior && !SHEET_SLOT.some(([k, v]) => v === 'prior' && from.prior.includes(k))) {
       const lastYear = csvText => { const r = C.parseFixedWidth(C.csvToFixedWidth(csvText, L), L).records; return r.map(x => x.startDate).filter(d => C.isValidDate(d)).sort().pop() || ''; };
       if (lastYear(got.prior) > lastYear(got.L)) { [got.L, got.prior] = [got.prior, got.L]; [from.L, from.prior] = [from.prior, from.L]; }
     }
-    return { got, from, blank };
+    return { got, from, blank, skipped };
   }
 
   // 由承保資料推得公司代號與填報年度，產生符合命名原則的檔名 (對帳依填報年度彙總)
