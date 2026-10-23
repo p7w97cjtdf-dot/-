@@ -11,7 +11,14 @@
   const yuan = R.yuan;
   let INTRO = '檢查已完成。按「請 AI 整理重點」，AI 會用白話說明問題主要出在哪裡、先改什麼，以及被退件的可能性。';
 
-  const state = { files: {}, res: null, sel: null, cat: '', customRules: [] };
+  const state = { files: {}, res: null, sel: null, cat: '', customRules: [], audit: [] };
+  // 稽核軌跡：放入哪些檔案、檢查結果、改了哪些值、下載了什麼 (含檔案內容的 SHA-256，可事後比對檔案有沒有被動過)
+  // 只存在這個畫面，關掉就沒有；匯出時遮蔽個資
+  function audit(action, detail, hashOf) {
+    const e = { at: new Date(), action, detail, sha: '' };
+    state.audit.push(e);
+    if (typeof hashOf === 'string' && window.crypto && crypto.subtle) sha256(hashOf).then(h => { e.sha = h; }).catch(() => {});
+  }
   // 匯入並套用的規則與內建規則合併
   function activeRules() {
     const base = state.customRules.length ? DQ.dsl.extend(BASE, state.customRules) : BASE;
@@ -78,6 +85,7 @@
   function setFile(fid, name, text, fromSheet) {
     if (DETAIL.includes(fid) && /\.csv$/i.test(name)) { text = DQ.csvToFixedWidth(text, rs.layouts[fid]); name = name.replace(/\.csv$/i, '.txt'); }
     state.files[fid] = { name, text, fromSheet: !!fromSheet };
+    audit('放入資料', `${SLOT_NAME[fid] || fid}：${name}（${text.split(/\r?\n/).filter(Boolean).length.toLocaleString()} 行）`, text);
     $('#name-' + fid).textContent = name;
   }
   function guessSlot(name, fallback) {
@@ -100,13 +108,17 @@
   async function readWorkbook(file) {
     if (!window.XLSX) { $('#sample-note').textContent = '讀取 Excel 的元件沒有載入成功：工具的 vendor 資料夾可能不完整。請重新下載整個工具資料夾，或改用網址開啟。'; return; }
     let wb;
-    try { wb = XLSX.read(await file.arrayBuffer(), { type: 'array' }); }
+    const buf = await file.arrayBuffer();
+    try { wb = XLSX.read(buf, { type: 'array' }); }
     catch (e) { $('#sample-note').textContent = `「${file.name}」無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次。`; return; }
     const { got, from, blank } = DQ.workbook.slots(XLSX, wb);
     if (!got.L && !got.D && blank.length) { $('#sample-note').textContent = `「${file.name}」的工作表只有標題列、還沒有資料。請從第二列開始填入保單資料或理賠資料，再放進來。`; return; }
     if (!Object.keys(got).length) { $('#sample-note').textContent = `「${file.name}」裡找不到可以辨識的工作表。工作表名稱需包含：保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數或資產負債表`; return; }
     const fs = DQ.workbook.files(got);
     for (const [slot, f] of Object.entries(fs)) { state.files[slot] = f; $('#name-' + slot).textContent = `工作表「${from[slot]}」`; }
+    audit('放入資料', `${file.name}：${Object.keys(fs).map(k => `${from[k]}（${fs[k].text.split(/\r?\n/).filter(Boolean).length.toLocaleString()} 行）`).join('、')}`, null);
+    const entry = state.audit[state.audit.length - 1];
+    if (window.crypto && crypto.subtle) crypto.subtle.digest('SHA-256', buf).then(b => { entry.sha = [...new Uint8Array(b)].map(v => v.toString(16).padStart(2, '0')).join(''); }).catch(() => {});
     state.key = state.reconKey = state.masterKey = state.anomalyKey = null;
     $('#sample-note').textContent = `已讀取「${file.name}」的 ${Object.keys(got).length} 張工作表：${Object.keys(got).map(k => from[k]).join('、')}`;
     run();
@@ -222,6 +234,8 @@
     state.all = state.res.issues.concat(state.extra.filter(i => !state.res.issues.includes(i)));
     state.sel = null; state.aiSummary = null;
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
+    { const c = sev => state.all.filter(i => i.severity === sev).length, h = Object.values(state.disabledCount || {}).reduce((t, n) => t + n, 0);
+      audit('檢查', `必須修改 ${c('error')}、建議確認 ${c('warning')}、請人工判斷 ${c('suspect')}${h ? `；停用的檢查隱藏 ${h} 個` : ''}`); }
     // 手機上資料一放進來就捲到結果區 (上傳區在畫面上方會佔掉整個螢幕)
     if (window.matchMedia('(max-width: 720px)').matches) requestAnimationFrame(() => $('#summary').scrollIntoView({ block: 'start', behavior: 'smooth' }));
     if (DQ.app && DQ.app.onRun) DQ.app.onRun();
@@ -380,10 +394,10 @@
       ${siblings.length ? `<div><div class="label">同一張保單的其他資料</div><table class="fields"><tbody>${[rec].concat(siblings).sort((a, b) => a.txnSeq.localeCompare(b.txnSeq)).map(r => `<tr class="${r === rec ? 'hit' : ''}"><td class="num">第${r._line}行</td><td class="v">${r.txnSeq}</td><td class="v">${r.addType} ${r.addDate}</td><td class="v">→ ${r.exitType} ${r.exitDate}</td></tr>`).join('')}</tbody></table></div>` : ''}
       <div class="ai-explain"><button class="btn ghost small ai-btn" id="btn-explain">請 AI 用白話解釋</button><p class="ai-notice">按下後會把這個問題和相關欄位送給 AI（Claude），不會送出整筆資料；身分證號、姓名、地址、電話、Email 會先遮蔽。</p><div class="ask" id="explain-out"></div></div>
       <div class="detail-foot">
-        <button class="linkish" type="button" id="btn-detail-list">下載問題清單</button>
+        <button class="linkish" type="button" id="btn-detail-list">匯出稽核軌跡</button>
         ${fixable ? `<button class="btn cta" id="btn-fix-one" title="${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}">改成建議的值</button>` : '<span class="hint">這個問題需要人工確認後修改</span>'}
       </div>`;
-    $('#btn-detail-list').onclick = () => $('#btn-dl-csv').click();
+    $('#btn-detail-list').onclick = exportAudit;
     const one = $('#btn-fix-one');
     if (one) one.onclick = () => applyFix([i.id]);
     $('#btn-explain').onclick = async () => {
@@ -399,6 +413,7 @@
   if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { saver = d; }, () => {});
   // 檔名一律用英數字：有些瀏覽器會丟掉中文檔名，存成沒有副檔名的「download」，打開就變亂碼
   async function download(name, data, type) {
+    if (name !== state.auditName) audit('下載', name, typeof data === 'string' ? data : null);
     if (saver) {
       try { await saver.save({ filename: name, data }); }
       catch (e) { $('#action-note').textContent = e && e.code === 'declined' ? '已取消下載。' : '這裡無法下載檔案。'; }
@@ -411,6 +426,14 @@
   }
   function applyFix(ids) {
     let total = 0;
+    // 先記下要改的值 (改之前的值 → 建議的值)
+    const sel = ids ? new Set(ids) : null;
+    for (const i of state.res.issues) {
+      if (!i.fix || !DETAIL.includes(i.file) || !state.files[i.file] || (sel && !sel.has(i.id))) continue;
+      const lay = rs.layouts[i.file], f = lay && lay.field(i.fix.field), rec = (state.res.data[i.file] || []).find(r => r._line === i.line);
+      if (!f || !rec || rec._raw.length !== lay.recordLength) continue;
+      audit('修改', `${SHEET[i.file]} ${rowLabel(i)}${i.policy ? ` ${i.policy.trim()}` : ''} ${f.name}：「${String(rec[f.key]).trim()}」→「${String(i.fix.value).trim()}」（${i.ruleId}）`);
+    }
     state.changed = state.changed || new Set();
     for (const fid of DETAIL) {
       if (!state.files[fid]) continue;
@@ -444,6 +467,18 @@
     } else download('issues_list.csv', DQ.report.toCSV(rs, state.res, state.extra), 'text/csv;charset=utf-8');
   };
   $('#btn-dl-reject').onclick = () => download('reject_' + safeName(state.files.L && state.files.L.name, 'policies.txt'), DQ.report.toRejectFile(rs, state.res, 'L'));
+  // 稽核軌跡：CSV (含 BOM，Excel 可直接開)；內容先遮蔽個資，避免轉寄時外流
+  async function exportAudit() {
+    await new Promise(r => setTimeout(r, 50));   // 等雜湊值算完
+    const q = v => { v = String(v == null ? '' : v); if (/^[=+@\t\r]|^-[^\d]/.test(v)) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const ctx = DQ.aiPayload.context(state.res || { data: {} }, reconCtx());
+    const p2 = n => String(n).padStart(2, '0'), ts = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+    const rows = [['時間', '動作', '內容', '檔案內容 SHA-256']].concat(state.audit.map(e => [ts(e.at), e.action, DQ.pii.redact(e.detail, ctx).text, e.sha]));
+    const head = `# 申報資料檢核助手 稽核軌跡（${ts(new Date())} 匯出）\r\n# ${$('#rule-version').textContent}\r\n`;
+    const d = new Date(); state.auditName = `audit_trail_${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}.csv`;
+    download(state.auditName, '\uFEFF' + head + rows.map(r => r.map(q).join(',')).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
+  }
+  $('#btn-dl-audit').onclick = exportAudit;
   $('#btn-dl-report').onclick = () => download('check_report.html', reportHTML(), 'text/html;charset=utf-8');
 
   // ---------- 跨系統對帳 ----------
