@@ -5,7 +5,7 @@
 
 | 檔案 | 程式庫 | 授權 |
 |---|---|---|
-| `xlsx.full.min.js` | SheetJS 0.18.5 | Apache-2.0（`LICENSE-sheetjs.txt`） |
+| `xlsx.core.min.js` | SheetJS 0.18.5 (不含舊版 .xls 的字碼表，檔案小一半) | Apache-2.0（`LICENSE-sheetjs.txt`） |
 | `pdf.min.js`、`pdf.worker.min.js` | PDF.js 3.11.174（npm `pdfjs-dist`） | Apache-2.0（`LICENSE-pdfjs.txt`） |
 | `mammoth.browser.min.js` | mammoth 1.6.0 | BSD-2-Clause（`LICENSE-mammoth.txt`） |
 
