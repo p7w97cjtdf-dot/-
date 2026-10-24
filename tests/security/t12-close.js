@@ -15,6 +15,13 @@ const back = page => page.evaluate(() => new Promise(r => { addEventListener('po
     const { browser, page, log } = await open();
     await page.setInputFiles('#file-book', SAMPLE); await page.waitForTimeout(2500);
     const url = page.url();
+    // 清單依類別收合：一開始只展開第一類、每類先列 5 項；點類別標題可以展開與收起
+    const g0 = await page.evaluate(() => [...document.querySelectorAll('#issue-list .grp')].map(g => ({ k: g.dataset.grp, open: g.classList.contains('open'), n: g.querySelectorAll('.issue').length })));
+    await page.click('#issue-list .grp:nth-child(2) .grp-h');
+    const g1 = await page.evaluate(() => document.querySelector('#issue-list .grp:nth-child(2)').classList.contains('open'));
+    await page.click('#issue-list .grp:nth-child(2) .grp-h');
+    const g2 = await page.evaluate(() => document.querySelector('#issue-list .grp:nth-child(2)').classList.contains('open'));
+    ok.groups = g0.length >= 2 && g0[0].open && g0[0].n <= 5 && g0.slice(1).every(g => !g.open) && g1 && !g2;
     // 篩選・下載選單：點外面、按 Esc 都會收起
     await page.evaluate(() => { document.querySelector('.more-menu').open = true; });
     await page.mouse.click(5, 300);
