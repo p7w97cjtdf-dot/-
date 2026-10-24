@@ -960,7 +960,7 @@ body:not(.no-data) #sample-note { font-size: 12px; }
 body.no-ai #view-check .ai-explain { display: none; }
 #view-check .detail-foot { margin-top: 16px; }
 @media (max-width: 1100px) {
-  #view-check .issue-list > #detail { margin: 0 12px 12px; border-color: var(--cta); position: static; max-height: none; }
+  #view-check .issue-list #detail { margin: 0 12px 12px; border-color: var(--cta); position: static; max-height: none; }
   #view-check .bench-side:empty { display: none; }
 }
 #view-check .issue { scroll-margin-top: 72px; }
@@ -1008,8 +1008,8 @@ body:not(.no-data) .imports .data-map { margin-top: 12px; }
 .x-close { position: absolute; top: 10px; right: 10px; min-height: 32px; padding: 2px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: #475569; cursor: pointer; }
 @media (max-width: 1100px) {
   #view-check .bench-side { display: none; }
-  #view-check .issue-list > #detail .d-close { display: inline-flex; align-items: center; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: var(--fg); cursor: pointer; flex: none; }
-  #view-check .issue-list > #detail .detail-head { gap: 8px; }
+  #view-check .issue-list #detail .d-close { display: inline-flex; align-items: center; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: var(--fg); cursor: pointer; flex: none; }
+  #view-check .issue-list #detail .detail-head { gap: 8px; }
 }
 /* 沒有使用的原因放在來源下面 (原因可能很長) */
 .dm-row.dm-off { grid-template-columns: minmax(96px, 9em) minmax(0, 1fr); row-gap: 2px; padding: 8px 16px; }
@@ -1018,3 +1018,25 @@ body:not(.no-data) .imports .data-map { margin-top: 12px; }
 @media (max-width: 720px) { .dm-row.dm-off { grid-template-columns: minmax(0, 1fr); } .dm-off .dm-n, .dm-off .dm-src { grid-column: 1; } .dm-off .dm-src { grid-row: auto; } }
 .dm-tpl #btn-template { display: inline-flex; align-items: center; min-height: 36px; margin: 0 6px; padding: 4px 14px; border: 1px solid var(--fg); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: var(--fg); cursor: pointer; text-decoration: none; }
 .dm-tpl #btn-template:hover { background: #F4F4F4; }
+
+/* ===== 清單依 5 大類收合 ===== */
+#view-check .grp + .grp { border-top: 1px solid var(--line); }
+#view-check .grp-h { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 10px 16px; border: 0; background: #fff; font: inherit; text-align: left; cursor: pointer; color: var(--fg); }
+#view-check .grp-h:hover { background: #F8FAFC; }
+#view-check .grp-h:focus-visible { outline: 2px solid var(--cta); outline-offset: -2px; }
+#view-check .grp-k { font-size: 14px; font-weight: 700; }
+#view-check .grp-n { font-size: 13px; font-weight: 700; color: #64748B; font-variant-numeric: tabular-nums; }
+#view-check .grp-h::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid #94A3B8; border-bottom: 2px solid #94A3B8; transform: rotate(45deg); transition: transform .15s; }
+#view-check .grp.open .grp-h::after { transform: rotate(-135deg); }
+#view-check .grp.open .grp-h { border-bottom: 1px solid #F1F5F9; }
+#view-check .grp-body .issue { padding: 12px 16px 12px 20px; }
+#view-check .issue-main { gap: 2px; }
+#view-check .issue-msg { font-size: 14px; }
+#view-check .issue-msg .sev-tag { margin-right: 6px; vertical-align: 1px; }
+#view-check .issue-where { font-size: 12px; font-weight: 500; color: #64748B; }
+#view-check .issue-where .issue-side { display: inline; font-size: 12px; font-weight: 500; color: #64748B; white-space: normal; max-width: none; }
+#view-check .issue-where .issue-side .to { color: var(--cta-ink2); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { #view-check .grp-h::after { transition: none; } }
+#view-check .grp-more { display: block; width: 100%; min-height: 44px; padding: 8px 20px; border: 0; border-top: 1px solid #F1F5F9; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: var(--fg); text-align: left; cursor: pointer; }
+#view-check .grp-more:hover { background: #F8FAFC; }
+#view-check .issue-list { max-height: 640px; }

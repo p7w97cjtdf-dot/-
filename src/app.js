@@ -361,7 +361,8 @@
     doneBack('detail');
     state.sel = null; state.aiSummary = null; state.aiInsights = null; state.aiChecks = null; state.focus = null;   // 資料變了，AI 的結論要重新產生與驗證
     // 寬螢幕：右側直接顯示第一個問題的說明 (不留空白的說明欄)
-    if (window.matchMedia('(min-width: 1101px)').matches) { const first = filtered()[0]; if (first) state.sel = first.id; }
+    state.openGroups = null; state.fullGroups = null;
+    if (window.matchMedia('(min-width: 1101px)').matches) { const g = grouped(filtered())[0]; if (g) state.sel = g[2][0].id; }
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
     { const c = sev => state.all.filter(i => i.severity === sev).length, h = Object.values(state.disabledCount || {}).reduce((t, n) => t + n, 0);
       audit('檢查', `必須修改 ${c('error')}、建議確認 ${c('warning')}、請人工判斷 ${c('suspect')}${h ? `；停用的檢查隱藏 ${h} 個` : ''}`); }
@@ -467,6 +468,16 @@
     const label = names[0] || shortFields(i).split(/[、 ]/)[0] || '內容';
     return esc(cut(`${label ? label + '：' : ''}${niceVal(fs[0], val)}`));
   }
+  // 清單分 5 大類 (13 種問題類型歸併)，一類一個收合區；一開始只展開第一個有問題的類別
+  const GROUPS = [['format', '格式錯誤'], ['logic', '內容矛盾'], ['cross', '檔案對不上'], ['total', '總數不符'], ['judge', '需人工判斷']];
+  const GROUP_OF = { 格式: 'format', 代碼: 'format', 缺漏: 'format', 單筆邏輯: 'logic', 多筆邏輯: 'logic', 邏輯合理性: 'logic',
+    跨檔: 'cross', 客戶資料: 'cross', 商品資料: 'cross', 期初期末結轉: 'cross', 跨系統對帳: 'total', 財報勾稽: 'total' };
+  const groupOf = i => i.severity === 'suspect' ? 'judge' : GROUP_OF[i.category] || 'logic';
+  function grouped(list) {
+    const by = Object.fromEntries(GROUPS.map(([k]) => [k, []]));
+    for (const i of list) by[groupOf(i)].push(i);
+    return GROUPS.map(([k, label]) => [k, label, by[k]]).filter(g => g[2].length);
+  }
   function renderTable() {
     // 手機上說明會插在選取的那一項下面：重畫清單前先放回右側欄
     if ($('#issue-list').contains($('#detail'))) $('.bench-side').appendChild($('#detail'));
@@ -476,36 +487,53 @@
     const list = filtered(), open = state.all.filter(i => i.severity !== 'suspect').length;
     $('#issue-count').textContent = state.all.length ? (list.length === state.all.length ? `${open} 項待處理` : `顯示 ${list.length} / ${state.all.length} 項`) : '沒有問題';
     $('#issue-count').className = 'count-pill' + (state.all.some(i => i.severity === 'error') ? ' err' : '');
-    // 這次最需要注意的事：最常出現的必須修改問題
-    const top = {}; for (const i of state.all) if (i.severity === 'error') (top[i.ruleId] = top[i.ruleId] || { n: 0, msg: i.ruleName || i.message }).n++;
-    const best = Object.values(top).sort((a, b) => b.n - a.n)[0], tm = best && best.msg, tn = best && best.n;
-    $('#list-hint').textContent = tm ? `最多的是「${tm.length > 26 ? tm.slice(0, 25) + '…' : tm}」${tn} 項・點選項目看說明` : '點選項目，右側會顯示問題說明與建議修正方式';
-    // 問題很多時只畫前 500 項 (一次畫幾萬項會讓瀏覽器卡住)；其餘用篩選或下載問題清單查看
-    const SHOW = 500, more = list.length - SHOW;
-    $('#issue-list').innerHTML = list.length ? list.slice(0, SHOW).map(i => {
-      const val = String(i.value == null ? '' : i.value).trim();
-      const fixable = i.fix && state.res.issues.includes(i);
-      // 一列只放：狀態、位置、問題、右側一句「欄位：值」(金額加千分位、日期加斜線；能一鍵修改時加上改成的值)
-      const side = sideText(i, val, fixable);
+    const groups = grouped(list);
+    // 展開的類別：選取的問題所在的類別一定展開；沒有指定時展開第一類
+    state.openGroups = state.openGroups || new Set();
+    const selG = state.sel != null && list.find(i => i.id === state.sel);
+    if (selG) state.openGroups.add(groupOf(selG));
+    if (!state.openGroups.size && groups[0]) state.openGroups.add(groups[0][0]);
+    // 問題很多時每類只畫前 500 項 (一次畫幾萬項會讓瀏覽器卡住)；其餘用篩選或下載問題清單查看
+    // 每類先列 5 項 (所有類別一眼看得到)，按「顯示其餘」才列出全部
+    const SHOW = 500, FIRST = 5;
+    state.fullGroups = state.fullGroups || new Set();
+    // 一項兩行：問題；位置・「欄位：值」(能一鍵修改時加上改成的值)。只有「建議確認」加標籤，其餘都是必須修改
+    const item = i => {
+      const val = String(i.value == null ? '' : i.value).trim(), side = sideText(i, val, i.fix && state.res.issues.includes(i));
       return `<div class="issue ${i.severity}${state.sel === i.id ? ' sel' : ''}" data-id="${i.id}" role="listitem" tabindex="0">
         <div class="issue-main">
-          <span class="sev-tag ${i.severity}">${SEV[i.severity]}</span>
-          <p class="issue-where">${esc(i.sheet || '')} ${rowLabel(i)}</p>
-          <p class="issue-msg">${esc(i.message)}</p>
+          <p class="issue-msg">${i.severity === 'warning' ? '<span class="sev-tag warning">建議確認</span>' : ''}${esc(i.message)}</p>
+          <p class="issue-where">${esc(i.sheet || '')} ${rowLabel(i)}${side ? `<span class="issue-side">・${side}</span>` : ''}</p>
         </div>
-        <div class="issue-side">${side}</div>
       </div>`;
-    }).join('') + (more > 0 ? `<p class="empty">還有 ${more.toLocaleString()} 項沒有列出。請用上方的篩選縮小範圍，或按「下載問題清單」查看全部。</p>` : '') : `<p class="empty">${state.all.length ? '沒有符合條件的問題' : '目前的檢核沒有發現問題；送件前仍請依正式手冊與主管機關規範確認。'}</p>`;
+    };
+    $('#issue-list').innerHTML = groups.length ? groups.map(([k, label, items]) => {
+      const on = state.openGroups.has(k);
+      return `<div class="grp${on ? ' open' : ''}" data-grp="${k}">
+        <button class="grp-h" type="button" aria-expanded="${on}"><span class="grp-k">${label}</span><span class="grp-n">${items.length}</span></button>
+        ${on ? (() => {
+          const full = state.fullGroups.has(k) || (state.sel != null && items.findIndex(i => i.id === state.sel) >= FIRST), n = full ? SHOW : FIRST;
+          return `<div class="grp-body" role="list">${items.slice(0, n).map(item).join('')}${items.length > n ? (full ? `<p class="empty">還有 ${(items.length - n).toLocaleString()} 項，請用篩選或下載問題清單查看。</p>` : `<button class="grp-more" type="button">顯示其餘 ${items.length - n} 項</button>`) : ''}</div>`;
+        })() : ''}
+      </div>`;
+    }).join('') : `<p class="empty">${state.all.length ? '沒有符合條件的問題' : '目前的檢核沒有發現問題；送件前仍請依正式手冊與主管機關規範確認。'}</p>`;
   }
+
   // 行號：文字檔為第 N 筆；由 Excel 匯入時換算成 Excel 列號 (第 1 列為標題)；CSV 工作表為檔案中的列號
   function rowLabel(i) {
     if (!i.line) return '';
     if (i.file === 'L' || i.file === 'D') { const f = state.files[i.file]; return f && f.fromSheet ? `第 ${i.line + 1} 列` : `第 ${i.line} 行`; }
     return `第 ${i.line} 列`;
   }
-  ['#f-sev', '#f-file', '#f-q'].forEach(s => $(s).addEventListener('input', renderTable));
+  ['#f-sev', '#f-file', '#f-q'].forEach(s => $(s).addEventListener('input', () => { state.openGroups = null; renderTable(); }));
   $('#f-cat').addEventListener('input', () => { state.cat = $('#f-cat').value; renderCats(); renderTable(); });
-  $('#issue-list').addEventListener('click', e => { const r = e.target.closest('[data-id]'); if (r) select(+r.dataset.id); });
+  $('#issue-list').addEventListener('click', e => {
+    const m = e.target.closest('.grp-more');
+    if (m) { state.fullGroups.add(m.closest('.grp').dataset.grp); renderTable(); return; }
+    const h = e.target.closest('.grp-h');
+    if (h) { const k = h.parentElement.dataset.grp; state.openGroups.has(k) ? state.openGroups.delete(k) : state.openGroups.add(k); renderTable(); const g = $(`#issue-list [data-grp="${k}"] .grp-h`); if (g) g.focus(); return; }
+    const r = e.target.closest('[data-id]'); if (r) select(+r.dataset.id);
+  });
   $('#issue-list').addEventListener('keydown', e => { const r = e.target.closest('[data-id]'); if (r && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(+r.dataset.id); } });
   function select(id, quiet) {
     state.sel = id; renderTable(); renderDetail();
@@ -539,8 +567,7 @@
     const el = $('#detail');
     const i = state.res && state.all.find(x => x.id === state.sel);
     if (!i) {
-      el.innerHTML = `<div class="detail-head"><div class="d-title"><div><h3>詳細說明</h3><p class="hint">點清單中任一個問題</p></div></div></div>
-        <p class="hint">這裡會說明問題在哪裡、依據哪一條規定、建議怎麼改。</p>`;
+      el.innerHTML = `<div class="detail-head"><div class="d-title"><div><h3>詳細說明</h3><p class="hint">點左邊的問題</p></div></div></div>`;
       return;
     }
     const lay = rs.layouts[i.file] || { title: i.sheet, recordLength: -1, fields: [], field: () => null, keyOf: () => '' };
@@ -560,14 +587,14 @@
         <span class="sev-pill ${i.severity}">${SEV[i.severity]}</span>
         <button class="d-close" type="button" aria-label="收起這個問題的說明">收起</button>
       </div>
-      <section class="d-sec"><p class="d-label">問題說明</p>
+      <section class="d-sec"><p class="d-label">問題</p>
         <div class="d-box ${i.severity}"><b>${esc(i.message)}</b></div></section>
-      <section class="d-sec"><p class="d-label">建議修正方式</p>
+      <section class="d-sec"><p class="d-label">怎麼改</p>
         <div class="d-box plain">${esc(i.suggestion || '請人工確認')}
           ${i.fix ? `<p class="d-meta">建議值：<b class="mono fixval">${esc(i.fix.value)}</b></p>` : ''}</div></section>
-      <section class="d-sec"><p class="d-label">依據的規定</p>
+      <section class="d-sec"><p class="d-label">依據</p>
         <div class="d-box basis">${esc(i.ruleName || LB.cat(i.category))}（檢核編號 <span class="mono">${esc(i.ruleId)}</span>${i.ref ? `・${esc(i.ref)}` : ''}）</div></section>
-      ${rec ? `<details class="raw"><summary>顯示原始資料${range}</summary>
+      ${rec ? `<details class="raw"><summary>原始資料${range}</summary>
         <p class="hint">左邊數字是第幾個字；「·」代表空白；黃色是有問題的地方。</p>
         <div class="ruler">${ruler(lay, rec._raw, i.fields)}</div>
         ${hits.length ? `<table class="fields"><tbody>${hits.map(row).join('')}</tbody></table>` : ''}
@@ -575,11 +602,7 @@
       </details>` : ''}
       ${siblings.length ? `<details class="raw"><summary>同一張保單的其他資料（${siblings.length} 筆）</summary><table class="fields"><tbody>${[rec].concat(siblings).sort((a, b) => a.txnSeq.localeCompare(b.txnSeq)).map(r => `<tr class="${r === rec ? 'hit' : ''}"><td class="num">第${r._line}行</td><td class="v">${r.txnSeq}</td><td class="v">${r.addType} ${r.addDate}</td><td class="v">→ ${r.exitType} ${r.exitDate}</td></tr>`).join('')}</tbody></table></details>` : ''}
       <div class="ai-explain"><button class="linkish ai-btn" type="button" id="btn-explain">請 AI 用白話解釋</button><p class="ai-notice" hidden>按下後會把這個問題和相關欄位送給 AI（Claude），不會送出整筆資料；身分證號、姓名、地址、電話、Email 會先遮蔽。</p><div class="ask" id="explain-out"></div></div>
-      <div class="detail-foot">
-        <button class="linkish" type="button" id="btn-detail-list">匯出稽核軌跡</button>
-        ${fixable ? `<button class="btn cta" id="btn-fix-one" title="${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}">套用建議值</button>` : '<span class="hint">需要人工確認後修改</span>'}
-      </div>`;
-    $('#btn-detail-list').onclick = exportAudit;
+      ${fixable ? `<div class="detail-foot"><button class="btn cta" id="btn-fix-one" title="${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}">套用建議值</button></div>` : ''}`;
     el.querySelector('.d-close').onclick = closeDetail;
     const one = $('#btn-fix-one');
     if (one) one.onclick = () => applyFix([i.id]);
@@ -671,29 +694,41 @@
     const red = v => DQ.pii.redact(String(v == null ? '' : v), ctx).text;
     const p2 = n => String(n).padStart(2, '0'), d = new Date();
     const day = x => `${x.getFullYear()}-${p2(x.getMonth() + 1)}-${p2(x.getDate())}`, ts = x => `${day(x)} ${p2(x.getHours())}:${p2(x.getMinutes())}:${p2(x.getSeconds())}`;
-    const head = ['時間', '動作', '資料', '位置', '保單號碼', '欄位', '原本的值', '改成', '檢核編號', '說明', '檔案內容 SHA-256'];
-    const rows = state.audit.map(e => e.action === '修改' && e.field
-      ? [ts(e.at), e.action, e.sheet, e.where, e.policy, e.field, red(e.from), red(e.to), e.rule, e.why || '', e.sha]
-      : [ts(e.at), e.action, '', '', '', '', '', '', '', red(e.detail), e.sha]);
+    // 分類放：修改紀錄 (每個改過的欄位一列)、檢查與檔案 (放入、檢查、下載)、AI 使用 (送出、驗證、設定)
+    const AI_ACT = /AI|加入檢查/;
+    const fixHead = ['時間', '資料', '位置', '保單號碼', '欄位', '原本的值', '改成', '檢核編號', '問題'];
+    const fixRows = state.audit.filter(e => e.action === '修改' && e.field).map(e => [ts(e.at), e.sheet, e.where, e.policy, e.field, red(e.from), red(e.to), e.rule, e.why || '']);
+    const logHead = ['時間', '動作', '內容', '檔案內容 SHA-256'];
+    const logRows = state.audit.filter(e => !(e.action === '修改' && e.field) && !AI_ACT.test(e.action)).map(e => [ts(e.at), e.action, red(e.detail), e.sha]);
+    const aiRows = state.audit.filter(e => AI_ACT.test(e.action)).map(e => [ts(e.at), e.action, red(e.detail)]);
+    const rows = fixRows.concat(logRows, aiRows);
     const info = [['項目', '內容'], ['工具', '申報資料檢核助手'], ['匯出時間', ts(d)], ['檢查依據', $('#rule-version').textContent],
       ['檢查的資料', SLOTS.filter(k => state.files[k]).map(k => `${SLOT_NAME[k] || k}：${state.src[k] || state.files[k].name}（${recCount(k)} 筆）`).join('\n') || '（沒有）'],
       ['紀錄筆數', String(rows.length)], ['說明', '身分證號、姓名、地址、電話、Email 已遮蔽。SHA-256 是放入或下載的檔案內容的雜湊值，可用來確認檔案事後沒有被改過。紀錄只存在網頁上，關掉網頁就沒有。']];
-    // 檔名：audit-trail_資料名稱_日期_時間 (英數字，避免部分瀏覽器存成亂碼)
+    // 檔名：稽核軌跡_資料檔名_日期_時間
     const k0 = SLOTS.find(k => state.files[k]);
-    const stem = k0 ? String(state.src[k0] || state.files[k0].name).replace(/「.*$/, '').replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '').slice(0, 40) : '';
-    const name = `audit-trail_${stem ? stem + '_' : ''}${day(d)}_${p2(d.getHours())}${p2(d.getMinutes())}`;
+    const stem = k0 ? String(state.src[k0] || state.files[k0].name).replace(/「.*$/, '').replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|\s]+/g, '').slice(0, 40) : '';
+    const name = `稽核軌跡_${stem ? stem + '_' : ''}${day(d)}_${p2(d.getHours())}${p2(d.getMinutes())}`;
     if (window.XLSX) {
-      const ws = XLSX.utils.aoa_to_sheet([head].concat(rows)), wi = XLSX.utils.aoa_to_sheet(info), wb = XLSX.utils.book_new();
-      ws['!cols'] = [19, 10, 12, 10, 16, 18, 18, 18, 14, 60, 18].map(w => ({ wch: w }));
-      ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: head.length - 1 } }) };
-      wi['!cols'] = [{ wch: 12 }, { wch: 100 }];
-      XLSX.utils.book_append_sheet(wb, ws, '稽核軌跡'); XLSX.utils.book_append_sheet(wb, wi, '匯出資訊');
+      const wb = XLSX.utils.book_new();
+      const sheet = (title, head, data, widths) => {
+        const ws = XLSX.utils.aoa_to_sheet([head].concat(data.length ? data : [['（沒有紀錄）']]));
+        ws['!cols'] = widths.map(w => ({ wch: w }));
+        if (data.length) ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length, c: head.length - 1 } }) };
+        XLSX.utils.book_append_sheet(wb, ws, title);
+      };
+      sheet('修改紀錄', fixHead, fixRows, [19, 10, 10, 16, 18, 18, 18, 14, 48]);
+      sheet('檢查與檔案', logHead, logRows, [19, 10, 80, 18]);
+      sheet('AI 使用', logHead.slice(0, 3), aiRows, [19, 12, 90]);
+      const wi = XLSX.utils.aoa_to_sheet(info); wi['!cols'] = [{ wch: 12 }, { wch: 100 }];
+      XLSX.utils.book_append_sheet(wb, wi, '匯出資訊');
       state.auditName = name + '.xlsx';
       return download(state.auditName, new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
     const q = v => { v = String(v == null ? '' : v); if (/^[=+@\t\r]|^-[^\d]/.test(v)) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     state.auditName = name + '.csv';
-    download(state.auditName, '\uFEFF' + [head].concat(rows).map(r => r.map(q).join(',')).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
+    const all = [['類別', '時間', '動作', '內容']].concat(fixRows.map(r => ['修改紀錄', r[0], '修改', `${r[1]} ${r[2]} ${r[3]} ${r[4]}：「${r[5]}」→「${r[6]}」（${r[7]}）`]), logRows.map(r => ['檢查與檔案', r[0], r[1], r[2]]), aiRows.map(r => ['AI 使用', r[0], r[1], r[2]]));
+    download(state.auditName, '\uFEFF' + all.map(r => r.map(q).join(',')).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
   }
 
   $('#btn-dl-audit').onclick = exportAudit;
