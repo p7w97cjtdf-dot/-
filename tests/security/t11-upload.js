@@ -19,6 +19,18 @@ const custom = path.join(TMP, 'custom_summary.xlsx'), wc = XLSX.utils.book_new()
 XLSX.utils.book_append_sheet(wc, XLSX.utils.aoa_to_sheet([['保單號碼', '險別', '生效日期', '理賠金額'], ['POL1', '一般壽險', '20200101', 0]]), '1_保單與理賠明細');
 XLSX.utils.book_append_sheet(wc, XLSX.utils.aoa_to_sheet([['會計科目代碼', '會計科目名稱', '期初餘額', '本期增減', '期末餘額'], ['1111', '現金', 100, 0, 100]]), '5_資產負債表');
 fs.writeFileSync(custom, XLSX.write(wc, { type: 'buffer', bookType: 'xlsx' }));
+// 格式亂的保單資料：欄位名稱不同、日期寫成 2025/1/1、性別寫男女 → 自動調整後結果要和原本的正確資料一樣 (0 個問題)
+const messy = path.join(TMP, 'messy.xlsx'), wm = XLSX.read(fs.readFileSync(path.join(ROOT, 'samples', 'excel', '試用資料_正確.xlsx')), { type: 'buffer' });
+{
+  const aoa = XLSX.utils.sheet_to_json(wm.Sheets['保單資料'], { header: 1, raw: true, defval: '' }), h = aoa[0], ix = n => h.indexOf(n);
+  h[ix('保單編號')] = '保單號碼'; h[ix('出生日期')] = '出生年月日 (YYYYMMDD)'; h[ix('性別')] = '性別（男/女）';
+  for (const r of aoa.slice(1)) {
+    for (const n of ['出生年月日 (YYYYMMDD)', '加保日期']) { const v = String(r[ix(n)]); if (/^(19|20)\d{6}$/.test(v)) r[ix(n)] = `${v.slice(0, 4)}/${+v.slice(4, 6)}/${+v.slice(6)}`; }
+    r[ix('性別（男/女）')] = { 1: '男', 2: '女' }[r[ix('性別（男/女）')]] || r[ix('性別（男/女）')];
+  }
+  wm.Sheets['保單資料'] = XLSX.utils.aoa_to_sheet(aoa);
+  fs.writeFileSync(messy, XLSX.write(wm, { type: 'buffer', bookType: 'xlsx' }));
+}
 
 (async () => {
   const { browser, page, log } = await open();
@@ -38,14 +50,19 @@ fs.writeFileSync(custom, XLSX.write(wc, { type: 'buffer', bookType: 'xlsx' }));
   await page.setInputFiles('#file-book', custom); await page.waitForTimeout(2500);
   const third = await look();
   third.template = await page.evaluate(() => !!document.querySelector('#btn-template'));
+  await page.setInputFiles('#file-book', messy); await page.waitForTimeout(3000);
+  const fourth = await look();
+  fourth.must = await page.evaluate(() => DQ.app.state.all.filter(i => i.severity !== 'suspect').length);
+  fourth.fixNote = await page.evaluate(() => [...document.querySelectorAll('#data-map .dm-fix')].map(e => e.textContent).join(' / '));
   const r = {
-    first, second, third,
+    first, second, third, fourth,
     ok: {
       cancerMapped: first.files.join() === 'CL,CD' && first.map.some(t => /癌症險保單資料 cancer\.xlsx「癌症險保單資料」 \d+ 筆/.test(t)),
       unusedListed: first.map.some(t => /沒有使用.*「說明」「錯誤解答」/.test(t)),
       blankClears: second.files.length === 0 && second.noData && !second.resultsVisible,
-      customRejected: third.files.length === 0 && third.noData && !third.resultsVisible && /不是申報資料的格式/.test(third.note),
-      customExplained: third.map.some(t => /1_保單與理賠明細.*欄位對不上「保單資料」/.test(t)) && third.map.some(t => /5_資產負債表.*缺 科目代號/.test(t)) && third.template,
+      customPartly: third.files.join() === 'statement' && third.noData && !third.resultsVisible,
+      customExplained: third.map.some(t => /1_保單與理賠明細.*欄位對不上「保單資料」.*無法自動補齊/.test(t)) && third.map.some(t => /資產負債表.*已自動調整.*會計科目代碼→科目代號/.test(t)) && third.template,
+      messyFixed: fourth.files.includes('L') && fourth.must === 0 && /保單號碼→保單編號/.test(fourth.fixNote) && /日期格式/.test(fourth.fixNote) && /男女/.test(fourth.fixNote),
       blankExplained: /只有標題列/.test(second.note) && second.map.some(t => /保單資料」「理賠資料」.*只有標題列/.test(t)),
     },
     errors: log.errors.filter(e => !/serviceWorker/.test(e)),

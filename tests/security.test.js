@@ -174,15 +174,28 @@ test('上傳：CSV 依標題列判斷是哪一份申報檔，不看檔名', () =
   assert.strictEqual(C.csvLayout('', detail), null);
 });
 
-test('上傳：工作表名稱對、欄位不對的資料不採用，並說明缺了哪些欄位', () => {
+test('上傳：欄位名稱與格式不同時自動調整；缺太多、補不齊的才不採用', () => {
   const W = require('../src/workbook.js');
-  assert.strictEqual(W.headProblem('L', all.layouts.L.fields.map(f => f.name)), '');
-  assert.strictEqual(W.headProblem('prior', all.layouts.L.fields.map(f => f.key)), '');
-  assert.strictEqual(W.headProblem('L', all.layouts.L.fields.map(() => '0')), '');   // 沒有標題列、欄位數相同
-  assert.match(W.headProblem('L', ['保單號碼', '險別', '生效日期']), /需要 61 個欄位，這張只對到 0 個/);
-  assert.strictEqual(W.headProblem('statement', ['科目代號', '科目名稱', '期初餘額', '本期增加', '本期減少', '期末餘額']), '');
-  assert.match(W.headProblem('statement', ['會計科目代碼', '會計科目名稱', '期初餘額', '本期增減', '期末餘額']), /缺 科目代號、科目名稱、本期增加、本期減少/);
-  assert.match(W.headProblem('customers', ['保單號碼', '身分證號', '姓名']), /缺 保單編號/);
+  const Lf = all.layouts.L.fields;
+  assert.strictEqual(W.headProblem('L', Lf.map(f => f.name)), '');
+  assert.strictEqual(W.headProblem('prior', Lf.map(f => f.key)), '');
+  assert.strictEqual(W.headProblem('L', Lf.map(() => '0')), '');   // 沒有標題列、欄位數相同
+  assert.match(W.headProblem('L', ['保單號碼', '險別', '生效日期']), /需要 61 個欄位，這張只對到 2 個.*無法自動補齊/);
+  assert.match(W.headProblem('customers', ['保單號碼', '身分證號', '姓名']), /缺 保單序號、角色、出生日期、性別/);
+  // 資產負債表：同義欄位名稱、「本期增減」拆成增加與減少
+  const st = W.normalize('statement', [['會計科目代碼', '會計科目名稱', '期初餘額', '本期增減', '期末餘額'], ['1111', '現金', 100, 20, 120], ['2111', '應付', 50, -10, 40]]);
+  assert.deepStrictEqual(st.rows, [['科目代號', '科目名稱', '期初餘額', '本期增加', '本期減少', '期末餘額'], ['1111', '現金', '100', '20', '0', '120'], ['2111', '應付', '50', '0', '10', '40']]);
+  assert.ok(st.notes.some(n => /會計科目代碼→科目代號/.test(n)) && st.notes.some(n => /本期增減/.test(n)));
+  // 客戶資料：括號說明、男女、角色、各種日期寫法
+  const cu = W.normalize('customers', [['保單號碼', '保單序號', '角色 (要保人/被保險人)', '身分證號', '姓名', '出生年月日 (YYYYMMDD)', '性別', '聯絡地址'],
+    ['P1', 'A01', '要保人', 'A123456789', '王', '1980/1/2', '男', '台北'], ['P1', 'A01', '被保險人', 'B223456789', '陳', '民國69年1月2日', '女', '台北'], ['P1', 'A01', '2', 'C1', '林', 29222, '2', '']]);
+  assert.deepStrictEqual(cu.rows[0], ['保單編號', '保單序號', '角色', '證件編號', '姓名', '出生日期', '性別', '郵遞區號', '地址']);
+  assert.deepStrictEqual(cu.rows.slice(1).map(r => [r[2], r[5], r[6]]), [['1', '19800102', '1'], ['2', '19800102', '2'], ['2', '19800102', '2']]);
+  for (const [a, b] of [['2025-01-31', '20250131'], ['114/1/5', '20250105'], ['1140105', '20250105'], ['20250105', '20250105'], ['00000000', '00000000'], ['', '']]) assert.strictEqual(W.toYmd(a), b, a);
+  // 保單資料：對到一半以上就採用，缺的欄位補空白 (檢查時會標出)
+  const some = Lf.slice(0, 40);
+  const lp = W.normalize('L', [some.map(f => f.name), some.map(f => '1'.repeat(f.len))]);
+  assert.ok(!lp.problem && lp.rows[0].length === 61 && lp.rows[1][60] === ' ' && lp.notes.some(n => /缺 21 個欄位已補空白/.test(n)));
   // 資產負債表缺欄位時不會讓檢查中斷
   const R = require('../src/recon.js');
   assert.doesNotThrow(() => R.statement('會計科目代碼,會計科目名稱,期末餘額\n1111,現金,100\n', { data: {}, issues: [] }));

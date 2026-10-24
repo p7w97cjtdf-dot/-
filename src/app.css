@@ -1040,3 +1040,14 @@ body:not(.no-data) .imports .data-map { margin-top: 12px; }
 #view-check .grp-more { display: block; width: 100%; min-height: 44px; padding: 8px 20px; border: 0; border-top: 1px solid #F1F5F9; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: var(--fg); text-align: left; cursor: pointer; }
 #view-check .grp-more:hover { background: #F8FAFC; }
 #view-check .issue-list { max-height: 640px; }
+.dm-fix { grid-column: 2 / -1; font-size: 12px; color: var(--teal-ink); }
+@media (max-width: 720px) { .dm-fix { grid-column: 1 / -1; } }
+
+/* ===== 首頁上傳區：一個拖放框、一個按鈕、一行說明 ===== */
+body.no-data .drop.big { gap: 10px; padding: 40px 20px; }
+body.no-data .drop.big .drop-h { display: block; font-size: 13px; color: var(--mut); }
+.drop-btn { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 22px; border-radius: 8px; background: var(--cta); color: #fff; font-size: 15px; font-weight: 700; }
+.drop.big:hover .drop-btn { background: var(--cta-ink2); }
+body:not(.no-data) .drop-btn { display: none; }
+body.no-data .upload-card { padding: 20px; }
+@media (max-width: 720px) { body.no-data .drop.big .drop-k { display: none; } body.no-data .drop.big { padding: 28px 16px; } }
