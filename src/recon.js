@@ -259,7 +259,7 @@
     return false;
   }
   function statement(stmtText, res) {
-    const rows = csvObjects(stmtText).map(o => ({ line: o._line, code: o['科目代號'], name: o['科目名稱'], open: parseAmount(o['期初餘額']), inc: parseAmount(o['本期增加']), dec: parseAmount(o['本期減少']), close: parseAmount(o['期末餘額']) }));
+    const rows = csvObjects(stmtText).map(o => ({ line: o._line, code: String(o['科目代號'] || '').trim(), name: o['科目名稱'] || '', open: parseAmount(o['期初餘額']), inc: parseAmount(o['本期增加']), dec: parseAmount(o['本期減少']), close: parseAmount(o['期末餘額']) }));
     const issues = [];
     const push = (r, o) => issues.push(Object.assign({ severity: 'error', category: '財報勾稽', file: 'S', line: r ? r.line : 0, policy: '', fields: [], value: '', code: r ? r.code : '' }, o));
     const seen = new Map();

@@ -173,3 +173,17 @@ test('上傳：CSV 依標題列判斷是哪一份申報檔，不看檔名', () =
   assert.strictEqual(C.csvLayout('客戶編號,姓名,身分證號,生日,性別,地址,電話,Email,職業,年收入,婚姻,子女,備註\n', detail), null);
   assert.strictEqual(C.csvLayout('', detail), null);
 });
+
+test('上傳：工作表名稱對、欄位不對的資料不採用，並說明缺了哪些欄位', () => {
+  const W = require('../src/workbook.js');
+  assert.strictEqual(W.headProblem('L', all.layouts.L.fields.map(f => f.name)), '');
+  assert.strictEqual(W.headProblem('prior', all.layouts.L.fields.map(f => f.key)), '');
+  assert.strictEqual(W.headProblem('L', all.layouts.L.fields.map(() => '0')), '');   // 沒有標題列、欄位數相同
+  assert.match(W.headProblem('L', ['保單號碼', '險別', '生效日期']), /需要 61 個欄位，這張只對到 0 個/);
+  assert.strictEqual(W.headProblem('statement', ['科目代號', '科目名稱', '期初餘額', '本期增加', '本期減少', '期末餘額']), '');
+  assert.match(W.headProblem('statement', ['會計科目代碼', '會計科目名稱', '期初餘額', '本期增減', '期末餘額']), /缺 科目代號、科目名稱、本期增加、本期減少/);
+  assert.match(W.headProblem('customers', ['保單號碼', '身分證號', '姓名']), /缺 保單編號/);
+  // 資產負債表缺欄位時不會讓檢查中斷
+  const R = require('../src/recon.js');
+  assert.doesNotThrow(() => R.statement('會計科目代碼,會計科目名稱,期末餘額\n1111,現金,100\n', { data: {}, issues: [] }));
+});

@@ -1011,3 +1011,10 @@ body:not(.no-data) .imports .data-map { margin-top: 12px; }
   #view-check .issue-list > #detail .d-close { display: inline-flex; align-items: center; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: var(--fg); cursor: pointer; flex: none; }
   #view-check .issue-list > #detail .detail-head { gap: 8px; }
 }
+/* 沒有使用的原因放在來源下面 (原因可能很長) */
+.dm-row.dm-off { grid-template-columns: minmax(96px, 9em) minmax(0, 1fr); row-gap: 2px; padding: 8px 16px; }
+.dm-off .dm-n { grid-column: 2; text-align: left; max-width: none; white-space: normal; font-size: 13px; color: #64748B; font-weight: 400; }
+.dm-tpl { color: var(--fg); }
+@media (max-width: 720px) { .dm-row.dm-off { grid-template-columns: minmax(0, 1fr); } .dm-off .dm-n, .dm-off .dm-src { grid-column: 1; } .dm-off .dm-src { grid-row: auto; } }
+.dm-tpl #btn-template { display: inline-flex; align-items: center; min-height: 36px; margin: 0 6px; padding: 4px 14px; border: 1px solid var(--fg); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: var(--fg); cursor: pointer; text-decoration: none; }
+.dm-tpl #btn-template:hover { background: #F4F4F4; }
