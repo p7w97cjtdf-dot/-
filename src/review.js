@@ -21,10 +21,11 @@
     pos = 0; decisions = new Map();
     if (!list.length) return;
     el.hidden = false; document.body.classList.add('reviewing');
+    if (app.onBack) app.onBack('review', close);   // 手機的返回鍵回到總覽
     render();
     el.querySelector('.rv-card').focus();
   }
-  function close() { el.hidden = true; document.body.classList.remove('reviewing'); }
+  function close() { el.hidden = true; document.body.classList.remove('reviewing'); if (app.doneBack) app.doneBack('review'); }
 
   // 進度：固定 10 段，依完成比例填滿 (圖示風格)
   function progress() {

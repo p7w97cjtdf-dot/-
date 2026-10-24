@@ -997,3 +997,17 @@ body.no-ai #view-check .ai-explain { display: none; }
 .dm-off .dm-src { white-space: normal; }
 body:not(.no-data) .imports .data-map { margin-top: 12px; }
 .samples:has(#sample-note:empty):has(#size-note[hidden]) { display: none; }
+
+/* ===== 收回與返回 ===== */
+.view > .back { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; margin: 0 0 12px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; font-weight: 700; color: var(--fg); cursor: pointer; }
+.view > .back:hover { border-color: var(--fg); }
+.fold { display: block; margin: 12px 0 4px auto; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: #475569; cursor: pointer; }
+.fold:hover { border-color: var(--fg); color: var(--fg); }
+.d-close { display: none; }
+.ai { position: relative; }
+.x-close { position: absolute; top: 10px; right: 10px; min-height: 32px; padding: 2px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: #475569; cursor: pointer; }
+@media (max-width: 1100px) {
+  #view-check .bench-side { display: none; }
+  #view-check .issue-list > #detail .d-close { display: inline-flex; align-items: center; min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; font-weight: 700; color: var(--fg); cursor: pointer; flex: none; }
+  #view-check .issue-list > #detail .detail-head { gap: 8px; }
+}
