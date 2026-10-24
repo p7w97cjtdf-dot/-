@@ -11,7 +11,7 @@
 # 已有 Chromium 時可用 CHROMIUM=/path/to/chromium 指定
 node tests/security/t01-network.js   # 外傳驗證：一般檢核、AI 分析、規則更新時的網路請求與送給 AI 的欄位
 node tests/security/t02-sent.js      # 個資遮罩：實際送給 AI 的文字裡找不到客戶證號、姓名、地址與手動貼上的個資
-node tests/security/t03-packs.js     # 更新包信任：停用規則的測試包、被竄改或格式錯誤的官方包
+node tests/security/t03-packs.js     # 更新包信任：只接受正式版本固定的公鑰；換掉或拿掉公鑰、竄改、沒簽章都不套用
 node tests/security/t05-prompt.js    # AI 提示注入：指令只出現在 <資料> 區塊內、不安全的 AI 回覆會加註提醒
 node tests/security/t06-html.js      # HTML 注入：畫面、報告、手機複核、規則預覽、CSV
 node tests/security/t07-stress.js    # 檔案壓力測試 (SIZES=1000,20000,100000 可調整張數)
@@ -20,6 +20,8 @@ node tests/security/t09-insights.js  # AI 洞見驗證：AI 說的原因與筆�
 node tests/security/t10-dify.js     # Dify：AI 改送到 Dify 時只在按按鈕後送出、內容已遮蔽、帶金鑰、只接受 https 與 CSP 允許的網址
 node tests/security/t11-upload.js   # 上傳對應：列出每份資料的來源與筆數、新的 Excel 取代舊資料、空白範本不會留著上一份的結果
 node tests/security/t12-close.js    # 收回與返回：選單、進階頁面、原始資料、AI 整理、逐筆確認、手機說明都能收回；返回鍵不會離開工具
+node tests/security/t13-ai-transmit.js # AI 傳輸：每次送出都確認、預覽＝實際送出、傳送紀錄與稽核軌跡有完整內容；金鑰只留在分頁、只收應用金鑰、設定檔不放金鑰
+node tests/security/t14-e2e.js        # 完整流程：原始資料 → 檢核 → 修改 → 再檢核 → 匯出數字一致；停用、沒執行、無法判定的檢查不會讓結果看起來更安全
 ```
 
 預設使用 `samples/excel/試用資料_含錯誤.xlsx`；可用 `SAMPLE=` 指定其他檔案。測試產生的暫存檔放在系統暫存資料夾 (`TMPDIR_T=` 可指定)。

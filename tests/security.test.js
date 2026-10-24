@@ -200,3 +200,43 @@ test('上傳：欄位名稱與格式不同時自動調整；缺太多、補不�
   const R = require('../src/recon.js');
   assert.doesNotThrow(() => R.statement('會計科目代碼,會計科目名稱,期末餘額\n1111,現金,100\n', { data: {}, issues: [] }));
 });
+
+test('T03 正式版本固定了公鑰指紋，而且和發布的公鑰是同一把；不再「第一次看到就信任」', () => {
+  const crypto = require('crypto');
+  const app = read('src/app.js');
+  const pins = (app.match(/PACK_KEY_PINS = Object\.freeze\(\[([^\]]*)\]\)/) || [, ''])[1].match(/[0-9a-f]{16}/g) || [];
+  assert.ok(pins.length >= 1, 'PACK_KEY_PINS 不可為空');
+  const pk = JSON.parse(read('rules/updates/public-key.json'));
+  assert.ok(pins.includes(crypto.createHash('sha256').update(JSON.stringify([pk.key.x, pk.key.y])).digest('hex').slice(0, 16)));
+  assert.doesNotMatch(app, /dq-pack-key/);   // 沒有「記住第一次看到的公鑰」
+  assert.doesNotMatch(read('src/app-packs.js'), /dq-pack-key|btn-key-accept/);
+});
+
+test('檢查範圍：沒放入的資料、停用、無法判定、格式不對、沒檢查完都要寫出來', () => {
+  const COV = require('../src/coverage.js');
+  const full = COV.scope(['L', 'D', 'prior', 'control', 'statement', 'products', 'customers'], {});
+  assert.ok(full.complete && full.safe);
+  const onlyL = COV.scope(['L'], {});
+  assert.ok(!onlyL.complete && onlyL.safe);
+  assert.deepStrictEqual(onlyL.notRun.map(x => x.short), ['理賠資料', '去年接續', '系統總數', '客戶資料', '商品資料', '資產負債表']);
+  assert.deepStrictEqual(COV.scope(['CL'], {}).notRun.map(x => x.short), ['癌症險理賠資料']);
+  const bad = COV.scope(['L', 'D', 'prior', 'control', 'statement', 'products', 'customers'], { disabled: { A: 3, B: 0 }, unjudged: { U1: 5 }, invalid: ['U2'], truncated: true });
+  assert.ok(!bad.safe);
+  assert.deepStrictEqual(bad.warn.map(w => [w.kind, w.n]), [['disabled', 3], ['unjudged', 5], ['invalid', 1], ['truncated', 1]]);
+  assert.match(COV.summary(bad), /隱藏了 3 個問題.*5 筆資料無法判定.*1 條自訂規則格式不正確.*沒有檢查完/);
+});
+
+test('自訂規則：無法判定的筆數與格式不對的規則都記下來，不當作通過', () => {
+  const dsl = require('../src/rules-dsl.js');
+  const rules = [
+    { id: 'U1', file: 'L', name: '保單號碼要是數字', assert: { field: { fn: 'num', args: ['policyNo'] }, op: 'gt', value: 0 } },   // 保單號碼不是數字 → 每筆都無法判定
+    { id: 'U2', file: 'L', name: '不安全的式樣', assert: { field: 'policyNo', op: 'matches', value: '(a+)+' } },             // 格式不對 → 沒有執行
+    { id: 'U3', file: 'L', scope: 'policy', name: '和上一筆同性別', assert: { field: 'sex', op: 'eq', ref: 'prev.sex' } },      // 第一筆沒有上一筆：不適用，不算無法判定
+  ];
+  const ext = dsl.extend(all, rules);
+  const text = read('samples/clean/LFL01_2025.txt'), n = text.split('\n').filter(Boolean).length;
+  C.validate(ext, { L: { text } });
+  assert.strictEqual(ext.dslStats.unjudged.U1, n);
+  assert.deepStrictEqual(ext.dslStats.invalid, ['U2']);
+  assert.ok(!ext.dslStats.unjudged.U3);
+});

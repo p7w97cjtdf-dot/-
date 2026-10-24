@@ -156,17 +156,25 @@
   }
 
   // ---------- 轉為規則集 (與內建規則合併) ----------
+  // stats：無法判定 (資料不足) 的筆數與格式不對沒有執行的規則，畫面與報告會寫出來，不當作通過
   function extend(base, rules) {
     const ok = rules.filter(r => !validateRule(r, base.layouts).length);
+    const stats = { unjudged: {}, invalid: rules.filter(r => !ok.includes(r)).map(r => r.id || '（沒有編號）') };
     const recordRules = {}, groupRules = {};
     for (const k of Object.keys(base.layouts)) {
       recordRules[k] = (base.recordRules[k] || []).slice();
       groupRules[k] = ((base.groupRules || {})[k] || []).slice();
     }
+    const usesPrev = new Set(ok.filter(r => /"prev\./.test(JSON.stringify(r))).map(r => r));
     const fire = (rule, rec, prev, push) => {
       const ctx = { rec, prev };
-      if (rule.when && evalCond(rule.when, ctx) !== true) return;
-      if (evalCond(rule.assert, ctx) !== false) return;
+      if (!prev && usesPrev.has(rule)) return;   // 每張保單的第一筆沒有「上一筆」可比，不適用 (不算無法判定)
+      const w = rule.when ? evalCond(rule.when, ctx) : true;
+      if (w === null) { stats.unjudged[rule.id] = (stats.unjudged[rule.id] || 0) + 1; return; }
+      if (w !== true) return;
+      const a = evalCond(rule.assert, ctx);
+      if (a === null) { stats.unjudged[rule.id] = (stats.unjudged[rule.id] || 0) + 1; return; }
+      if (a !== false) return;
       const fields = fieldsOf(rule).filter(k => base.layouts[rule.file].field(k));
       push({ ruleId: rule.id, severity: rule.severity || 'error', category: rule.category || '匯入規則', fields, value: fields.map(k => String(rec[k]).trim()).join(' / '),
         message: rule.message || rule.name, suggestion: rule.suggestion || '請依規則文件確認', imported: true });
@@ -181,7 +189,7 @@
       } else recordRules[rule.file].push((rec, push) => fire(rule, rec, null, push));
     }
     const catalog = base.catalog.filter(c => !ok.some(r => r.id === c.id)).concat(ok.map(r => ({ id: r.id, name: r.name, level: r.level || '匯入規則', ref: r.ref || '規則文件', severity: r.severity || 'error', pack: r.pack })));
-    return Object.assign({}, base, { catalog, recordRules, groupRules });
+    return Object.assign({}, base, { catalog, recordRules, groupRules, dslStats: stats });
   }
 
   // 只執行指定規則 (試跑用)

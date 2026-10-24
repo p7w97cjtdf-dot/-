@@ -182,7 +182,8 @@ npm run bench     # 計時：試用資料完整檢核一次的秒數 (另含 1 �
 
 **官方更新包的簽章與審核**：
 
-1. **產生簽章金鑰（只做一次）**：由負責核准法規更新的人在自己的電腦執行 `node tools/pack-keygen.js ~/dq-pack-signing-key.pem`。私鑰留在自己電腦（不可放進 repo），把產生的 `rules/updates/public-key.json` 提交，並把印出的公鑰指紋填進 `src/app.js` 的 `PACK_KEY_PINS`。之後工具只套用用這把私鑰簽過的官方更新包；沒有公鑰時一律不套用官方更新包。
+1. **簽章金鑰（已產生）**：正式版本已固定公鑰指紋 `7fb780c45230b133`（`src/app.js` 的 `PACK_KEY_PINS`，公鑰在 `rules/updates/public-key.json`）。工具只套用這把公鑰對應的私鑰簽過的官方更新包，**不採用「第一次看到就信任」**：網站上的公鑰被換掉、拿掉，或不在固定清單裡，官方更新包一律不套用。CI 會檢查固定的指紋和公鑰是同一把。私鑰由核准法規更新的人保管，不可放進 repo。
+   - **更換金鑰**（私鑰遺失或換人）：在自己的電腦執行 `node tools/pack-keygen.js ~/新的私鑰.pem`，把新的指紋填進 `PACK_KEY_PINS`、提交新的 `public-key.json`，經審核發布新版本；舊版本的工具不會接受新公鑰，要更新後才生效。
 2. **發布**：`node tools/publish-pack.js rules/updates/<檔名>.json --key ~/dq-pack-signing-key.pem`，會檢查格式、登記 SHA-256 並簽章。
 3. **開啟 GitHub 分支保護**：GitHub 的 repository → Settings → Branches → Add branch ruleset（或 Add rule），目標 `main`，勾選：
    - Require a pull request before merging，Required approvals 1，並勾 Require review from Code Owners（`.github/CODEOWNERS` 指定更新包、公鑰與驗證程式的負責人）

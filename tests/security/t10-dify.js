@@ -19,16 +19,15 @@ const reply = '1. 整體狀況：有格式錯誤。\n```json\n{"insights":[{"tit
   const before = got.length;
   // 不接受沒有加密的網址
   await page.evaluate(() => { document.querySelector('#ai-settings').open = true; });
-  await page.fill('#dify-url', 'http://api.dify.ai/v1'); await page.fill('#dify-key', 'app-test'); await page.click('#btn-dify-save'); await page.waitForTimeout(200);
+  await page.fill('#dify-url', 'http://api.dify.ai/v1'); await page.fill('#dify-key', 'app-test12345'); await page.click('#btn-dify-save'); await page.waitForTimeout(200);
   const rejectHttp = await page.textContent('#dify-note');
   // 不在網站安全設定 (CSP) 允許清單的自架網址：存檔時就說明要加進 connect-src
   await page.fill('#dify-url', 'https://dify.example.com/v1'); await page.click('#btn-dify-save'); await page.waitForTimeout(200);
   const rejectCsp = await page.textContent('#dify-note');
-  await page.fill('#dify-url', DIFY); await page.fill('#dify-key', 'app-test'); await page.click('#btn-dify-save'); await page.waitForTimeout(200);
+  await page.fill('#dify-url', DIFY); await page.fill('#dify-key', 'app-test12345'); await page.click('#btn-dify-save'); await page.waitForTimeout(200);
   const saved = await page.evaluate(() => ({ note: document.querySelector('#dify-note').textContent, aiShown: !document.body.classList.contains('no-ai'), keyInBox: document.querySelector('#dify-key').value }));
   await page.click('#btn-dify-test'); await page.waitForTimeout(500);
   const ping = await page.textContent('#dify-note');
-  await page.evaluate(() => sessionStorage.setItem('dq-ai-preview-skip', '1'));
   await page.click('#btn-ai'); await page.waitForTimeout(800);
   const shown = await page.evaluate(() => ({ tag: document.querySelector('#ai-out .ai-tag').textContent, ins: [...document.querySelectorAll('#ai-out .ins')].map(e => e.querySelector('.ins-st').textContent + ' ' + e.querySelector('b').textContent) }));
   const sum = got[got.length - 1];

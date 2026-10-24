@@ -1,0 +1,11 @@
+{
+  "note": "官方更新包的簽章公鑰。工具只套用用對應私鑰簽過的官方更新包；更換公鑰等同更換「誰可以核准法規更新」，須經審核。",
+  "keyId": "7fb780c45230b133",
+  "createdAt": "2026-10-24",
+  "key": {
+    "kty": "EC",
+    "crv": "P-256",
+    "x": "-WL9NM3UZYjVTZagimA6loEy6nLlpuyw_9lS3Iv76k8",
+    "y": "hpwJyWJxflBg13pKwOReGOY53_VdybKA5-NIrwSm4_o"
+  }
+}

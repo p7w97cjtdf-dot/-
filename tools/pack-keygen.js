@@ -21,4 +21,4 @@ fs.writeFileSync(path.join(repo, 'rules', 'updates', 'public-key.json'), JSON.st
   keyId: id, createdAt: new Date().toISOString().slice(0, 10), key: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y },
 }, null, 2) + '\n');
 console.log(`私鑰：${abs}（請妥善保管，不要提交）\n公鑰：rules/updates/public-key.json（指紋 ${id}），請提交到 GitHub。\n` +
-  `並把指紋填進 src/app.js 的 PACK_KEY_PINS（例如 const PACK_KEY_PINS = ['${id}'];），經審核後發布：工具只接受這個版本核准的公鑰。`);
+  `並把指紋填進 src/app.js 的 PACK_KEY_PINS（const PACK_KEY_PINS = Object.freeze(['${id}']);），經審核後發布：工具只接受這個版本固定的公鑰，不會「第一次看到就信任」。CI 會檢查兩者一致。`);

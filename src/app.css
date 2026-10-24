@@ -1093,3 +1093,21 @@ main > section.home-only, main > section.legal { margin-top: 48px; }
 }
 body.no-data .drop.big { padding: 28px 20px; }
 @media (max-width: 900px) { .hero-main, .hero-card { flex: none; } }
+
+/* ===== AI 傳送紀錄 ===== */
+#ai-log { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+#ai-log h2 { margin: 0 0 4px; font-size: 18px; }
+.ai-log-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; max-height: 60vh; overflow: auto; }
+.ai-log-item { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.ai-log-item > summary { cursor: pointer; font-size: 13px; }
+.ai-log-item pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; max-height: 40vh; overflow: auto; background: #F8FAFC; padding: 10px; border-radius: 6px; }
+.ai-log-item .muted { color: #94A3B8; }
+
+/* ===== 檢查範圍 ===== */
+.scope-note { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border: 1px solid #EEDCB6; border-radius: 10px; background: #FFF8EC; font-size: 13px; color: #7A4B00; }
+.scope-note[hidden] { display: none; }
+.scope-note p { margin: 0; }
+.scope-note .scope-warn { font-weight: 700; }
+.scope-note .scope-off { color: #6B5B3E; }
+#view-check #summary .tile .v .v-note { display: block; font-size: 11px; font-weight: 600; color: var(--warn); }
+.run-status .scope-flag { color: var(--warn); font-weight: 700; }
