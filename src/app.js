@@ -23,6 +23,7 @@
   // 匯入並套用的規則與內建規則合併
   function activeRules() {
     const base = state.customRules.length ? DQ.dsl.extend(BASE, state.customRules) : BASE;
+    state.dslStats = base.dslStats || null;
     const out = DQ.rulePacks.apply(base, state.packs.filter(x => x.on).map(x => x.pack));
     state.disabled = out.disabled;
     return (rs = out.ruleset);
@@ -43,23 +44,21 @@
     return n ? `注意：法規更新停用了 ${ids.length} 項檢查（${ids.slice(0, 5).join('、')}${ids.length > 5 ? '…' : ''}），隱藏了 ${n} 個問題；如果更新包的來源不確定，請到「法規更新」關掉後重新檢查。` : '';
   }
   // 官方更新包的簽章公鑰 (rules/updates/public-key.json)：只套用用對應私鑰簽過的更新包；取不到公鑰就一律不套用 (fail closed)。
-  // PACK_KEY_PINS：核准的公鑰指紋固定在程式裡 (產生金鑰後由 tools/pack-keygen.js 印出，填進來並經審核發布)。
-  // 有填時，網站上的公鑰指紋必須在清單中；沒填時，第一次看到的公鑰記在這台裝置，之後被拿掉或更換都不套用。
-  const PACK_KEY_PINS = [];
+  // PACK_KEY_PINS：這個版本核准的公鑰指紋，固定在程式裡 (tools/pack-keygen.js 產生金鑰時印出)。網站上的公鑰指紋必須在清單中，
+  // 不採用「第一次看到就信任」：公鑰被換掉、拿掉，或清單是空的，官方更新包都不套用。更換公鑰要改這裡並經審核發布新版本。
+  const PACK_KEY_PINS = Object.freeze(['7fb780c45230b133']);
   const b64 = s => Uint8Array.from(atob(String(s)), c => c.charCodeAt(0));
   const keyIdOf = async k => (await sha256(JSON.stringify([k.x, k.y]))).slice(0, 16);   // 和 tools/pack-keygen.js 同一算法
   async function packKey(base) {
-    let seen = null; try { seen = localStorage.getItem('dq-pack-key'); } catch (e) { /* ignore */ }
+    state.packKey = null;
+    if (!PACK_KEY_PINS.length) return { reject: '這個版本沒有核准的簽章公鑰，官方更新包一律不套用' };
     let k = null;
     try { const r = await fetch(base + 'rules/updates/public-key.json', { cache: 'no-cache' }); if (r.ok) k = await r.json(); } catch (e) { k = null; }
-    state.packKey = null; state.packKeyNew = null;
-    if (!k || !k.key || !k.key.x || !k.key.y) return { reject: seen ? `這台裝置之前看過簽章公鑰（${seen}），現在卻讀不到，為了安全不套用` : '還沒有設定核准者的簽章公鑰，官方更新包一律不套用' };
+    if (!k || !k.key || !k.key.x || !k.key.y) return { reject: '讀不到簽章公鑰，為了安全不套用官方更新包' };
     const id = await keyIdOf(k.key);   // 指紋自己算，不採用檔案裡寫的 keyId
-    if (PACK_KEY_PINS.length && !PACK_KEY_PINS.includes(id)) return { reject: `簽章公鑰（${id}）不是這個版本核准的公鑰` };
-    if (!PACK_KEY_PINS.length && seen && seen !== id) { state.packKeyNew = id; return { reject: `簽章公鑰和這台裝置之前看過的不同（${seen} → ${id}）；若是正式更換，請在「法規更新」頁確認` }; }
+    if (!PACK_KEY_PINS.includes(id)) return { reject: `簽章公鑰（${id}）不是這個版本核准的公鑰（${PACK_KEY_PINS.join('、')}）` };
     try {
       const key = await crypto.subtle.importKey('jwk', { kty: 'EC', crv: 'P-256', x: k.key.x, y: k.key.y, ext: true }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
-      try { localStorage.setItem('dq-pack-key', id); } catch (e) { /* ignore */ }
       state.packKey = id;
       return { key };
     } catch (e) { return { reject: '簽章公鑰格式不正確' }; }
@@ -103,7 +102,8 @@
       } catch (e) { /* 這個位置讀不到，換下一個 */ }
     }
   }
-  try { const saved = JSON.parse(localStorage.getItem('dq-custom-rules') || '[]'); if (Array.isArray(saved)) state.customRules = saved.filter(r => !DQ.dsl.validateRule(r, BASE.layouts).length); } catch (e) { /* 無法讀取時忽略 */ }
+  state.droppedRules = [];   // 存起來的自訂規則格式不對、沒有執行的 (檢查範圍會寫出來)
+  try { const saved = JSON.parse(localStorage.getItem('dq-custom-rules') || '[]'); if (Array.isArray(saved)) { state.customRules = saved.filter(r => !DQ.dsl.validateRule(r, BASE.layouts).length); state.droppedRules = saved.filter(r => !state.customRules.includes(r)).map(r => (r && r.id) || '（沒有編號）'); } } catch (e) { /* 無法讀取時忽略 */ }
 
   // ---------- 檔案 ----------
   const SLOTS = ['L', 'D', 'prior', 'control', 'statement', 'products', 'customers', 'CL', 'CD', 'AL', 'AD'];
@@ -363,6 +363,9 @@
       const d = cat.find(c => c.id === i.ruleId); if (d && !i.ruleName) { i.ruleName = d.name; i.ref = i.ref || d.ref; }
     }
     state.all = state.res.issues.concat(state.extra.filter(i => !state.res.issues.includes(i)));
+    // 檢查範圍：沒有執行或結果不完整的檢查 (停用、無法判定、格式不對、沒檢查完、沒放入的資料)
+    state.scope = DQ.coverage.scope(SLOTS.filter(k => state.files[k]), { disabled: state.disabledCount, unjudged: state.dslStats && state.dslStats.unjudged,
+      invalid: (state.dslStats ? state.dslStats.invalid : []).concat(state.droppedRules || []), truncated: Object.values(state.res.summary.byFile).some(b => b.truncated) });
     doneBack('detail');
     state.sel = null; state.aiSummary = null; state.aiInsights = null; state.aiChecks = null; state.focus = null;   // 資料變了，AI 的結論要重新產生與驗證
     // 寬螢幕：右側直接顯示第一個問題的說明 (不留空白的說明欄)
@@ -370,7 +373,7 @@
     if (window.matchMedia('(min-width: 1101px)').matches) { const g = grouped(filtered())[0]; if (g) state.sel = g[2][0].id; }
     renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(true); renderReport(); renderRules(); renderDecodeExamples();
     { const c = sev => state.all.filter(i => i.severity === sev).length, h = Object.values(state.disabledCount || {}).reduce((t, n) => t + n, 0);
-      audit('檢查', `必須修改 ${c('error')}、建議確認 ${c('warning')}、請人工判斷 ${c('suspect')}${h ? `；停用的檢查隱藏 ${h} 個` : ''}`); }
+      audit('檢查', `必須修改 ${c('error')}、建議確認 ${c('warning')}、請人工判斷 ${c('suspect')}${h ? `；停用的檢查隱藏 ${h} 個` : ''}${state.scope.complete ? '' : `；檢查範圍：${DQ.coverage.summary(state.scope)}`}`); }
     // 手機上資料一放進來就捲到結果區 (上傳區在畫面上方會佔掉整個螢幕)
     if (window.matchMedia('(max-width: 720px)').matches) requestAnimationFrame(() => $('#summary').scrollIntoView({ block: 'start', behavior: 'smooth' }));
     if (DQ.app && DQ.app.onRun) DQ.app.onRun();
@@ -420,6 +423,21 @@
     else $('#run-status').innerHTML = nRec ? `<i></i><span>已檢查 ${nRec.toLocaleString()} 筆資料・${okPct(nRec, nBad)}% 沒有必須修改的問題</span>` : '<i></i><span>沒有讀到任何資料，請確認檔案內容</span>';
     $('#summary-note').textContent = `已檢查 ${recs}，共 ${Object.values(state.files).filter(Boolean).length} 份資料，花了 ${(state.elapsed / 1000).toFixed(2)} 秒。${found}`;
     const hn = hiddenNote(); $('#hidden-note').hidden = !hn; $('#hidden-note').textContent = hn;
+    // 結果不完整 (停用、無法判定、格式不對、沒檢查完) 時：卡片不顯示成正常、頂端狀態註明；沒放入的資料列在下面一行
+    const sc = state.scope, warns = sc.warn.filter(w => w.kind !== 'disabled');
+    $('#scope-note').hidden = sc.complete || (!warns.length && !sc.notRun.length);
+    $('#scope-note').innerHTML = warns.map(w => `<p class="scope-warn">${esc(w.text)}</p>`).join('') +
+      (sc.notRun.length ? `<p class="scope-off" title="${esc(sc.notRun.map(x => `${x.what}（${x.why}）`).join('\n'))}"><b>沒有檢查：</b>${sc.notRun.map(x => esc(x.short || x.what)).join('、')}（沒有放入這些資料）</p>` : '');
+    if (!sc.safe) {
+      // 結果不完整時不顯示「100%」：有隱藏、無法判定或沒檢查完的資料，不能說全部正確
+      const t1 = $('#summary .tile'), v = t1.querySelector('.v');
+      t1.classList.remove('ok'); t1.classList.add('warn', 'partial');
+      if (/^100%$/.test(v.textContent.trim())) v.textContent = '無法確認';
+      v.insertAdjacentHTML('beforeend', '<small class="v-note">結果不完整，見下方說明</small>');
+      t1.title = DQ.coverage.summary(sc);
+      $('#run-status').className = 'run-status bad';
+      if (nRec && !cut) $('#run-status').innerHTML = `<i></i><span>已檢查 ${nRec.toLocaleString()} 筆資料・${nBad ? `${okPct(nRec, nBad)}% 沒有必須修改的問題` : '沒有發現必須修改的問題'}・<b class="scope-flag">結果不完整</b></span>`;
+    } else if (!sc.complete && nRec && !cut) $('#run-status').insertAdjacentHTML('beforeend', `<span class="scope-flag">・有 ${sc.notRun.length} 類檢查沒有執行</span>`);
   }
   function renderCats() {
     // 「資料」篩選：只列出有問題的工作表
@@ -521,7 +539,7 @@
           return `<div class="grp-body" role="list">${items.slice(0, n).map(item).join('')}${items.length > n ? (full ? `<p class="empty">還有 ${(items.length - n).toLocaleString()} 項，請用篩選或下載問題清單查看。</p>` : `<button class="grp-more" type="button">顯示其餘 ${items.length - n} 項</button>`) : ''}</div>`;
         })() : ''}
       </div>`;
-    }).join('') : `<p class="empty">${state.all.length ? '沒有符合條件的問題' : '目前的檢核沒有發現問題；送件前仍請依正式手冊與主管機關規範確認。'}</p>`;
+    }).join('') : `<p class="empty">${state.all.length ? '沒有符合條件的問題' : (state.scope && !state.scope.complete ? '目前執行的檢查沒有發現問題，但檢查不完整（見上方說明），不代表資料都正確。' : '目前的檢核沒有發現問題；送件前仍請依正式手冊與主管機關規範確認。')}</p>`;
   }
 
   // 行號：文字檔為第 N 筆；由 Excel 匯入時換算成 Excel 列號 (第 1 列為標題)；CSV 工作表為檔案中的列號
@@ -686,6 +704,10 @@
       const ws = XLSX.utils.aoa_to_sheet(rows), wb = XLSX.utils.book_new();
       ws['!cols'] = [6, 14, 12, 6, 18, 18, 24, 16, 18, 48, 40, 18, 14].map(w => ({ wch: w }));
       XLSX.utils.book_append_sheet(wb, ws, '問題清單');
+      // 檢查範圍：沒有執行或結果不完整的檢查，和問題清單放在同一個檔案
+      const sc = state.scope, scRows = [['項目', '內容']].concat(sc.warn.map(w => ['結果不完整', w.text]), sc.notRun.map(x => ['沒有執行', `${x.what}（${x.why}）`]));
+      if (scRows.length === 1) scRows.push(['完整', '這次所有檢查都有執行']);
+      const wsc = XLSX.utils.aoa_to_sheet(scRows); wsc['!cols'] = [{ wch: 12 }, { wch: 100 }]; XLSX.utils.book_append_sheet(wb, wsc, '檢查範圍');
       download('issues_list.xlsx', new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     } else download('issues_list.csv', DQ.report.toCSV(rs, state.res, state.extra), 'text/csv;charset=utf-8');
   };
@@ -705,7 +727,8 @@
     const fixRows = state.audit.filter(e => e.action === '修改' && e.field).map(e => [ts(e.at), e.sheet, e.where, e.policy, e.field, red(e.from), red(e.to), e.rule, e.why || '']);
     const logHead = ['時間', '動作', '內容', '檔案內容 SHA-256'];
     const logRows = state.audit.filter(e => !(e.action === '修改' && e.field) && !AI_ACT.test(e.action)).map(e => [ts(e.at), e.action, red(e.detail), e.sha]);
-    const aiRows = state.audit.filter(e => AI_ACT.test(e.action)).map(e => [ts(e.at), e.action, red(e.detail)]);
+    const CELL = 32000, full = v => { const t = red(v || ''); return t.length > CELL ? t.slice(0, CELL) + `…（共 ${t.length.toLocaleString()} 字，超過 Excel 一格的上限，其餘略）` : t; };
+    const aiRows = state.audit.filter(e => AI_ACT.test(e.action)).map(e => [ts(e.at), e.action, red(e.detail), e.payload ? full(e.payload) : '']);
     const rows = fixRows.concat(logRows, aiRows);
     const info = [['項目', '內容'], ['工具', '申報資料檢核助手'], ['匯出時間', ts(d)], ['檢查依據', $('#rule-version').textContent],
       ['檢查的資料', SLOTS.filter(k => state.files[k]).map(k => `${SLOT_NAME[k] || k}：${state.src[k] || state.files[k].name}（${recCount(k)} 筆）`).join('\n') || '（沒有）'],
@@ -724,7 +747,7 @@
       };
       sheet('修改紀錄', fixHead, fixRows, [19, 10, 10, 16, 18, 18, 18, 14, 48]);
       sheet('檢查與檔案', logHead, logRows, [19, 10, 80, 18]);
-      sheet('AI 使用', logHead.slice(0, 3), aiRows, [19, 12, 90]);
+      sheet('AI 使用', ['時間', '動作', '內容', '送出的完整內容'], aiRows, [19, 12, 50, 100]);
       const wi = XLSX.utils.aoa_to_sheet(info); wi['!cols'] = [{ wch: 12 }, { wch: 100 }];
       XLSX.utils.book_append_sheet(wb, wi, '匯出資訊');
       state.auditName = name + '.xlsx';
@@ -941,7 +964,7 @@
   };
 
   // ---------- 報告 / 規則 ----------
-  function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, aiInsights: state.aiInsights, aiChecks: state.aiChecks, hidden: hiddenNote(), totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
+  function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, aiInsights: state.aiInsights, aiChecks: state.aiChecks, hidden: hiddenNote(), scope: state.scope, totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
   function renderReport() { $('#report-frame').srcdoc = reportHTML(); }
   // 手冊頁碼 (rules/rules.js)：PDF 頁碼與頁面上印的頁碼
   const SRCDOC = { rules: '檢核規則手冊', manual: '填報手冊' };
@@ -1030,10 +1053,10 @@
     INTRO = !ok ? DQ.ai.OFFLINE : DQ.ai.providerName() === 'Dify' ? INTRO0 + '（使用「AI 服務設定」裡的 Dify。）' : INTRO0 + '（使用你自己的 Claude 帳號，第一次使用時會詢問是否允許。）';
     if (was && !$('#ai-box').hidden) $('#ai-out').textContent = INTRO;
     const d = DQ.ai.difyConfig();
-    $('#dify-note').textContent = d ? `目前使用 Dify：${d.url}` : DQ.ai.providerName() === 'Claude' ? '目前使用 claude.ai 的 Claude；填入 Dify 後會改用 Dify。' : '尚未設定。';
+    $('#dify-note').textContent = d ? `目前使用 Dify：${d.url}${d.proxy ? '（經公司轉發伺服器）' : '（金鑰只留在這個分頁）'}` : DQ.ai.savedUrl() && DQ.ai.providerName() !== 'Claude' ? '請貼上 Dify 應用的 API 金鑰（只留在這個分頁，關掉就清除）。' : DQ.ai.providerName() === 'Claude' ? '目前使用 claude.ai 的 Claude；填入 Dify 後會改用 Dify。' : '尚未設定。';
   };
   DQ.ai.ready.then(aiReady);
-  { const d = DQ.ai.difyConfig(); if (d) { $('#dify-url').value = d.url; $('#ai-settings').open = false; } }
+  { const d = DQ.ai.difyConfig(); $('#dify-url').value = d ? d.url : DQ.ai.savedUrl(); if (d) $('#ai-settings').open = false; }
   $('#btn-dify-save').onclick = async () => {
     try { await DQ.ai.setDify({ url: $('#dify-url').value, key: $('#dify-key').value }); $('#dify-key').value = ''; aiReady(true); audit('AI 服務設定', `改用 Dify：${DQ.ai.difyConfig().url}`); }
     catch (e) { $('#dify-note').textContent = e.message; }
@@ -1074,20 +1097,16 @@
       (on.length ? `另套用法規更新：${on.map(x => x.pack.name + (x.pack.version ? ` 第 ${x.pack.version} 版` : '')).join('、')}。` : '');
   }
   activeRules(); renderVersion();
-  // 送給 AI 之前：顯示遮蔽後的實際內容，使用者按「送出」才送 (可選這次開啟期間不再詢問)
+  // 送給 AI 之前：顯示實際送出的完整內容 (系統指示＋遮蔽後的資料)，使用者按「送出」才送。每次都要確認，不提供「不再詢問」
   DQ.ai.confirmSend = (text, counts) => new Promise(resolve => {
-    let skip = false; try { skip = sessionStorage.getItem('dq-ai-preview-skip') === '1'; } catch (e) { /* ignore */ }
-    if (skip) { audit('送出給 AI', `${text.length.toLocaleString()} 字（已設定這次開啟期間不再詢問）`); return resolve(true); }
     const d = $('#ai-preview'), desc = DQ.pii.describe(counts);
     const dest = DQ.ai.providerName() === 'Dify' ? `Dify（${DQ.ai.difyConfig().url}）` : DQ.ai.providerName() || 'AI';
-    $('#ai-preview-note').textContent = `將送到 ${dest}，共 ${text.length.toLocaleString()} 字。${desc ? `送出前已遮蔽：${desc}。` : '沒有偵測到需要遮蔽的個資。'}遮蔽無法保證百分之百完整，請確認沒有不該送出的資料。`;
+    $('#ai-preview-note').textContent = `將送到 ${dest}，共 ${text.length.toLocaleString()} 字，下面就是完整的送出內容。${desc ? `送出前已遮蔽：${desc}。` : '沒有偵測到需要遮蔽的個資。'}遮蔽無法保證百分之百完整，請確認沒有不該送出的資料。`;
     $('#ai-preview-text').textContent = text;
-    $('#ai-preview-skip').checked = false;
     const done = ok => {
       $('#ai-preview-yes').onclick = $('#ai-preview-no').onclick = d.oncancel = null;
-      if (ok && $('#ai-preview-skip').checked) { try { sessionStorage.setItem('dq-ai-preview-skip', '1'); } catch (e) { /* ignore */ } }
       if (d.open) d.close();
-      audit('送出給 AI', ok ? `${text.length.toLocaleString()} 字，使用者確認後送出` : '使用者取消，沒有送出');
+      audit('送出給 AI', ok ? `${text.length.toLocaleString()} 字，使用者確認後送出到 ${dest}` : '使用者取消，沒有送出', null, ok ? { payload: text } : null);
       resolve(ok);
     };
     $('#ai-preview-yes').onclick = () => done(true);
@@ -1095,7 +1114,14 @@
     d.oncancel = e => { e.preventDefault(); done(false); };
     if (d.showModal) d.showModal(); else resolve(window.confirm('要把遮蔽後的內容送給 AI 嗎？'));
   });
-
+  // AI 傳送紀錄：每一次送給 AI 的時間、目的地、字數、狀態與完整內容
+  $('#btn-ai-log').onclick = () => {
+    const list = DQ.ai.sent, p2 = n => String(n).padStart(2, '0');
+    $('#ai-log-list').innerHTML = list.length ? list.slice().reverse().map(e => `<details class="ai-log-item"><summary><b>${p2(e.at.getHours())}:${p2(e.at.getMinutes())}:${p2(e.at.getSeconds())}</b>　${esc(e.kind)}・${esc(e.dest)}・${e.chars.toLocaleString()} 字・<span class="${e.status === '已送出' ? '' : 'muted'}">${esc(e.status)}</span></summary><pre>${esc(e.payload)}</pre></details>`).join('')
+      : '<p class="hint">這次開啟後還沒有送任何內容給 AI。</p>';
+    $('#ai-log').showModal();
+  };
+  $('#ai-log-close').onclick = () => $('#ai-log').close();
   // AI 安全自我測試 (真正的模型)：結果記在畫面與稽核軌跡
   state.selfTests = [];
   $('#btn-ai-selftest').onclick = async () => {

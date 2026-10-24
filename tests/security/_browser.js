@@ -20,12 +20,16 @@ async function open(opts) {
     if (opts.serve && opts.serve(u, r)) return;
     return r.abort();
   });
-  if (opts.ai && opts.aiPreview) await page.addInitScript(() => { window.__keepPreview = true; });
+  if (opts.aiPreview) await page.addInitScript(() => { window.__keepPreview = true; });
+  // 測試時自動按「送出前確認」視窗的「送出」，和使用者操作一樣 (opts.aiPreview 為 true 時不自動按，用來測試這個視窗)
+  await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
+    const d = document.querySelector('#ai-preview'); if (!d || window.__keepPreview) return;
+    new MutationObserver(() => { if (d.open) setTimeout(() => { const b = document.querySelector('#ai-preview-yes'); if (d.open && b) b.click(); }, 0); }).observe(d, { attributes: true, attributeFilter: ['open'] });
+  }));
   if (opts.ai) await page.addInitScript(() => {
     window.__sent = [];
-    // 測試時略過「送出前確認」視窗 (opts.aiPreview 為 true 時保留，用來測試這個視窗)
-    if (!window.__keepPreview) try { sessionStorage.setItem('dq-ai-preview-skip', '1'); } catch (e) { /* ignore */ }
-    window.claude = { use: async k => k === 'sample' ? async prompt => { window.__sent.push(prompt); return { text: window.__aiReply || 'AI 回覆（測試）' }; } : { save: async () => {} } };
+
+    window.claude = { use: async k => k === 'sample' ? async prompt => { window.__sent.push(prompt); return { text: window.__aiReply || 'AI 回覆（測試）' }; } : { save: async o => { (window.__saved = window.__saved || []).push(o); } } };
   });
   // 收在「更多」選單裡的按鈕：點之前先打開選單 (和使用者操作一樣)
   const click = page.click.bind(page);

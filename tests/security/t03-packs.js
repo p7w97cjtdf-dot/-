@@ -3,9 +3,11 @@ const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
 const { open, ROOT } = require('./_browser.js');
-const SAMPLE = process.env.SAMPLE || path.join(ROOT, 'samples', 'excel', '試用資料_含錯誤.xlsx');
 const TMP = process.env.TMPDIR_T || path.join(require('os').tmpdir(), 'dq-t03');
 fs.mkdirSync(TMP, { recursive: true });
+// 測試瀏覽器放不進中文檔名，先複製成英數字檔名
+const SAMPLE = path.join(TMP, 'sample.xlsx');
+fs.copyFileSync(process.env.SAMPLE || path.join(ROOT, 'samples', 'excel', '試用資料_含錯誤.xlsx'), SAMPLE);
 
 // 測試包：只停用兩項會找到問題的內建檢查 (格式完全合法)
 const evil = { id: 'test-disable', name: '測試用停用包', version: '1', issuedAt: '20261022', basis: '安全測試 T03（虛構）', disable: ['30212_L1305', '30205_P0502', 'C008'] };
@@ -13,14 +15,39 @@ const evilFile = path.join(TMP, 'test-disable.json'); fs.writeFileSync(evilFile,
 const sha = t => crypto.createHash('sha256').update(t).digest('hex');
 const OFF = 'https://p7w97cjtdf-dot.github.io/-/rules/updates/';
 
+// 用本機伺服器開啟工具：src/app.js 的 PACK_KEY_PINS 換成測試金鑰的指紋 (模擬「這個版本核准的公鑰」)；
+// 不換時就是正式版本固定的指紋
+const http = require('http');
+function server(pin) {
+  return new Promise(res => {
+    const srv = http.createServer((q, r) => {
+      const f = path.join(ROOT, decodeURIComponent(q.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
+      if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); return r.end(); }
+      let body = fs.readFileSync(f);
+      if (pin && f.endsWith(path.join('src', 'app.js'))) body = Buffer.from(String(body).replace(/PACK_KEY_PINS = Object\.freeze\(\[[^\]]*\]\)/, `PACK_KEY_PINS = Object.freeze(['${pin}'])`));
+      const type = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.json': 'application/json' }[path.extname(f)] || 'application/octet-stream';
+      r.writeHead(200, { 'content-type': type + '; charset=utf-8' }); r.end(body);
+    }).listen(0, () => res(srv));
+  });
+}
 async function scenario(name, opts, act) {
+  let srv = null;
+  if (opts.pin !== undefined) {
+    srv = await server(opts.pin);
+    const port = srv.address().port, inner = opts.serve;
+    opts = Object.assign({}, opts, { url: `http://localhost:${port}/index.html`, serve: (u, r) => {
+      if (inner && inner(u.replace(`http://localhost:${port}/rules/updates/`, OFF), r)) return true;
+      if (u.startsWith(`http://localhost:${port}/`)) { r.continue(); return true; }
+      return false;
+    } });
+  }
   const t = await open(opts);
   await t.page.setInputFiles('#file-book', SAMPLE); await t.page.waitForTimeout(2500);
   const before = await t.page.evaluate(() => DQ.app.state.all.length);
   const r = await act(t);
   const after = await t.page.evaluate(() => ({ n: DQ.app.state.all.length, hidden: DQ.app.state.disabledCount, note: document.querySelector('#hidden-note').hidden ? '' : document.querySelector('#hidden-note').textContent,
     report: /hidden-note/.test(document.querySelector('#report-frame').srcdoc), packs: DQ.app.state.packs.map(x => ({ id: x.pack.id, on: x.on, official: !!x.official, imported: !!x.imported })), rejected: DQ.app.state.officialRejected || [] }));
-  await t.browser.close();
+  await t.browser.close(); if (srv) srv.close();
   return Object.assign({ name, before, dialogs: t.log.dialogs.map(d => d.split('\n')[0]) }, after, r || {});
 }
 (async () => {
@@ -37,21 +64,29 @@ async function scenario(name, opts, act) {
     if (u.startsWith(OFF + 'bad.json')) { r.fulfill({ contentType: 'application/json', body: bad }); return true; }
   };
   const reload = async t => { await t.page.evaluate(() => DQ.app.loadOfficial()); await t.page.waitForTimeout(1000); };
-  out.push(await scenario('官方包被竄改 (雜湊不符)', { serve: serve({ packs: [{ file: 'p.json', sha256: sha(text + ' ') }] }) }, reload));
-  out.push(await scenario('官方包雜湊相符，但還沒有簽章公鑰', { serve: serve({ packs: [{ file: 'p.json', sha256: sha(text) }] }) }, reload));
-  out.push(await scenario('官方包停用不存在的檢查', { serve: serve({ packs: ['bad.json'] }) }, reload));
-  // 數位簽章：有公鑰時只接受核准者簽過的更新包
   const kp = () => { const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }); const j = publicKey.export({ format: 'jwk' }); return { privateKey, pk: { keyId: crypto.createHash('sha256').update(JSON.stringify([j.x, j.y])).digest('hex').slice(0, 16), key: { kty: j.kty, crv: j.crv, x: j.x, y: j.y } } }; };
   const A = kp(), B = kp();
   const sign = (k, t) => crypto.sign('sha256', Buffer.from(t), { key: k, dsaEncoding: 'ieee-p1363' }).toString('base64');
   const good = { file: 'p.json', sha256: sha(text), sig: sign(A.privateKey, text) };
-  out.push(await scenario('簽章正確', { serve: serve({ packs: [good] }, A.pk) }, reload));
-  out.push(await scenario('有公鑰但更新包沒有簽章', { serve: serve({ packs: [{ file: 'p.json', sha256: sha(text) }] }, A.pk) }, reload));
-  out.push(await scenario('用別人的私鑰簽章', { serve: serve({ packs: [Object.assign({}, good, { sig: sign(B.privateKey, text) })] }, A.pk) }, reload));
-  // 同一台裝置：先看過公鑰 A，之後公鑰被拿掉或換成 B
-  const seenA = async (t, pk) => { await t.page.evaluate(() => DQ.app.loadOfficial()); await t.page.waitForTimeout(800); };
-  out.push(await scenario('看過公鑰後公鑰被拿掉', { serve: serve({ packs: [good] }, A.pk) }, async t => { await t.page.evaluate(() => localStorage.setItem('dq-pack-key', 'x')); await t.ctx.unrouteAll(); await t.ctx.route(/^https?:\/\//, r => serve({ packs: [good] }, null)(r.request().url(), r) || r.abort()); await seenA(t); }));
-  out.push(await scenario('公鑰被換成另一把', { serve: serve({ packs: [Object.assign({}, good, { sig: sign(B.privateKey, text) })] }, B.pk) }, async t => { await t.page.evaluate(k => localStorage.setItem('dq-pack-key', k), A.pk.keyId); await seenA(t); }));
-  console.log(JSON.stringify(out, null, 2));
+  const pinA = A.pk.keyId;
+  out.push(await scenario('官方包被竄改 (雜湊不符)', { pin: pinA, serve: serve({ packs: [Object.assign({}, good, { sha256: sha(text + ' ') })] }, A.pk) }, reload));
+  out.push(await scenario('官方包停用不存在的檢查', { pin: pinA, serve: serve({ packs: ['bad.json'] }, A.pk) }, reload));
+  // 數位簽章：只接受這個版本固定的公鑰簽過的更新包
+  out.push(await scenario('簽章正確 (公鑰是這個版本固定的)', { pin: pinA, serve: serve({ packs: [good] }, A.pk) }, reload));
+  out.push(await scenario('有公鑰但更新包沒有簽章', { pin: pinA, serve: serve({ packs: [{ file: 'p.json', sha256: sha(text) }] }, A.pk) }, reload));
+  out.push(await scenario('用別人的私鑰簽章', { pin: pinA, serve: serve({ packs: [Object.assign({}, good, { sig: sign(B.privateKey, text) })] }, A.pk) }, reload));
+  out.push(await scenario('公鑰被拿掉', { pin: pinA, serve: serve({ packs: [good] }, null) }, reload));
+  // 不再「第一次看到就信任」：網站上的公鑰換成另一把 (簽章本身正確)，不在固定清單就不套用
+  out.push(await scenario('公鑰被換成另一把 (簽章正確但不是固定的公鑰)', { pin: pinA, serve: serve({ packs: [Object.assign({}, good, { sig: sign(B.privateKey, text) })] }, B.pk) }, reload));
+  out.push(await scenario('正式版本：攻擊者自己的公鑰與簽章', { serve: serve({ packs: [Object.assign({}, good, { sig: sign(B.privateKey, text) })] }, B.pk) }, reload));
+  // 判定：只有「簽章正確」會套用並隱藏問題，其餘都拒絕、問題數不變
+  const pass = out.map(o => {
+    const applied = o.packs.some(p => p.official && p.on);
+    const expectApplied = /^簽章正確/.test(o.name);
+    const ok = /自行匯入/.test(o.name) ? true : expectApplied ? applied && o.n < out[0].before && !!o.note : !applied && o.n === o.before && o.rejected.length > 0;
+    return { name: o.name, ok, rejected: o.rejected.map(x => x.why || x.reason || x).join('；').slice(0, 120) };
+  });
+  console.log(JSON.stringify({ scenarios: out, pass }, null, 2));
   if (process.argv[2]) fs.writeFileSync(process.argv[2], JSON.stringify(out, null, 2));
+  process.exitCode = pass.every(p => p.ok) ? 0 : 1;
 })();

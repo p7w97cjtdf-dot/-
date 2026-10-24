@@ -35,8 +35,12 @@ if (process.argv[2] === '--check') {
     else if (typeof e === 'string' || !verifySig(text, e.sig)) errs.push(`${name}：沒有簽章或簽章不對`);
     errs.push(...problems(text, name).bad.map(b => `${name}：${b}`));
   }
+  // 固定在程式裡的公鑰指紋 (src/app.js PACK_KEY_PINS) 要和 rules/updates/public-key.json 是同一把
+  const pins = (fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8').match(/PACK_KEY_PINS = Object\.freeze\(\[([^\]]*)\]\)/) || [, ''])[1].match(/[0-9a-f]{16}/g) || [];
+  if (!pins.length) errs.push('src/app.js 的 PACK_KEY_PINS 是空的：正式版本必須固定核准的公鑰指紋');
+  if (pub) { const id = crypto.createHash('sha256').update(JSON.stringify([pub.key.x, pub.key.y])).digest('hex').slice(0, 16); if (!pins.includes(id)) errs.push(`rules/updates/public-key.json 的公鑰 (${id}) 不在 src/app.js 的 PACK_KEY_PINS (${pins.join('、') || '空'})`); }
   if (errs.length) { console.error('官方更新包檢查沒有通過：\n- ' + errs.join('\n- ')); process.exit(1); }
-  console.log(`官方更新包檢查通過：${(idx.packs || []).length} 個${pub ? `，簽章皆有效 (公鑰 ${pub.keyId})` : '（尚未設定簽章公鑰）'}`);
+  console.log(`官方更新包檢查通過：${(idx.packs || []).length} 個${pub ? `，簽章皆有效 (公鑰 ${pub.keyId}，已固定在 src/app.js)` : '（尚未設定簽章公鑰）'}`);
   process.exit(0);
 }
 

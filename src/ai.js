@@ -38,16 +38,28 @@ ${GUARD}`;
     return d.slice(1).some(src => (src === "'self'" && root.location && o.origin === root.location.origin) ||
       src.replace(/\/+$/, '') === o.origin || (/:\*$/.test(src) && o.origin.startsWith(src.slice(0, -1))));
   }
+  // 金鑰不長期存在瀏覽器：
+  //  - 使用者填的金鑰只放在這個分頁 (sessionStorage，關掉分頁就沒有)；網址 (不是祕密) 記在這台電腦
+  //  - 只接受 Dify「應用」的金鑰 (app- 開頭，只能呼叫這一個聊天應用)，不接受權限更高的知識庫或帳號金鑰
+  //  - 部署設定 (window.DQ_AI_CONFIG) 不可放金鑰：只能指定公司的轉發網址 (proxy: true)，由轉發伺服器加上金鑰
+  const KEY_OK = k => /^app-[A-Za-z0-9]{8,}$/.test(String(k || '').trim());
+  try {   // 舊版把金鑰存在 localStorage：只留下網址，金鑰刪掉
+    const old = JSON.parse(localStorage.getItem('dq-dify') || 'null');
+    if (old) { if (old.url) localStorage.setItem('dq-dify-url', old.url); localStorage.removeItem('dq-dify'); }
+  } catch (e) { /* ignore */ }
   function difyConfig() {
-    const c = root.DQ_AI_CONFIG && root.DQ_AI_CONFIG.provider === 'dify' ? root.DQ_AI_CONFIG : (() => { try { return JSON.parse(localStorage.getItem('dq-dify') || 'null'); } catch (e) { return null; } })();
-    return c && c.url && c.key && okUrl(String(c.url).trim()) ? { url: String(c.url).trim().replace(/\/+$/, ''), key: String(c.key).trim() } : null;
+    const g = root.DQ_AI_CONFIG;
+    if (g && g.provider === 'dify' && g.proxy && okUrl(String(g.url || '').trim())) return { url: String(g.url).trim().replace(/\/+$/, ''), key: '', proxy: true };
+    let c = null; try { c = JSON.parse(sessionStorage.getItem('dq-dify') || 'null'); } catch (e) { c = null; }
+    return c && c.url && KEY_OK(c.key) && okUrl(String(c.url).trim()) ? { url: String(c.url).trim().replace(/\/+$/, ''), key: String(c.key).trim() } : null;
   }
+  const savedUrl = () => { try { return localStorage.getItem('dq-dify-url') || ''; } catch (e) { return ''; } };
   function difyPlatform(c) {
     return async text => {
       const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 120000);
       let r;
       try {
-        r = await fetch(`${c.url}/chat-messages`, { method: 'POST', signal: ctl.signal, headers: { Authorization: `Bearer ${c.key}`, 'Content-Type': 'application/json' },
+        r = await fetch(`${c.url}/chat-messages`, { method: 'POST', signal: ctl.signal, headers: Object.assign({ 'Content-Type': 'application/json' }, c.key ? { Authorization: `Bearer ${c.key}` } : {}),
           body: JSON.stringify({ inputs: {}, query: text, response_mode: 'blocking', user: 'filing-checker' }) });
       } catch (e) { throw new Error(e.name === 'AbortError' ? 'Dify 超過 2 分鐘沒有回應，請稍後再試。' : `連不到 Dify（${c.url}）：請確認網址正確、網路可以連線，Dify 允許這個網站呼叫 (CORS)，以及網址已列在網站安全設定 (CSP) 的 connect-src。`); }
       finally { clearTimeout(timer); }
@@ -71,15 +83,20 @@ ${GUARD}`;
     if (c) {
       if (!okUrl(String(c.url || '').trim())) throw new Error('網址要以 https:// 開頭（本機測試可用 http://localhost）。');
       if (!String(c.key || '').trim()) throw new Error('請填入 Dify 應用的 API 金鑰。');
+      if (!KEY_OK(c.key)) throw new Error('只接受 Dify「應用」的 API 金鑰（app- 開頭，只能呼叫這一個聊天應用）；不要用知識庫或帳號等權限較高的金鑰。');
       if (!cspAllows(String(c.url).trim())) throw new Error(`網站的安全設定 (CSP) 不允許連到 ${new URL(String(c.url).trim()).origin}：自架的 Dify 請部署者把這個網址加進 index.html 的 connect-src (見 docs/dify-setup.md)。`);
-      localStorage.setItem('dq-dify', JSON.stringify({ url: String(c.url).trim(), key: String(c.key).trim() }));
-    } else localStorage.removeItem('dq-dify');
+      sessionStorage.setItem('dq-dify', JSON.stringify({ url: String(c.url).trim(), key: String(c.key).trim() }));
+      localStorage.setItem('dq-dify-url', String(c.url).trim());
+    } else { sessionStorage.removeItem('dq-dify'); localStorage.removeItem('dq-dify-url'); }
     const d = difyConfig();
     if (d) { platform = difyPlatform(d); provider = 'Dify'; }
     else { platform = null; provider = ''; return (async () => { try { if (root.claude && root.claude.use) { platform = await root.claude.use('sample'); provider = 'Claude'; } } catch (e) { /* ignore */ } return !!platform; })(); }
     return Promise.resolve(true);
   }
   let lastRedaction = null;
+  // AI 傳送紀錄：這次開啟期間每一次送給 AI 的完整內容 (只在這個畫面，關掉就沒有)
+  const sent = [];
+  const destination = () => provider === 'Dify' ? `Dify（${difyConfig() ? difyConfig().url : ''}）` : provider || 'AI';
   const OFFLINE = 'AI 說明需要 claude.ai 線上版，或在頁面下方「AI 服務設定」填入 Dify；沒有 AI 時其他檢查功能不受影響。';
 
   async function ask(prompt, opts) {
@@ -90,10 +107,15 @@ ${GUARD}`;
     const counts = Object.assign({}, P().takeCounts());
     for (const [k, n] of Object.entries(safe.counts)) counts[k] = (counts[k] || 0) + n;
     lastRedaction = { counts, at: new Date() };
-    // 送出前讓使用者看實際要送出的內容 (已遮蔽)，按「送出」才送；自我測試用的虛構資料不用確認
-    if (!opts.noPreview && root.DQ.ai.confirmSend && !(await root.DQ.ai.confirmSend(safe.text, counts))) throw new Error('已取消，沒有送出給 AI。');
+    // 實際送出的完整內容 (系統指示＋遮蔽後的資料)：送出前顯示這段給使用者確認，每次都要確認 (沒有「不再詢問」)；
+    // 自我測試與連線測試只送虛構內容，不跳確認，但一樣記在「AI 傳送紀錄」
+    const payload = `${opts.system || SYSTEM}\n\n${safe.text}`;
+    const entry = { at: new Date(), dest: destination(), chars: payload.length, payload, kind: opts.kind || (opts.noPreview ? '測試（虛構資料）' : 'AI 分析'), status: '等待確認' };
+    sent.push(entry);
+    if (!opts.noPreview && root.DQ.ai.confirmSend && !(await root.DQ.ai.confirmSend(payload, counts, entry))) { entry.status = '取消，沒有送出'; throw new Error('已取消，沒有送出給 AI。'); }
+    entry.status = '已送出';
     try {
-      const out = await platform(`${opts.system || SYSTEM}\n\n${safe.text}`, { modelTier: opts.tier || 'default' });
+      const out = await platform(payload, { modelTier: opts.tier || 'default' });
       return opts.raw ? out.text.trim() : warnUnsafe(out.text.trim());
     } catch (e) {
       if (e && e.code === 'not_granted') throw new Error('沒有允許使用 Claude，所以無法產生 AI 說明。');
@@ -202,5 +224,5 @@ ${GUARD}`;
   // 連線測試：固定的一句話，不含資料，不用確認
   const ping = () => ask('連線測試：請只回覆「OK」。', { raw: true, noPreview: true });
 
-  root.DQ.ai = { ping, selfTest, SELF_TESTS, unsafeAdvice, summarize, explain, decode, convertRules, get LABEL() { return label(); }, providerName: () => provider, difyConfig, setDify, OFFLINE, ready, available: () => !!platform, redactionNote, fence, warnUnsafe };
+  root.DQ.ai = { ping, selfTest, SELF_TESTS, unsafeAdvice, summarize, explain, decode, convertRules, get LABEL() { return label(); }, providerName: () => provider, difyConfig, savedUrl, sent, setDify, OFFLINE, ready, available: () => !!platform, redactionNote, fence, warnUnsafe };
 })(typeof self !== 'undefined' ? self : this);
