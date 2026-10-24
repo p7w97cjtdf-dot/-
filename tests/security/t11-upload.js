@@ -14,6 +14,11 @@ XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['填寫說明'], ['�
 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([all.layouts.L.fields.map(f => f.name)]), '保單資料');
 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([all.layouts.D.fields.map(f => f.name)]), '理賠資料');
 fs.writeFileSync(blank, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+// 自己整理的摘要表：工作表名稱看得懂，但欄位不是申報格式
+const custom = path.join(TMP, 'custom_summary.xlsx'), wc = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wc, XLSX.utils.aoa_to_sheet([['保單號碼', '險別', '生效日期', '理賠金額'], ['POL1', '一般壽險', '20200101', 0]]), '1_保單與理賠明細');
+XLSX.utils.book_append_sheet(wc, XLSX.utils.aoa_to_sheet([['會計科目代碼', '會計科目名稱', '期初餘額', '本期增減', '期末餘額'], ['1111', '現金', 100, 0, 100]]), '5_資產負債表');
+fs.writeFileSync(custom, XLSX.write(wc, { type: 'buffer', bookType: 'xlsx' }));
 
 (async () => {
   const { browser, page, log } = await open();
@@ -29,12 +34,18 @@ fs.writeFileSync(blank, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
   const first = await look();
   await page.setInputFiles('#file-book', blank); await page.waitForTimeout(2000);
   const second = await look();
+  await page.setInputFiles('#file-book', cancer); await page.waitForTimeout(2500);
+  await page.setInputFiles('#file-book', custom); await page.waitForTimeout(2500);
+  const third = await look();
+  third.template = await page.evaluate(() => !!document.querySelector('#btn-template'));
   const r = {
-    first, second,
+    first, second, third,
     ok: {
       cancerMapped: first.files.join() === 'CL,CD' && first.map.some(t => /癌症險保單資料 cancer\.xlsx「癌症險保單資料」 \d+ 筆/.test(t)),
       unusedListed: first.map.some(t => /沒有使用.*「說明」「錯誤解答」/.test(t)),
       blankClears: second.files.length === 0 && second.noData && !second.resultsVisible,
+      customRejected: third.files.length === 0 && third.noData && !third.resultsVisible && /不是申報資料的格式/.test(third.note),
+      customExplained: third.map.some(t => /1_保單與理賠明細.*欄位對不上「保單資料」/.test(t)) && third.map.some(t => /5_資產負債表.*缺 科目代號/.test(t)) && third.template,
       blankExplained: /只有標題列/.test(second.note) && second.map.some(t => /保單資料」「理賠資料」.*只有標題列/.test(t)),
     },
     errors: log.errors.filter(e => !/serviceWorker/.test(e)),

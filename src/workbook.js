@@ -56,22 +56,48 @@
     if (has('科目代號', '期末餘額')) return 'statement';
     return null;
   }
+  // 標題列要符合這份資料的格式：申報明細檔 (保單、理賠…) 至少八成欄位名稱對得上；其他資料要有工具會用到的欄位。
+  // 名稱對、欄位不對 (例如自己整理的摘要表) 的工作表不採用，並列出缺了哪些欄位
+  const NEED = {
+    customers: ['保單編號', '保單序號', '角色', '證件編號', '姓名', '出生日期', '性別'],
+    products: ['商品代號', '商品名稱', '險種', '停售日'],
+    control: ['項目代號', '期間', '筆數', '金額'],
+    statement: ['科目代號', '科目名稱', '期初餘額', '本期增加', '本期減少', '期末餘額'],
+  };
+  const norm = h => String(h == null ? '' : h).replace(/^\uFEFF/, '').trim().replace(/（/g, '(').replace(/）/g, ')').replace(/\s+/g, '');
+  function headProblem(slot, head) {
+    const h = new Set((head || []).map(norm));
+    const lay = slot === 'prior' ? L : all.layouts[slot];
+    if (lay && lay.fields) {
+      // 沒有標題列 (第一列就是資料) 的 CSV：欄位數剛好等於申報格式時照欄位順序讀
+      if (head && head.length === lay.fields.length && !/[\u4e00-\u9fff]/.test(head.join(''))) return '';
+      const miss = lay.fields.filter(f => !h.has(norm(f.key)) && !h.has(norm(f.name)));
+      if (miss.length <= lay.fields.length * 0.2) return '';
+      return `欄位對不上「${NAMES[slot]}」的申報格式：需要 ${lay.fields.length} 個欄位，這張只對到 ${lay.fields.length - miss.length} 個（缺 ${miss.slice(0, 4).map(f => f.name).join('、')} 等）`;
+    }
+    const miss = (NEED[slot] || []).filter(k => !h.has(k));
+    return miss.length ? `欄位對不上「${NAMES[slot]}」的格式：缺 ${miss.join('、')}` : '';
+  }
   // 依工作表名稱分配，名稱不符時依標題列判斷：回傳 { slot: csv文字 } 與 { slot: 工作表名稱 }
   // 兩張工作表都像保單資料、又沒有名稱可判斷時，日期較早的那張當作去年保單資料
   // 只有標題列 (例如還沒填的空白範本) 的工作表視為沒有資料，列在 blank
   function slots(XLSX, wb) {
     const got = {}, from = {}, unknown = [], blank = [], skipped = [];   // skipped：沒有用到的工作表 (名稱、原因)
     const toCsv = name => XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false, rawNumbers: true });
+    const headOf = name => (XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false })[0]) || [];
     const hasRows = csv => csv.split(/\r?\n/).filter(l => l.replace(/,/g, '').trim()).length > 1;
     for (const name of wb.SheetNames) {
       const hit = SHEET_SLOT.find(([k]) => name.includes(k));
-      if (hit && !got[hit[1]]) { const c = toCsv(name); if (hasRows(c)) { got[hit[1]] = c; from[hit[1]] = name; } else blank.push(name); }
+      const bad = hit && !got[hit[1]] ? headProblem(hit[1], headOf(name)) : '';
+      if (bad) skipped.push({ name, why: bad });
+      else if (hit && !got[hit[1]]) { const c = toCsv(name); if (hasRows(c)) { got[hit[1]] = c; from[hit[1]] = name; } else blank.push(name); }
       else if (!hit) unknown.push(name);
       else skipped.push({ name, why: `和「${from[hit[1]]}」是同一種資料，只用第一張` });
     }
     for (const name of unknown) {
-      const head = (XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false })[0]) || [];
+      const head = headOf(name);
       let slot = bySignature(head);
+      if (slot && headProblem(slot, head)) slot = null;
       if (slot === 'L' && got.L) slot = got.prior ? null : 'prior';
       if (slot && !got[slot]) { const c = toCsv(name); if (hasRows(c)) { got[slot] = c; from[slot] = name; } else blank.push(name); }
       else skipped.push({ name, why: slot ? '同一種資料已經有一張' : '不是申報資料（例如說明頁）' });
@@ -132,5 +158,5 @@
     if (z.total > ZIP_MAX_BYTES) return `解開後有 ${Math.round(z.total / 1048576)} MB，超過 ${ZIP_MAX_BYTES / 1048576} MB`;
     return '';
   }
-  return { SHEET_SLOT, NAMES, sheets, extSheets, slots, files, zipStats, zipProblem };
+  return { SHEET_SLOT, NAMES, sheets, extSheets, slots, files, headProblem, zipStats, zipProblem };
 });

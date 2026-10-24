@@ -130,8 +130,27 @@
       <ul class="dm-list">${have.map(k => row(SLOT_NAME[k] || k, state.src[k] || state.files[k].name, `${recCount(k).toLocaleString()} 筆`)).join('')}
       ${unused().map(([why, srcs]) => row('沒有使用', srcs.join('、'), why, 'dm-off')).join('')}</ul>
       ${have.length && !DETAIL.some(k => state.files[k]) ? '<p class="dm-foot">還需要保單資料或理賠資料（壽險、癌症險或傷害險）才能開始檢查。</p>' : ''}
-      ${!have.length ? '<p class="dm-foot">之前放入的資料與結果已清除。請放入有資料的檔案（第一列是欄位名稱，從第二列開始每列一筆）。</p>' : ''}`;
+      ${!have.length ? '<p class="dm-foot">之前放入的資料與結果已清除。請放入有資料的檔案（第一列是欄位名稱，從第二列開始每列一筆）。</p>' : ''}
+      ${state.notes.some(n => /欄位對不上/.test(n.why)) ? '<p class="dm-foot dm-tpl">欄位名稱要和申報格式一樣。<button class="linkish" type="button" id="btn-template">下載正確格式的空白範本</button>（每張工作表的第一列就是要用的欄位名稱）</p>' : ''}`;
+    const t = $('#btn-template'); if (t) t.onclick = downloadTemplate;
     const b = $('#btn-clear-files'); if (b) b.onclick = () => { clearFiles(); state.notes = []; $('#sample-note').textContent = ''; run(); };
+  }
+  // 空白範本：每一種資料一張工作表，第一列是正確的欄位名稱
+  function downloadTemplate() {
+    if (!window.XLSX) return;
+    const wb = XLSX.utils.book_new(), add = (name, head) => { const ws = XLSX.utils.aoa_to_sheet([head]); ws['!cols'] = head.map(h => ({ wch: Math.max(10, String(h).length * 2) })); XLSX.utils.book_append_sheet(wb, ws, name); };
+    add('說明', ['填寫說明']);
+    const info = wb.Sheets['說明'];
+    XLSX.utils.sheet_add_aoa(info, [['1. 每張工作表的第一列是欄位名稱，請不要修改；從第二列開始每列填一筆資料。'], ['2. 代號、日期、保單號碼等欄位請先把儲存格設為「文字」，避免 Excel 去掉開頭的 0。'], ['3. 至少要有一張保單資料或理賠資料（壽險、癌症險或傷害險）；用不到的工作表可以留空或刪除。'], ['4. 日期寫成 YYYYMMDD，例如 20250101。']], { origin: 'A2' });
+    info['!cols'] = [{ wch: 80 }];
+    for (const k of ['L', 'D']) add(SLOT_NAME[k], rs.layouts[k].fields.map(f => f.name));
+    add('客戶資料', ['保單編號', '保單序號', '角色', '證件編號', '姓名', '出生日期', '性別', '郵遞區號', '地址']);
+    add('商品資料', ['商品代號', '商品名稱', '險種', '繳費年期', '起售日', '停售日', '替代代號']);
+    add('去年保單資料', rs.layouts.L.fields.map(f => f.name));
+    add('系統總數', ['來源系統', '項目代號', '項目名稱', '期間', '筆數', '金額']);
+    add('資產負債表', ['科目代號', '科目名稱', '期初餘額', '本期增加', '本期減少', '期末餘額']);
+    for (const k of ['CL', 'CD', 'AL', 'AD']) if (rs.layouts[k]) add(SLOT_NAME[k], rs.layouts[k].fields.map(f => f.name));
+    download('blank_template.xlsx', new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   }
   function setFile(fid, name, text, fromSheet, srcName) {
     // CSV 依欄位定義轉成固定長度 (去年保單資料和保單資料同格式)
@@ -173,6 +192,7 @@
     for (const name of blank) state.notes.push({ source: `${file.name}「${name}」`, why: '只有標題列，沒有資料' });
     for (const x of skipped) state.notes.push({ source: `${file.name}「${x.name}」`, why: x.why });
     if (!DETAIL.some(k => got[k]) && blank.length) return fail(`「${file.name}」的工作表只有標題列、還沒有資料，沒有可以檢查的內容。請從第二列開始填入保單資料或理賠資料，再放進來。`);
+    if (!Object.keys(got).length && skipped.some(x => /欄位對不上/.test(x.why))) return fail(`「${file.name}」的工作表欄位不是申報資料的格式，沒有可以檢查的資料。每張工作表缺少的欄位列在下方；格式可參考「完整說明」的「可以放哪些檔案」或試用資料。`);
     if (!Object.keys(got).length) return fail(`「${file.name}」裡找不到可以辨識的工作表。工作表名稱需包含：保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數或資產負債表（癌症險、傷害險在前面加上類別）`);
     clearFiles();
     const fs = DQ.workbook.files(got);
@@ -197,12 +217,19 @@
     return b.length > 0 && ctl / b.length > 0.01;
   }
   const notText = name => { $('#sample-note').textContent = `「${name}」看起來不是文字檔（可能是壓縮檔、圖片或其他程式的檔案），沒有讀取。申報資料請放 .txt、.csv 或 Excel 檔。`; };
+  // CSV 的標題列要符合放入的那一份資料；不符時不採用，列出缺了哪些欄位
+  function csvProblem(fid, name, text) {
+    if (!/\.csv$/i.test(name)) return '';
+    return DQ.workbook.headProblem(fid, (DQ.parseCSV(String(text).slice(0, 65536))[0] || []));
+  }
   async function readFile(fid, file) {
     if (tooBig(file)) return;
     if (BOOK.test(file.name)) { readWorkbook(file); return; }
     const buf = await file.arrayBuffer();
     if (looksBinary(buf)) { notText(file.name); return; }
-    setFile(fid, file.name, decodeText(buf));
+    const text = decodeText(buf), bad = csvProblem(fid, file.name, text);
+    if (bad) { state.notes = [{ source: file.name, why: bad }]; $('#sample-note').textContent = `「${file.name}」${bad}，沒有放入。`; renderMap(); return; }
+    setFile(fid, file.name, text);
     run();
   }
   for (const fid of SLOTS) {
@@ -255,6 +282,8 @@
         const text = decodeText(buf);
         const byContent = /\.csv$/i.test(f.name) ? DQ.csvLayout(text, DETAIL_LAYOUTS) : BY_LENGTH[text.split(/\r?\n/)[0].length] || null;
         if (byContent) slot = byContent === 'L' && slot === 'prior' ? 'prior' : byContent;
+        const bad = slot && csvProblem(slot, f.name, text);
+        if (bad) { state.notes.push({ source: f.name, why: bad }); renderMap(); continue; }
         if (slot) { setFile(slot, f.name, text); run(); } else unknown.push(f.name);
         continue;
       }
