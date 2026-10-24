@@ -368,7 +368,7 @@
     // 寬螢幕：右側直接顯示第一個問題的說明 (不留空白的說明欄)
     state.openGroups = null; state.fullGroups = null;
     if (window.matchMedia('(min-width: 1101px)').matches) { const g = grouped(filtered())[0]; if (g) state.sel = g[2][0].id; }
-    renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(); renderReport(); renderRules(); renderDecodeExamples();
+    renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(true); renderReport(); renderRules(); renderDecodeExamples();
     { const c = sev => state.all.filter(i => i.severity === sev).length, h = Object.values(state.disabledCount || {}).reduce((t, n) => t + n, 0);
       audit('檢查', `必須修改 ${c('error')}、建議確認 ${c('warning')}、請人工判斷 ${c('suspect')}${h ? `；停用的檢查隱藏 ${h} 個` : ''}`); }
     // 手機上資料一放進來就捲到結果區 (上傳區在畫面上方會佔掉整個螢幕)
@@ -741,24 +741,35 @@
 
   // ---------- 跨系統對帳 ----------
   const STATUS_CLS = { 一致: 'ok', 時間差: 'info', 定義差: 'info', 待查: 'bad', 格式錯誤: 'bad' };
-  function renderRecon() {
+  function renderRecon(resetOpen) {
     // 控制總數
     if (!state.ctl) { $('#ctl-chips').innerHTML = '<span class="hint">還沒有放入「系統總數」資料。</span>'; $('#ctl-table tbody').innerHTML = ''; }
     else {
       const s = state.ctl.summary;
       $('#ctl-chips').innerHTML = [['一致', s.ok], ['時間差', s.timing], ['定義差', s.definition], ['待查', s.open]].map(([k, n]) => `<span class="st ${STATUS_CLS[k]}">${LB.status(k)} <b>${n}</b></span>`).join('');
       const only = $('#ctl-diff-only').checked;
-      const rows = state.ctl.rows.filter(r => !only || r.status !== '一致');
+      // 需要追查的排最前面
+      const ORDER_ST = { 待查: 0, 格式錯誤: 1, 時間差: 2, 定義差: 3, 一致: 4 };
+      const rows = state.ctl.rows.filter(r => !only || r.status !== '一致').slice().sort((a, b) => (ORDER_ST[a.status] ?? 5) - (ORDER_ST[b.status] ?? 5));
       $('#ctl-table tbody').innerHTML = rows.length ? rows.map(r => r.up ? `<tr>
         <td>${esc(r.source)}</td><td>${esc(r.name)}</td><td class="mono">${esc(r.period)}</td>
         <td class="num">${r.up.cnt} 筆<br>${yuan(r.up.amt)} 元</td><td class="num">${r.fil.cnt} 筆<br>${yuan(r.fil.amt)} 元</td>
         <td class="num ${r.diff.cnt || r.diff.amt ? 'neg' : ''}">${r.diff.cnt} 筆<br>${yuan(r.diff.amt)}</td>
         <td><span class="st ${STATUS_CLS[r.status]}">${LB.status(r.status)}</span></td>
-        <td class="explain">${esc(r.explain || '')}${r.suggestion ? `<div class="hint">${esc(r.suggestion)}</div>` : ''}${(r.related || []).length ? `<div>${[...new Set(r.related.map(i => i.id).filter(Boolean))].slice(0, 6).map(id => `<button class="chip jump" data-id="${id}">相關問題 #${id}</button>`).join(' ')}</div>` : ''}</td></tr>`
+        <td class="explain">${esc(r.explain || '')}${r.suggestion && r.status !== '時間差' && r.status !== '定義差' ? `<div class="hint">${esc(r.suggestion)}</div>` : ''}${(r.related || []).length ? `<div>${[...new Set(r.related.map(i => i.id).filter(Boolean))].slice(0, 6).map(id => `<button class="chip jump" data-id="${id}">相關問題 #${id}</button>`).join(' ')}</div>` : ''}</td></tr>`
         : `<tr><td colspan="8">${esc(r.explain)}</td></tr>`).join('') : '<tr><td colspan="8" class="empty">申報資料的加總和各系統的總數完全相符。</td></tr>';
     }
+    // 各區標題右邊的數字；一開始只展開第一個需要處理的區
+    const pill = (id, text, bad) => { const el = $('#rc-n-' + id); el.textContent = text; el.className = 'rc-n' + (bad ? ' err' : text ? ' ok' : ''); return bad; };
+    const need = [];
+    if (state.ctl) {
+      const s = state.ctl.summary, soft = s.timing + s.definition;
+      need.push(['ctl', pill('ctl', s.open ? `需要追查 ${s.open}` : soft ? `對不上 ${soft}（不需修改）` : '全部相符', s.open > 0)]);
+      $('#ctl-note').hidden = !soft; $('#ctl-note').textContent = '「結帳日不同」「算法不同」：不需要修改申報檔，請在對帳底稿註明原因，並確認兩邊的截止日或計算方式。';
+    } else pill('ctl', '沒有放入', false);
     // 客戶與商品資料
     const mstAll = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
+    if (state.cust || state.prod) need.push(['mst', pill('mst', mstAll.length ? `問題 ${mstAll.length}` : '都對得上', mstAll.length > 0)]); else pill('mst', '沒有放入', false);
     if (!state.cust && !state.prod) { $('#mst-chips').innerHTML = '<span class="hint">還沒有放入客戶資料或商品資料。</span>'; $('#mst-table tbody').innerHTML = ''; }
     else {
       $('#mst-chips').innerHTML = (state.cust ? `<span class="st ${state.cust.issues.length ? 'bad' : 'ok'}">客戶資料 ${state.cust.summary.rows} 列（${state.cust.summary.people} 人），問題 <b>${state.cust.issues.length}</b></span>` : '') +
@@ -782,10 +793,15 @@
         Object.entries(m.term).map(([k, v]) => row(`－ 結束：${k}`, -v[0], -v[1])).join('') +
         row('＝ 今年底應有效（推算）', m.close[0], m.close[1], 'strong') + row('今年底有效（申報資料）', m.closeActual[0], m.closeActual[1], m.close[1] === m.closeActual[1] ? 'muted' : 'bad');
       const iss = state.roll.issues;
+      need.push(['roll', pill('roll', iss.length ? `必須修改 ${iss.filter(i => i.severity === 'error').length || iss.length}` : '接得上', iss.length > 0)]);
       $('#roll-issues tbody').innerHTML = iss.length ? iss.map(i => `<tr><td><span class="badge ${i.severity}">${SEV[i.severity]}</span></td><td class="mono">${esc(i.policy)}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('')
         : `<tr><td colspan="4" class="empty">${state.roll.hasPrior ? '去年底和今年初的保單一張不少、保額相同；今年保額的變動也都有對應的異動。' : '放入去年保單資料後，可以逐張核對去年底和今年初是否接得上。'}</td></tr>`;
     }
     // 財報
+    if (!state.roll) pill('roll', '沒有放入', false);
+    if (state.stmt) need.push(['stmt', pill('stmt', state.stmt.issues.length ? `必須修改 ${state.stmt.summary.errors}` : '報表是平的', state.stmt.summary.errors > 0)]); else pill('stmt', '沒有放入', false);
+    const firstBad = need.find(x => x[1]);
+    if (resetOpen === true) for (const k of ['ctl', 'roll', 'mst', 'stmt']) $('#rc-' + k).open = !!firstBad && firstBad[0] === k;
     if (!state.stmt) { $('#stmt-banner').innerHTML = '<p class="hint">還沒有放入資產負債表。</p>'; $('#stmt-chains').innerHTML = ''; $('#stmt-table tbody').innerHTML = ''; return; }
     const st = state.stmt;
     $('#stmt-banner').innerHTML = `<div class="banner ${st.summary.balanced ? 'ok' : 'bad'}"><b>${st.summary.balanced ? '資產 = 負債 + 權益，報表是平的' : '資產不等於負債加權益，報表不平'}</b>　${SEV.error} ${st.summary.errors} 項、${SEV.warning} ${st.summary.warnings} 項</div>`;
@@ -976,7 +992,7 @@
     if (view === 'check') doneBack('view'); else onBack('view', () => showTab('check'));
     document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x.dataset.view === view));
     document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
-    if (view !== 'check') window.scrollTo({ top: $('#view-' + view).offsetTop - 12 });
+    if (view !== 'check') $('#view-' + view).scrollIntoView({ block: 'start' });
     else if (!document.body.classList.contains('no-data')) $('#view-check').scrollIntoView({ block: 'start' });
   }
   document.querySelectorAll('.view:not(#view-check)').forEach(v => v.insertAdjacentHTML('afterbegin', '<button class="back" type="button">← 回到檢查結果</button>'));

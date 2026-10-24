@@ -1051,3 +1051,45 @@ body.no-data .drop.big .drop-h { display: block; font-size: 13px; color: var(--m
 body:not(.no-data) .drop-btn { display: none; }
 body.no-data .upload-card { padding: 20px; }
 @media (max-width: 720px) { body.no-data .drop.big .drop-k { display: none; } body.no-data .drop.big { padding: 28px 16px; } }
+
+/* ===== 數字核對明細：每區可收合，標題列寫結果 ===== */
+html { scroll-padding-top: 88px; }
+#view-recon { display: flex; flex-direction: column; gap: 12px; }
+#view-recon[hidden] { display: none; }
+details.rc { padding: 0; gap: 0; border-radius: 12px; overflow: hidden; }
+details.rc > summary.rc-head { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 12px 16px; list-style: none; cursor: pointer; }
+details.rc > summary.rc-head::-webkit-details-marker { display: none; }
+details.rc > summary.rc-head::after { content: ""; flex: none; width: 8px; height: 8px; margin-left: 4px; border-right: 2px solid #94A3B8; border-bottom: 2px solid #94A3B8; transform: rotate(45deg); }
+details.rc[open] > summary.rc-head::after { transform: rotate(-135deg); }
+details.rc[open] > summary.rc-head { border-bottom: 1px solid #F1F5F9; }
+details.rc > summary.rc-head:hover { background: #F8FAFC; }
+.rc-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.rc-t b { font-size: 16px; }
+.rc-t .hint { margin: 0; font-size: 12px; }
+.rc-n { flex: none; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #F1F5F9; color: #475569; white-space: nowrap; }
+.rc-n:empty { display: none; }
+.rc-n.err { background: var(--err-soft); color: var(--err); }
+.rc-n.ok { background: #E6F2EA; color: #2F6B45; }
+details.rc > :not(summary) { margin: 12px 16px; }
+details.rc > .fold { margin: 0 16px 12px auto; }
+.rc-tools { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.rc-note { margin-top: 0 !important; }
+details.sub > summary { cursor: pointer; font-size: 13px; font-weight: 700; color: #475569; padding: 6px 0; }
+details.sub > .table-wrap { margin-top: 8px; }
+
+/* ===== 首頁：縮小區塊之間的空白 ===== */
+.hero.home-only { padding: 40px 0 8px; }
+body.no-data .hero.home-only { justify-content: space-between; gap: 40px; }
+.hero-main { flex: 1 1 600px; gap: 20px; }
+.hero-card { flex: 0 1 400px; }
+body.no-data .sec-head.home-only { margin-top: 40px; }
+.sec-head { margin-bottom: 16px; }
+main > section.home-only, main > section.legal { margin-top: 48px; }
+@media (max-width: 720px) {
+  .hero.home-only { padding: 24px 0 0; }
+  body.no-data .sec-head.home-only { margin-top: 28px; }
+  main > section.home-only, main > section.legal { margin-top: 32px; }
+  .sec-head h2 { font-size: 26px; }
+}
+body.no-data .drop.big { padding: 28px 20px; }
+@media (max-width: 900px) { .hero-main, .hero-card { flex: none; } }

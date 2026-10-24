@@ -46,15 +46,11 @@
         <label class="btn-x primary" for="file-book">上傳資料開始檢核</label>
         <a class="btn-x" href="docs/guide.html">查看完整使用說明</a>
       </div>
-      <p class="eyebrow">支援的資料類型</p>
-      <ul class="chips">
-        <li>個人壽險</li><li>癌症險</li><li>傷害險</li><li>職業分類</li><li>會計科目</li><li>Excel 與文字檔</li>
-      </ul>
     </div>
     <aside class="hero-card" aria-label="支援資料">
       <h2>支援資料</h2>
       <dl>
-        <dt>檔案格式</dt><dd>文字檔（.txt）與 Excel（.xlsx / .xls）</dd>
+        <dt>檔案格式</dt><dd>Excel、CSV、文字檔（.txt）</dd>
         <dt>保險類別</dt><dd>個人壽險、癌症險、傷害險、職業分類與會計科目</dd>
         <dt>檢查依據</dt><dd class="small">人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度）；CRL／CRD、PAL／PAD、OCC 與會計科目。</dd>
       </dl>
@@ -107,24 +103,6 @@
     </ol>
   </section>
 
-  <section class="home-only" aria-labelledby="guide-title">
-    <div class="sec-head">
-      <h2 id="guide-title">完整使用說明</h2>
-      <p>第一次使用？完整說明包含資料準備、檢核結果、修改與下載、手機使用、法規更新與常見問題。</p>
-    </div>
-    <div class="guide-x">
-      <div class="guide-x-main">
-        <h3>完整使用說明</h3>
-        <p>準備資料、看懂結果、修改與下載、手機使用、法規更新、常見問題，以及可以下載的試用資料。</p>
-        <ul class="chips dark"><li>資料準備</li><li>檢核結果</li><li>修改與下載</li><li>手機使用</li><li>法規更新</li><li>常見問題</li></ul>
-      </div>
-      <div class="guide-x-side">
-        <b>打開完整說明</b>
-        <p>包含試用資料與常見問題，幫助你更快上手。</p>
-        <a class="btn-x light" href="docs/guide.html">打開說明 →</a>
-      </div>
-    </div>
-  </section>
 
 
   <!-- ================= 明細檢核 ================= -->
@@ -181,35 +159,35 @@
 
   <!-- ================= 跨系統對帳 ================= -->
   <section id="view-recon" class="view" hidden>
-    <div class="block">
-      <div class="block-head">
-        <div><h2>和各系統的總數核對</h2><p class="hint">把申報資料加總，和新契約、理賠、保單系統各自的總數比較。對不上時會說明原因：是兩邊結帳日不同、計算方式不同，還是真的有缺漏需要追查。</p></div>
-        <label class="toggle"><input type="checkbox" id="ctl-diff-only" checked> 只看對不上的</label>
-      </div>
-      <div class="chips" id="ctl-chips"></div>
+    <details class="block rc" id="rc-ctl">
+      <summary class="rc-head"><span class="rc-t"><b>和各系統的總數核對</b><span class="hint">申報資料加總和各系統的總數比較</span></span><span class="rc-n" id="rc-n-ctl"></span></summary>
+      <div class="rc-tools"><div class="chips" id="ctl-chips"></div><label class="toggle"><input type="checkbox" id="ctl-diff-only" checked> 只看對不上的</label></div>
       <div class="table-wrap"><table id="ctl-table"><thead><tr><th>系統</th><th>項目</th><th>期間</th><th class="num">系統的總數</th><th class="num">申報資料加總</th><th class="num">差多少</th><th>原因</th><th>說明</th></tr></thead><tbody></tbody></table></div>
-    </div>
+      <p class="hint rc-note" id="ctl-note" hidden></p>
+    </details>
 
-    <div class="block">
-      <div class="block-head"><div><h2>去年底和今年初是否接得上</h2><p class="hint">逐張比對去年申報的有效保單和今年的資料：有沒有漏報、保額是否相同，今年的保額變動是否都有對應的異動。金額為保額（新臺幣）。</p></div></div>
-      <div class="roll">
+    <details class="block rc" id="rc-roll">
+      <summary class="rc-head"><span class="rc-t"><b>去年底和今年初是否接得上</b><span class="hint">去年底有效的保單，今年初要一張不少、保額相同</span></span><span class="rc-n" id="rc-n-roll"></span></summary>
+      <div class="table-wrap"><table id="roll-issues"><thead><tr><th>狀況</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody></tbody></table></div>
+      <details class="sub"><summary>件數與保額的推算</summary>
         <div class="table-wrap"><table id="roll-table"><thead><tr><th>項目</th><th class="num">件數</th><th class="num">保額（元）</th></tr></thead><tbody></tbody></table></div>
-        <div class="table-wrap"><table id="roll-issues"><thead><tr><th>狀況</th><th>保單號碼</th><th>問題</th><th>建議</th></tr></thead><tbody></tbody></table></div>
-      </div>
-    </div>
+      </details>
+    </details>
 
-    <div class="block">
-      <div class="block-head"><div><h2>客戶資料與商品資料</h2><p class="hint">檢查身分證號是否正確、地址和郵遞區號是否相符、同一個人在不同保單的資料是否一致，並和保單資料比對生日與性別；保單資料填錯時，會用客戶資料當作建議的值。商品方面檢查商品代號是否存在、已停售的商品是否還在使用。</p></div></div>
+    <details class="block rc" id="rc-mst">
+      <summary class="rc-head"><span class="rc-t"><b>客戶資料與商品資料</b><span class="hint">身分證號、生日、性別、商品代號和保單資料比對</span></span><span class="rc-n" id="rc-n-mst"></span></summary>
       <div class="chips" id="mst-chips"></div>
       <div class="table-wrap"><table id="mst-table"><thead><tr><th>狀況</th><th>位置</th><th>保單號碼</th><th>問題</th><th>建議怎麼改</th></tr></thead><tbody></tbody></table></div>
-    </div>
+    </details>
 
-    <div class="block">
-      <div class="block-head"><div><h2>資產負債表加總檢查</h2><p class="hint">檢查每個科目的期初加減後是否等於期末、小計是否等於細項加總、資產是否等於負債加權益，以及科目代號是否打錯或已停用。</p></div></div>
+    <details class="block rc" id="rc-stmt">
+      <summary class="rc-head"><span class="rc-t"><b>資產負債表加總檢查</b><span class="hint">期初＋增加－減少＝期末、小計、資產＝負債＋權益</span></span><span class="rc-n" id="rc-n-stmt"></span></summary>
       <div id="stmt-banner"></div>
       <div id="stmt-chains" class="chains"></div>
-      <div class="table-wrap"><table id="stmt-table"><thead><tr><th>科目代號</th><th>科目名稱</th><th class="num">期初餘額</th><th class="num">本期增加</th><th class="num">本期減少</th><th class="num">期末餘額</th><th>結果</th></tr></thead><tbody></tbody></table></div>
-    </div>
+      <details class="sub"><summary>全部科目</summary>
+        <div class="table-wrap"><table id="stmt-table"><thead><tr><th>科目代號</th><th>科目名稱</th><th class="num">期初餘額</th><th class="num">本期增加</th><th class="num">本期減少</th><th class="num">期末餘額</th><th>結果</th></tr></thead><tbody></tbody></table></div>
+      </details>
+    </details>
   </section>
 
   <!-- ================= 退件解碼 ================= -->
