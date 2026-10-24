@@ -63,18 +63,13 @@
   <p class="update-notice" id="update-notice" role="status" hidden></p>
   <div class="sec-head home-only">
     <h2>上傳資料</h2>
-    <p>拖放或選擇檔案，系統會先幫你判斷資料類型與欄位完整度。</p>
   </div>
   <section class="imports upload-card" aria-label="放入資料">
-    <div class="upload-head home-only">
-      <div><h3>拖放檔案到這裡，或按鈕選擇</h3><p>支援文字檔（.txt）與 Excel（.xlsx / .xls）。</p></div>
-      <div class="upload-acts"><label class="btn-x sm" for="file-book">選擇檔案</label><button class="btn-x sm primary" type="button" id="btn-start">開始檢核</button></div>
-    </div>
     <label class="drop big" id="drop-book" for="file-book">
       <span class="drop-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v3a2 2 0 002 2h10a2 2 0 002-2v-3" stroke="#00A3A7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-      <span class="drop-k"><span class="on-desk">將檔案拖到這裡</span><span class="on-phone">點這裡選擇檔案</span></span>
-      <span class="drop-or">或按鈕選擇檔案，支援多檔上傳。</span>
-      <span class="drop-h">支援 .txt、.csv 與 Excel，可一次選擇多個檔案。Excel 會依工作表名稱自動分類；癌症險、傷害險請在工作表名稱前加上類別。</span>
+      <span class="drop-k"><span class="on-desk">把檔案拖到這裡</span><span class="on-phone">點這裡選擇檔案</span></span>
+      <span class="drop-btn" aria-hidden="true">選擇檔案</span>
+      <span class="drop-h">Excel、CSV、文字檔都可以；格式不同會自動調整</span>
       <input type="file" id="file-book" accept=".xlsx,.xls,.xlsm,.ods,.txt,.csv" multiple>
     </label>
     <div class="samples">
@@ -98,11 +93,6 @@
         <label class="drop opt" id="drop-AD" for="file-AD"><span class="drop-k">傷害險理賠資料</span><span class="drop-n" id="name-AD">尚未放入</span><span class="drop-h">PAD 開頭的給付檔</span><input type="file" id="file-AD" accept=".txt,.csv,.xlsx,.xls,.xlsm,.ods"></label>
       </div>
     </details>
-    <div class="upload-info home-only">
-      <div><b>檔案類型</b><span>文字檔 .txt 與 Excel .xlsx / .xls</span></div>
-      <div><b>檢查內容</b><span>欄位對應、資料格式與必填檢查</span></div>
-      <div><b>資料安全</b><span>一般檢核在你的電腦上進行；只有主動使用 AI 時，必要內容才會在遮蔽個資後送到 Claude。</span></div>
-    </div>
   </section>
 
   <section class="home-only" id="flow" aria-labelledby="flow-title">

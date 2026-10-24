@@ -109,10 +109,10 @@
   const SLOTS = ['L', 'D', 'prior', 'control', 'statement', 'products', 'customers', 'CL', 'CD', 'AL', 'AD'];
   const DETAIL = ['L', 'D', 'CL', 'CD', 'AL', 'AD'];  // 固定長度的明細檔 (依規則集檢查)
   // 「已放入的資料」：每一份資料來自哪個檔案 / 工作表、幾筆；這次沒有用到的工作表與原因
-  state.src = {}; state.notes = [];
+  state.src = {}; state.notes = []; state.fixed = {};   // fixed：放入時自動調整了什麼 (欄位名稱、日期格式…)
   function clearFiles() {
     for (const k of SLOTS) { delete state.files[k]; $('#name-' + k).textContent = '尚未放入'; }
-    state.src = {};
+    state.src = {}; state.fixed = {};
   }
   const recCount = k => { const n = state.files[k].text.split(/\r?\n/).filter(l => l.trim()).length; return DETAIL.includes(k) || k === 'prior' ? n : Math.max(0, n - 1); };
   // 沒有用到的工作表：同一個檔案、同樣原因的合併成一列 (例：a.xlsx「說明」「錯誤解答」)
@@ -125,9 +125,9 @@
     const el = $('#data-map'), have = SLOTS.filter(k => state.files[k]);
     el.hidden = !have.length && !state.notes.length;
     if (el.hidden) return;
-    const row = (k, src, n, cls) => `<li class="dm-row${cls ? ' ' + cls : ''}"><b class="dm-k">${esc(k)}</b><span class="dm-src">${esc(src)}</span><span class="dm-n">${n}</span></li>`;
+    const row = (k, src, n, cls, fix) => `<li class="dm-row${cls ? ' ' + cls : ''}"><b class="dm-k">${esc(k)}</b><span class="dm-src">${esc(src)}</span><span class="dm-n">${n}</span>${fix ? `<span class="dm-fix">已自動調整：${esc(fix.join('；'))}</span>` : ''}</li>`;
     el.innerHTML = `<div class="dm-head"><b>${have.length ? `這次檢查的資料（${have.length} 份）` : '這次沒有可以檢查的資料'}</b>${have.length ? '<button class="linkish" type="button" id="btn-clear-files">清除，重新放入</button>' : ''}</div>
-      <ul class="dm-list">${have.map(k => row(SLOT_NAME[k] || k, state.src[k] || state.files[k].name, `${recCount(k).toLocaleString()} 筆`)).join('')}
+      <ul class="dm-list">${have.map(k => row(SLOT_NAME[k] || k, state.src[k] || state.files[k].name, `${recCount(k).toLocaleString()} 筆`, '', state.fixed[k])).join('')}
       ${unused().map(([why, srcs]) => row('沒有使用', srcs.join('、'), why, 'dm-off')).join('')}</ul>
       ${have.length && !DETAIL.some(k => state.files[k]) ? '<p class="dm-foot">還需要保單資料或理賠資料（壽險、癌症險或傷害險）才能開始檢查。</p>' : ''}
       ${!have.length ? '<p class="dm-foot">之前放入的資料與結果已清除。請放入有資料的檔案（第一列是欄位名稱，從第二列開始每列一筆）。</p>' : ''}
@@ -188,7 +188,7 @@
     if (zp) { audit('拒絕檔案', `${file.name}（${zp}）`); return fail(`「${file.name}」${zp}，為避免瀏覽器記憶體不足，沒有讀取。請在 Excel 打開後另存新檔，或把資料拆成幾個檔案。`); }
     try { wb = XLSX.read(buf, { type: 'array' }); }
     catch (e) { return fail(`「${file.name}」無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次。`); }
-    const { got, from, blank, skipped } = DQ.workbook.slots(XLSX, wb);
+    const { got, from, blank, skipped, fixed } = DQ.workbook.slots(XLSX, wb);
     for (const name of blank) state.notes.push({ source: `${file.name}「${name}」`, why: '只有標題列，沒有資料' });
     for (const x of skipped) state.notes.push({ source: `${file.name}「${x.name}」`, why: x.why });
     if (!DETAIL.some(k => got[k]) && blank.length) return fail(`「${file.name}」的工作表只有標題列、還沒有資料，沒有可以檢查的內容。請從第二列開始填入保單資料或理賠資料，再放進來。`);
@@ -197,6 +197,7 @@
     clearFiles();
     const fs = DQ.workbook.files(got);
     for (const [slot, f] of Object.entries(fs)) { state.files[slot] = f; state.src[slot] = `${file.name}「${from[slot]}」`; $('#name-' + slot).textContent = `工作表「${from[slot]}」`; }
+    for (const [slot, notes] of Object.entries(fixed || {})) { state.fixed[slot] = notes; audit('自動調整', `${file.name}「${from[slot]}」：${notes.join('；')}`); }
     audit('放入資料', `${file.name}：${Object.keys(fs).map(k => `${from[k]}（${fs[k].text.split(/\r?\n/).filter(Boolean).length.toLocaleString()} 行）`).join('、')}`, null);
     const entry = state.audit[state.audit.length - 1];
     if (window.crypto && crypto.subtle) crypto.subtle.digest('SHA-256', buf).then(b => { entry.sha = [...new Uint8Array(b)].map(v => v.toString(16).padStart(2, '0')).join(''); }).catch(() => {});
@@ -218,18 +219,20 @@
   }
   const notText = name => { $('#sample-note').textContent = `「${name}」看起來不是文字檔（可能是壓縮檔、圖片或其他程式的檔案），沒有讀取。申報資料請放 .txt、.csv 或 Excel 檔。`; };
   // CSV 的標題列要符合放入的那一份資料；不符時不採用，列出缺了哪些欄位
-  function csvProblem(fid, name, text) {
-    if (!/\.csv$/i.test(name)) return '';
-    return DQ.workbook.headProblem(fid, (DQ.parseCSV(String(text).slice(0, 65536))[0] || []));
+  // 回傳 { text, notes } (已改成標準格式) 或 { problem }
+  function csvFix(fid, name, text) {
+    if (!/\.csv$/i.test(name)) return { text, notes: [] };
+    return DQ.workbook.normalizeCsv(fid, text);
   }
+  function keepFix(fid, name, notes) { if (notes && notes.length) { state.fixed[fid] = notes; audit('自動調整', `${name}：${notes.join('；')}`); } else delete state.fixed[fid]; }
   async function readFile(fid, file) {
     if (tooBig(file)) return;
     if (BOOK.test(file.name)) { readWorkbook(file); return; }
     const buf = await file.arrayBuffer();
     if (looksBinary(buf)) { notText(file.name); return; }
-    const text = decodeText(buf), bad = csvProblem(fid, file.name, text);
-    if (bad) { state.notes = [{ source: file.name, why: bad }]; $('#sample-note').textContent = `「${file.name}」${bad}，沒有放入。`; renderMap(); return; }
-    setFile(fid, file.name, text);
+    const fx = csvFix(fid, file.name, decodeText(buf));
+    if (fx.problem) { state.notes = [{ source: file.name, why: fx.problem }]; $('#sample-note').textContent = `「${file.name}」${fx.problem}，沒有放入。`; renderMap(); return; }
+    setFile(fid, file.name, fx.text); keepFix(fid, file.name, fx.notes);
     run();
   }
   for (const fid of SLOTS) {
@@ -282,9 +285,11 @@
         const text = decodeText(buf);
         const byContent = /\.csv$/i.test(f.name) ? DQ.csvLayout(text, DETAIL_LAYOUTS) : BY_LENGTH[text.split(/\r?\n/)[0].length] || null;
         if (byContent) slot = byContent === 'L' && slot === 'prior' ? 'prior' : byContent;
-        const bad = slot && csvProblem(slot, f.name, text);
-        if (bad) { state.notes.push({ source: f.name, why: bad }); renderMap(); continue; }
-        if (slot) { setFile(slot, f.name, text); run(); } else unknown.push(f.name);
+        // 標題不是標準名稱時，看欄位最多對得上哪一種申報明細檔
+        if (!slot && /\.csv$/i.test(f.name)) slot = DQ.workbook.guessByHead(DQ.parseCSV(text.slice(0, 65536))[0] || [], DETAIL);
+        const fx = slot ? csvFix(slot, f.name, text) : null;
+        if (fx && fx.problem) { state.notes.push({ source: f.name, why: fx.problem }); renderMap(); continue; }
+        if (slot) { setFile(slot, f.name, fx.text); keepFix(slot, f.name, fx.notes); run(); } else unknown.push(f.name);
         continue;
       }
       if (slot) readFile(slot, f); else unknown.push(f.name);
@@ -1092,7 +1097,7 @@
     b.disabled = false;
   };
   // 首頁的「開始檢核」：還沒放資料時打開選檔視窗；已放資料時重新檢查並捲到結果
-  $('#btn-start').onclick = () => { if (DETAIL.some(k => state.files[k])) { run(); $('#summary').scrollIntoView({ behavior: 'smooth' }); } else $('#file-book').click(); };
+  if ($('#btn-start')) $('#btn-start').onclick = () => { if (DETAIL.some(k => state.files[k])) { run(); $('#summary').scrollIntoView({ behavior: 'smooth' }); } else $('#file-book').click(); };
   $('#link-updates').onclick = e => { e.preventDefault(); showTab('updates'); };
   document.addEventListener('click', e => { const a = e.target.closest('[data-goto]'); if (a) { e.preventDefault(); showTab(a.dataset.goto); } });
   // 打開時不載入任何資料：只顯示拖放框
