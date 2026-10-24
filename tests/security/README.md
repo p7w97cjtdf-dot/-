@@ -19,6 +19,7 @@ node tests/security/t08-output.js    # 輸出正確性：一鍵修改後下載�
 node tests/security/t09-insights.js  # AI 洞見驗證：AI 說的原因與筆數要經工具用原始資料驗證
 node tests/security/t10-dify.js     # Dify：AI 改送到 Dify 時只在按按鈕後送出、內容已遮蔽、帶金鑰、只接受 https 與 CSP 允許的網址
 node tests/security/t11-upload.js   # 上傳對應：列出每份資料的來源與筆數、新的 Excel 取代舊資料、空白範本不會留著上一份的結果
+node tests/security/t12-close.js    # 收回與返回：選單、進階頁面、原始資料、AI 整理、逐筆確認、手機說明都能收回；返回鍵不會離開工具
 ```
 
 預設使用 `samples/excel/試用資料_含錯誤.xlsx`；可用 `SAMPLE=` 指定其他檔案。測試產生的暫存檔放在系統暫存資料夾 (`TMPDIR_T=` 可指定)。

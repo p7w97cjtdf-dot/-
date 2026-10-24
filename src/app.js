@@ -14,8 +14,9 @@
   const state = { files: {}, res: null, sel: null, cat: '', customRules: [], audit: [] };
   // 稽核軌跡：放入哪些檔案、檢查結果、改了哪些值、下載了什麼 (含檔案內容的 SHA-256，可事後比對檔案有沒有被動過)
   // 只存在這個畫面，關掉就沒有；匯出時遮蔽個資
-  function audit(action, detail, hashOf) {
-    const e = { at: new Date(), action, detail, sha: '' };
+  // more：修改時分欄記下 資料、位置、保單、欄位、原本的值、改成、檢核編號 (匯出時各自一欄)
+  function audit(action, detail, hashOf, more) {
+    const e = Object.assign({ at: new Date(), action, detail, sha: '' }, more);
     state.audit.push(e);
     if (typeof hashOf === 'string' && window.crypto && crypto.subtle) sha256(hashOf).then(h => { e.sha = h; }).catch(() => {});
   }
@@ -328,6 +329,7 @@
       const d = cat.find(c => c.id === i.ruleId); if (d && !i.ruleName) { i.ruleName = d.name; i.ref = i.ref || d.ref; }
     }
     state.all = state.res.issues.concat(state.extra.filter(i => !state.res.issues.includes(i)));
+    doneBack('detail');
     state.sel = null; state.aiSummary = null; state.aiInsights = null; state.aiChecks = null; state.focus = null;   // 資料變了，AI 的結論要重新產生與驗證
     // 寬螢幕：右側直接顯示第一個問題的說明 (不留空白的說明欄)
     if (window.matchMedia('(min-width: 1101px)').matches) { const first = filtered()[0]; if (first) state.sel = first.id; }
@@ -480,9 +482,14 @@
     state.sel = id; renderTable(); renderDetail();
     const r = $(`#issue-list [data-id="${id}"]`); if (r && !quiet) r.scrollIntoView({ block: 'nearest' });
     // 手機 / 窄螢幕：說明直接展開在選取的那一項下面 (不用捲到整張清單的最下面)
-    if (window.matchMedia('(max-width: 1100px)').matches && r) { r.after($('#detail')); if (!quiet) r.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+    if (window.matchMedia('(max-width: 1100px)').matches && r) { r.after($('#detail')); onBack('detail', closeDetail); if (!quiet) r.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
   }
 
+  // 收起手機上展開的說明，回到原本那一項
+  function closeDetail() {
+    const id = state.sel; state.sel = null; renderTable(); renderDetail(); doneBack('detail');
+    const r = $(`#issue-list [data-id="${id}"]`); if (r) { r.scrollIntoView({ block: 'nearest' }); r.focus({ preventScroll: true }); }
+  }
   function ruler(lay, raw, hitFields) {
     const marks = new Array(raw.length).fill(false);
     for (const k of hitFields) { const f = lay.field(k); if (f) for (let p = f.start - 1; p < f.start - 1 + f.len; p++) marks[p] = true; }
@@ -522,6 +529,7 @@
       <div class="detail-head">
         <div class="d-title"><div><h3>詳細說明</h3><p class="hint">${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}</p></div></div>
         <span class="sev-pill ${i.severity}">${SEV[i.severity]}</span>
+        <button class="d-close" type="button" aria-label="收起這個問題的說明">收起</button>
       </div>
       <section class="d-sec"><p class="d-label">問題說明</p>
         <div class="d-box ${i.severity}"><b>${esc(i.message)}</b></div></section>
@@ -543,6 +551,7 @@
         ${fixable ? `<button class="btn cta" id="btn-fix-one" title="${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}">套用建議值</button>` : '<span class="hint">需要人工確認後修改</span>'}
       </div>`;
     $('#btn-detail-list').onclick = exportAudit;
+    el.querySelector('.d-close').onclick = closeDetail;
     const one = $('#btn-fix-one');
     if (one) one.onclick = () => applyFix([i.id]);
     $('#btn-explain').onclick = async () => {
@@ -587,7 +596,8 @@
       if (!i.fix || !DETAIL.includes(i.file) || !state.files[i.file] || (sel && !sel.has(i.id))) continue;
       const lay = rs.layouts[i.file], f = lay && lay.field(i.fix.field), rec = (state.res.data[i.file] || []).find(r => r._line === i.line);
       if (!f || !rec || rec._raw.length !== lay.recordLength) continue;
-      audit('修改', `${SHEET[i.file]} ${rowLabel(i)}${i.policy ? ` ${i.policy.trim()}` : ''} ${f.name}：「${String(rec[f.key]).trim()}」→「${String(i.fix.value).trim()}」（${i.ruleId}）`);
+      audit('修改', `${SHEET[i.file]} ${rowLabel(i)}${i.policy ? ` ${i.policy.trim()}` : ''} ${f.name}：「${String(rec[f.key]).trim()}」→「${String(i.fix.value).trim()}」（${i.ruleId}）`, null,
+        { sheet: SHEET[i.file], where: rowLabel(i), policy: (i.policy || '').trim(), field: f.name, from: String(rec[f.key]).trim(), to: String(i.fix.value).trim(), rule: i.ruleId, why: i.message });
     }
     state.changed = state.changed || new Set();
     for (const fid of DETAIL) {
@@ -624,16 +634,39 @@
   };
   $('#btn-dl-reject').onclick = () => download('reject_' + safeName(state.files.L && state.files.L.name, 'policies.txt'), DQ.report.toRejectFile(rs, state.res, 'L'));
   // 稽核軌跡：CSV (含 BOM，Excel 可直接開)；內容先遮蔽個資，避免轉寄時外流
+  // 稽核軌跡：Excel 檔，每一項各自一欄 (修改紀錄分成 資料、位置、保單號碼、欄位、原本的值、改成、檢核編號)，
+  // 第二張工作表寫匯出時間、檢查依據與檢查的資料。內容先遮蔽個資，避免轉寄時外流。Excel 元件沒載入時改用 CSV (同樣的欄位)
   async function exportAudit() {
     await new Promise(r => setTimeout(r, 50));   // 等雜湊值算完
-    const q = v => { v = String(v == null ? '' : v); if (/^[=+@\t\r]|^-[^\d]/.test(v)) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     const ctx = DQ.aiPayload.context(state.res || { data: {} }, reconCtx());
-    const p2 = n => String(n).padStart(2, '0'), ts = d => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
-    const rows = [['時間', '動作', '內容', '檔案內容 SHA-256']].concat(state.audit.map(e => [ts(e.at), e.action, DQ.pii.redact(e.detail, ctx).text, e.sha]));
-    const head = `# 申報資料檢核助手 稽核軌跡（${ts(new Date())} 匯出）\r\n# 檢查依據：${$('#rule-version').textContent}\r\n`;
-    const d = new Date(); state.auditName = `audit_trail_${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}.csv`;
-    download(state.auditName, '\uFEFF' + head + rows.map(r => r.map(q).join(',')).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
+    const red = v => DQ.pii.redact(String(v == null ? '' : v), ctx).text;
+    const p2 = n => String(n).padStart(2, '0'), d = new Date();
+    const day = x => `${x.getFullYear()}-${p2(x.getMonth() + 1)}-${p2(x.getDate())}`, ts = x => `${day(x)} ${p2(x.getHours())}:${p2(x.getMinutes())}:${p2(x.getSeconds())}`;
+    const head = ['時間', '動作', '資料', '位置', '保單號碼', '欄位', '原本的值', '改成', '檢核編號', '說明', '檔案內容 SHA-256'];
+    const rows = state.audit.map(e => e.action === '修改' && e.field
+      ? [ts(e.at), e.action, e.sheet, e.where, e.policy, e.field, red(e.from), red(e.to), e.rule, e.why || '', e.sha]
+      : [ts(e.at), e.action, '', '', '', '', '', '', '', red(e.detail), e.sha]);
+    const info = [['項目', '內容'], ['工具', '申報資料檢核助手'], ['匯出時間', ts(d)], ['檢查依據', $('#rule-version').textContent],
+      ['檢查的資料', SLOTS.filter(k => state.files[k]).map(k => `${SLOT_NAME[k] || k}：${state.src[k] || state.files[k].name}（${recCount(k)} 筆）`).join('\n') || '（沒有）'],
+      ['紀錄筆數', String(rows.length)], ['說明', '身分證號、姓名、地址、電話、Email 已遮蔽。SHA-256 是放入或下載的檔案內容的雜湊值，可用來確認檔案事後沒有被改過。紀錄只存在網頁上，關掉網頁就沒有。']];
+    // 檔名：audit-trail_資料名稱_日期_時間 (英數字，避免部分瀏覽器存成亂碼)
+    const k0 = SLOTS.find(k => state.files[k]);
+    const stem = k0 ? String(state.src[k0] || state.files[k0].name).replace(/「.*$/, '').replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '').slice(0, 40) : '';
+    const name = `audit-trail_${stem ? stem + '_' : ''}${day(d)}_${p2(d.getHours())}${p2(d.getMinutes())}`;
+    if (window.XLSX) {
+      const ws = XLSX.utils.aoa_to_sheet([head].concat(rows)), wi = XLSX.utils.aoa_to_sheet(info), wb = XLSX.utils.book_new();
+      ws['!cols'] = [19, 10, 12, 10, 16, 18, 18, 18, 14, 60, 18].map(w => ({ wch: w }));
+      ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: head.length - 1 } }) };
+      wi['!cols'] = [{ wch: 12 }, { wch: 100 }];
+      XLSX.utils.book_append_sheet(wb, ws, '稽核軌跡'); XLSX.utils.book_append_sheet(wb, wi, '匯出資訊');
+      state.auditName = name + '.xlsx';
+      return download(state.auditName, new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+    const q = v => { v = String(v == null ? '' : v); if (/^[=+@\t\r]|^-[^\d]/.test(v)) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    state.auditName = name + '.csv';
+    download(state.auditName, '\uFEFF' + [head].concat(rows).map(r => r.map(q).join(',')).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
   }
+
   $('#btn-dl-audit').onclick = exportAudit;
   $('#btn-dl-report').onclick = () => download('check_report.html', reportHTML(), 'text/html;charset=utf-8');
 
@@ -856,13 +889,51 @@
 
   // ---------- 分頁 ----------
   // 進階功能 (頁尾)：切換後回到頁首；每個進階頁上方有「回到檢查結果」
+  // ---------- 收回與返回 ----------
+  // 打開進階頁面、手機上的問題說明、逐筆確認時記一筆瀏覽紀錄：按手機或瀏覽器的返回鍵就關掉，不會離開工具
+  const backStack = []; let skipPop = 0;
+  function onBack(key, close) {
+    if (backStack.some(b => b.key === key)) return;
+    backStack.push({ key, close });
+    try { history.pushState({ dq: key }, ''); } catch (e) { /* 沙盒環境不支援時，只能用畫面上的按鈕關閉 */ }
+  }
+  function doneBack(key) {
+    const i = backStack.findIndex(b => b.key === key); if (i < 0) return;
+    backStack.splice(i, 1); skipPop++;
+    try { history.back(); } catch (e) { skipPop--; }
+  }
+  window.addEventListener('popstate', () => { if (skipPop) { skipPop--; return; } const b = backStack.pop(); if (b) b.close(); });
   function showTab(view) {
+    if (view === 'check') doneBack('view'); else onBack('view', () => showTab('check'));
     document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x.dataset.view === view));
     document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
     if (view !== 'check') window.scrollTo({ top: $('#view-' + view).offsetTop - 12 });
+    else if (!document.body.classList.contains('no-data')) $('#view-check').scrollIntoView({ block: 'start' });
   }
   document.querySelectorAll('.view:not(#view-check)').forEach(v => v.insertAdjacentHTML('afterbegin', '<button class="back" type="button">← 回到檢查結果</button>'));
   document.addEventListener('click', e => { if (e.target.closest('.back')) showTab('check'); });
+  $('#btn-ai-close').onclick = () => { $('#ai-box').hidden = true; };
+  // 展開的區塊內容較長時，底部加「收起」，不用捲回最上面
+  document.addEventListener('toggle', e => {
+    const d = e.target;
+    if (!(d instanceof HTMLDetailsElement) || !d.open || d.classList.contains('more-menu') || d.querySelector(':scope > .fold')) return;
+    if (d.offsetHeight > 240) d.insertAdjacentHTML('beforeend', '<button type="button" class="fold">收起 ▲</button>');
+  }, true);
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.fold');
+    if (b) { const d = b.parentElement, sum = d.querySelector(':scope > summary'); d.open = false; if (sum && sum.getBoundingClientRect().top < 0) sum.scrollIntoView({ block: 'center' }); }
+    // 「篩選・下載」選單：點選單外面就收起
+    document.querySelectorAll('details.more-menu[open]').forEach(m => { if (!m.contains(e.target)) m.open = false; });
+  });
+  // Esc：依序收起選單、手機上的說明、進階頁面
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !$('#review').hidden || ($('#ai-preview') && $('#ai-preview').open)) return;
+    const m = document.querySelector('details.more-menu[open]');
+    if (m) { m.open = false; m.querySelector('summary').focus(); return; }
+    if ($('#issue-list').contains($('#detail'))) return closeDetail();
+    const v = [...document.querySelectorAll('.view')].find(x => !x.hidden);
+    if (v && v.id !== 'view-check') showTab('check');
+  });
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.view));
   const hash = (location.hash || '').slice(1);
 
@@ -892,7 +963,7 @@
 
   // 提供給規則匯入分頁使用
   DQ.app = {
-    state, run, showTab, select, download, applyFix, rowLabel,
+    state, run, showTab, select, download, applyFix, rowLabel, onBack, doneBack,
     setPacks(list) {
       state.packs = list;
       try {
