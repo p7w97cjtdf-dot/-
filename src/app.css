@@ -1111,3 +1111,11 @@ body.no-data .drop.big { padding: 28px 20px; }
 .scope-note .scope-off { color: #6B5B3E; }
 #view-check #summary .tile .v .v-note { display: block; font-size: 11px; font-weight: 600; color: var(--warn); }
 .run-status .scope-flag { color: var(--warn); font-weight: 700; }
+
+/* ===== 主管核可 ===== */
+details.approve > summary { cursor: pointer; list-style: none; padding: 4px 0; }
+details.approve > summary::-webkit-details-marker { display: none; }
+.ap-card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 8px 0; font-size: 14px; }
+.ap-card ul { margin: 8px 0 0; padding-left: 20px; }
+.pack-trial { margin: 4px 0; padding: 6px 10px; border-radius: 8px; background: #F1F5F9; font-size: 13px; }
+.pack-acts .chip.cta { background: var(--cta); border-color: var(--cta); color: #fff; font-weight: 700; }

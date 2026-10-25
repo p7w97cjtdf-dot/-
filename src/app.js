@@ -23,14 +23,23 @@
   // 匯入並套用的規則與內建規則合併
   function activeRules() {
     const base = state.customRules.length ? DQ.dsl.extend(BASE, state.customRules) : BASE;
-    state.dslStats = base.dslStats || null;
-    const out = DQ.rulePacks.apply(base, state.packs.filter(x => x.on).map(x => x.pack));
+
+    const live = state.packs.filter(x => x.on && usable(x)).map(x => x.pack);
+    const out = DQ.rulePacks.apply(base, live);
     state.disabled = out.disabled;
+    // 自訂規則與更新包規則：無法判定的筆數、格式不對沒有執行的規則一起算進「檢查範圍」
+    const ps = out.ruleset.dslStats || { unjudged: {}, invalid: [] };
+    const skipped = live.flatMap(pk => pk.rules.filter(r => DQ.dsl.validateRule(DQ.rulePacks.withEffective(r), out.ruleset.layouts).length).map(r => r.id || '（沒有編號）'));
+    // (統計物件在檢查時才會累計筆數，所以存參照，檢查完再合併)
+    state.dslSources = [base.dslStats, ps].filter(Boolean); state.dslSkipped = skipped;
     return (rs = out.ruleset);
   }
   // 法規更新包 (src/rule-packs.js)：存在這台電腦的瀏覽器
   state.packs = [];
-  try { const saved = JSON.parse(localStorage.getItem('dq-rule-packs') || '[]'); if (Array.isArray(saved)) state.packs = saved.filter(x => x && x.pack).map(x => ({ pack: DQ.rulePacks.normalize(x.pack), on: x.on !== false, imported: !!x.imported })); } catch (e) { /* 無法讀取時忽略 */ }
+  // 法規更新要主管核可：自行匯入或本機建立的更新包，只有附主管簽章 (approvedFile) 且驗證通過 (verified) 才會套用；
+  // 驗證在開啟時重新做 (存在這台電腦的「已核可」狀態不能被改來繞過)
+  try { const saved = JSON.parse(localStorage.getItem('dq-rule-packs') || '[]'); if (Array.isArray(saved)) state.packs = saved.filter(x => x && x.pack).map(x => ({ pack: DQ.rulePacks.normalize(x.pack), on: x.on !== false, imported: !!x.imported, approvedFile: x.approvedFile || null, approval: null, verified: false, impact: x.impact || null })); } catch (e) { /* 無法讀取時忽略 */ }
+  const usable = x => x.official || (x.verified && x.approval);
   // 官方發布的更新包 (rules/updates/index.json)：打開工具時自動下載並套用，不存進瀏覽器；使用者可在本機關閉
   const officialOff = () => { try { return new Set(JSON.parse(localStorage.getItem('dq-official-off') || '[]')); } catch (e) { return new Set(); } };
   const offKey = p => `${p.id}@${p.version || ''}`;
@@ -364,8 +373,8 @@
     }
     state.all = state.res.issues.concat(state.extra.filter(i => !state.res.issues.includes(i)));
     // 檢查範圍：沒有執行或結果不完整的檢查 (停用、無法判定、格式不對、沒檢查完、沒放入的資料)
-    state.scope = DQ.coverage.scope(SLOTS.filter(k => state.files[k]), { disabled: state.disabledCount, unjudged: state.dslStats && state.dslStats.unjudged,
-      invalid: (state.dslStats ? state.dslStats.invalid : []).concat(state.droppedRules || []), truncated: Object.values(state.res.summary.byFile).some(b => b.truncated) });
+    const src = state.dslSources || [], unjudged = Object.assign({}, ...src.map(x => x.unjudged)), invalid = [...new Set(src.flatMap(x => x.invalid).concat(state.dslSkipped || [], state.droppedRules || []))];
+    state.scope = DQ.coverage.scope(SLOTS.filter(k => state.files[k]), { disabled: state.disabledCount, unjudged, invalid, truncated: Object.values(state.res.summary.byFile).some(b => b.truncated) });
     doneBack('detail');
     state.sel = null; state.aiSummary = null; state.aiInsights = null; state.aiChecks = null; state.focus = null;   // 資料變了，AI 的結論要重新產生與驗證
     // 寬螢幕：右側直接顯示第一個問題的說明 (不留空白的說明欄)
@@ -908,7 +917,7 @@
       [`理由：${esc(p.reason || '（沒寫）')}${p.note ? `　${esc(p.note)}` : ''}`, p.why ? `<span class="hint">${esc(p.why)}</span>` : `實際：${esc(p.fact)}`]));
     const pre = c.preventions.map((p, k) => vItem(p.status, p.title, p.status === 'invalid' ? [`<span class="hint">${esc(p.errors.join('；'))}</span>`] :
       [`試跑 ${p.checked.toLocaleString()} 筆：抓到現有問題 <b>${p.caught}</b> / ${p.target} 筆，誤報（沒有任何問題的資料被擋下）<b>${p.falseAlarm}</b> 筆`, `<span class="hint">檢查條件：${esc(SHEET[p.file] || p.file)}的資料應該 ${esc(p.text)}</span>`],
-      p.caught && !state.customRules.some(x => x.name === p.title) ? `<button class="linkish" type="button" data-add-prev="${k}">加入成為自訂檢查（建議確認）</button>` : ''));
+      p.caught && !((state.packs.find(x => x.pack.id === 'local') || { pack: { rules: [] } }).pack.rules.some(x => x.name === p.title)) ? `<button class="linkish" type="button" data-add-prev="${k}">加入本機自訂更新（主管核可後套用）</button>` : ''));
     return vBlock('整體狀況・工具判定', [risk], '') + vBlock('先改什麼・用數字檢查 AI 的理由', pri, 'AI 沒有提供可以檢查的修改順序。') + vBlock('以後怎麼避免・預防檢查拿現在的資料試跑', pre, 'AI 沒有提供可以試跑的預防檢查。');
   }
   // AI 提出的共同原因 → 工具用原始資料驗證的結果 (第 3 級：只有驗證過的筆數才顯示為事實)
@@ -931,8 +940,8 @@
     if (add && state.aiChecks) {
       // 加入預防檢查：重新檢查後保留 AI 的整理 (資料沒變，只多了檢查)
       const p = state.aiChecks.preventions[+add.dataset.addPrev], keep = { s: state.aiSummary, i: state.aiInsights, c: state.aiChecks };
-      DQ.app.setCustomRules(state.customRules.concat(p.rule));
-      audit('加入檢查', `AI 提出、經試跑驗證的預防檢查「${p.title}」（抓到 ${p.caught}/${p.target}、誤報 ${p.falseAlarm}）`);
+      addDraftRules([p.rule], 'ai');
+      audit('加入檢查', `AI 提出、經試跑驗證的預防檢查「${p.title}」（抓到 ${p.caught}/${p.target}、誤報 ${p.falseAlarm}），已放入本機自訂更新，主管核可後才會套用`);
       Object.assign(state, { aiSummary: keep.s, aiInsights: keep.i, aiChecks: keep.c });
       $('#ai-box').hidden = false; const out = $('#ai-out'); out.className = 'ai-out done'; showAI(out, keep.s, keep.i, summaryChecksHTML(keep.c)); renderReport();
       return;
@@ -1069,20 +1078,56 @@
     try { const t = await DQ.ai.ping(); $('#dify-note').textContent = `連線成功，Dify 回覆：「${t.slice(0, 40)}」`; } catch (e) { $('#dify-note').textContent = e.message; }
   };
 
+  // 本機自訂更新 (待主管核可)：AI 轉換的規則、AI 建議的預防檢查都放這裡，主管核可後才會套用
+  function addDraftRules(rules, src) {
+    let x = state.packs.find(p => p.pack.id === 'local');
+    if (!x) { x = { pack: DQ.rulePacks.normalize({ id: 'local', name: '本機自訂更新', issuedAt: new Date().toISOString().slice(0, 10).replace(/-/g, '') }), on: true }; state.packs = state.packs.concat(x); }
+    const ids = new Set(rules.map(r => r.id));
+    x.pack.rules = x.pack.rules.filter(r => !ids.has(r.id)).concat(rules.map(r => Object.assign({}, r, src ? { src } : {})));
+    revoke(x);
+    audit('建立更新（待主管核可）', `本機自訂更新加入 ${rules.length} 條規則${src === 'ai' ? '（AI 產生）' : ''}，主管核可後才會套用`);
+    DQ.app.setPacks(state.packs.slice());
+  }
+  // 更新包內容有改動：原本的核可失效，要重新申請
+  function revoke(x) { if (x.approvedFile || x.approval) audit('核可失效', `「${x.pack.name}」內容有改動，原本的主管核可失效，需要重新申請`); x.approvedFile = null; x.approval = null; x.verified = false; }
+  // 驗證存在這台電腦的「已核可」更新包 (開啟時)；驗證不過的不套用
+  async function verifyApproved() {
+    for (const x of state.packs.filter(y => !y.official && y.approvedFile)) {
+      const v = await DQ.approval.verify(x.approvedFile, PACK_KEY_PINS);
+      x.verified = v.ok && JSON.stringify(v.pack) === JSON.stringify(x.pack); x.approval = x.verified ? v.approval : null;
+    }
+  }
+  // 舊版存在這台電腦的自訂規則 (直接套用)：改放進本機自訂更新，等主管核可
+  try {
+    const legacy = JSON.parse(localStorage.getItem('dq-custom-rules') || '[]');
+    if (Array.isArray(legacy) && legacy.length) {
+      let x = state.packs.find(p => p.pack.id === 'local');
+      if (!x) { x = { pack: DQ.rulePacks.normalize({ id: 'local', name: '本機自訂更新' }), on: true }; state.packs.push(x); }
+      const ids = new Set(legacy.map(r => r.id));
+      x.pack.rules = x.pack.rules.filter(r => !ids.has(r.id)).concat(legacy.map(r => Object.assign({}, r, { src: 'ai' })));
+      x.approvedFile = null; x.approval = null; x.verified = false;
+      localStorage.setItem('dq-rule-packs', JSON.stringify(state.packs.filter(y => !y.official).map(y => ({ pack: y.pack, on: y.on, imported: y.imported, approvedFile: y.approvedFile || null }))));
+      localStorage.removeItem('dq-custom-rules');
+      state.customRules = []; state.droppedRules = [];
+    }
+  } catch (e) { /* ignore */ }
+
   // 提供給規則匯入分頁使用
   DQ.app = {
-    state, run, showTab, select, download, applyFix, rowLabel, onBack, doneBack,
+    state, run, showTab, select, download, applyFix, rowLabel, onBack, doneBack, audit,
     setPacks(list) {
       state.packs = list;
       try {
-        localStorage.setItem('dq-rule-packs', JSON.stringify(list.filter(x => !x.official)));
+        localStorage.setItem('dq-rule-packs', JSON.stringify(list.filter(x => !x.official).map(x => ({ pack: x.pack, on: x.on, imported: x.imported, approvedFile: x.approvedFile || null, impact: x.impact || null }))));
         localStorage.setItem('dq-official-off', JSON.stringify(list.filter(x => x.official && !x.on).map(x => offKey(x.pack))));
       } catch (e) { /* ignore */ }
       if (state.res) run(); else activeRules(); renderVersion();
     },
     loadOfficial,
     activeRules, base: BASE,
-    setCustomRules(rules) { state.customRules = rules; try { localStorage.setItem('dq-custom-rules', JSON.stringify(rules)); } catch (e) { /* ignore */ } run(); },
+    usable, pins: PACK_KEY_PINS, addDraftRules, verifyApproved,
+    // 舊介面：自訂規則改為加入「本機自訂更新」(待主管核可)，不再直接套用
+    setCustomRules(rules) { addDraftRules(rules, 'ai'); },
   };
 
   // 手機上清單預設收起 (主要用逐筆確認)，按「看全部清單」展開
@@ -1097,6 +1142,8 @@
       (on.length ? `另套用法規更新：${on.map(x => x.pack.name + (x.pack.version ? ` 第 ${x.pack.version} 版` : '')).join('、')}。` : '');
   }
   activeRules(); renderVersion();
+  // 開啟時重新驗證「已核可」的更新包，通過的才套用
+  verifyApproved().then(() => { if (state.packs.some(x => x.approvedFile)) DQ.app.setPacks(state.packs.slice()); });
   // 送給 AI 之前：顯示實際送出的完整內容 (系統指示＋遮蔽後的資料)，使用者按「送出」才送。每次都要確認，不提供「不再詢問」
   DQ.ai.confirmSend = (text, counts) => new Promise(resolve => {
     const d = $('#ai-preview'), desc = DQ.pii.describe(counts);

@@ -22,6 +22,7 @@ node tests/security/t11-upload.js   # 上傳對應：列出每份資料的來源
 node tests/security/t12-close.js    # 收回與返回：選單、進階頁面、原始資料、AI 整理、逐筆確認、手機說明都能收回；返回鍵不會離開工具
 node tests/security/t13-ai-transmit.js # AI 傳輸：每次送出都確認、預覽＝實際送出、傳送紀錄與稽核軌跡有完整內容；金鑰只留在分頁、只收應用金鑰、設定檔不放金鑰
 node tests/security/t14-e2e.js        # 完整流程：原始資料 → 檢核 → 修改 → 再檢核 → 匯出數字一致；停用、沒執行、無法判定的檢查不會讓結果看起來更安全
+node tests/security/t15-approval.js   # 主管核可：匯入或自建的更新不套用；試跑 → 申請 → 核可 → 匯入已核可檔才套用；竄改、別把金鑰、核可後修改都不套用
 ```
 
 預設使用 `samples/excel/試用資料_含錯誤.xlsx`；可用 `SAMPLE=` 指定其他檔案。測試產生的暫存檔放在系統暫存資料夾 (`TMPDIR_T=` 可指定)。

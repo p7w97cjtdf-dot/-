@@ -11,6 +11,11 @@ fs.rmSync(TMP, { recursive: true, force: true }); fs.mkdirSync(TMP, { recursive:
 const cp = (from, to) => { fs.copyFileSync(from, path.join(TMP, to)); return path.join(TMP, to); };
 const DIRTY = cp(process.env.SAMPLE || path.join(ROOT, 'samples', 'excel', '試用資料_含錯誤.xlsx'), 'dirty.xlsx');
 const ok = {}, facts = {};
+// 法規更新要主管核可才會套用：測試用的主管金鑰 (只在這次測試；工具用本機伺服器把固定指紋換成這把)
+const crypto = require('crypto'), A = require(path.join(ROOT, 'src', 'approval.js'));
+const BOSS = (() => { const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }); const j = publicKey.export({ format: 'jwk' });
+  return { pem: privateKey.export({ type: 'pkcs8', format: 'pem' }), id: crypto.createHash('sha256').update(JSON.stringify([j.x, j.y])).digest('hex').slice(0, 16) }; })();
+const approvedFile = async (pack, name) => { const f = path.join(TMP, name); fs.writeFileSync(f, JSON.stringify(await A.approve(await A.request(pack, null, '測試'), BOSS.pem, '測試主管'))); return f; };
 const nonSw = log => log.errors.filter(e => !/serviceWorker|sandboxed and lacks/.test(e));
 // 下載：依序收下 (中文檔名在部分系統會變成 download，所以依按鈕對應)
 async function grab(page, sel) {
@@ -74,8 +79,8 @@ const nodeKeys = files => C.validate(all, Object.fromEntries(Object.entries(file
     const one = path.join(TMP, 'LFL01_2025.txt'); fs.writeFileSync(one, lines.join('\n'));
     const base = C.validate(all, { L: { text: lines.join('\n') } }).issues;
     const rule = base.filter(i => i.severity === 'error').map(i => i.ruleId);
-    const pack = path.join(TMP, 'disable.json'); fs.writeFileSync(pack, JSON.stringify({ id: 'hide-one', name: '測試：停用性別代碼檢查', version: '1', issuedAt: '20261024', basis: '測試', disable: [...new Set(rule)] }));
-    const { browser, page, log } = await open({ acceptDialogs: true });
+    const pack = await approvedFile({ id: 'hide-one', name: '測試：停用性別代碼檢查', version: '1', issuedAt: '20261024', basis: '測試', disable: [...new Set(rule)] }, 'disable.json');
+    const { browser, page, log } = await open({ pin: BOSS.id });
     await page.evaluate(() => DQ.app.showTab('updates')); await page.setInputFiles('#file-pack', pack); await page.waitForTimeout(1000); await page.evaluate(() => DQ.app.showTab('check'));
     await page.setInputFiles('#file-book', one); await page.waitForTimeout(2500);
     const s = await screen(page);
@@ -106,11 +111,12 @@ const nodeKeys = files => C.validate(all, Object.fromEntries(Object.entries(file
   // ===== D. 自訂規則無法判定、格式不對：不算通過 =====
   {
     const onlyL = path.join(TMP, 'LFL01_2025.txt'); fs.copyFileSync(path.join(ROOT, 'samples/clean/LFL01_2025.txt'), onlyL);
-    const { browser, page, log } = await open();
-    await page.evaluate(() => localStorage.setItem('dq-custom-rules', JSON.stringify([
-      { id: 'U1', file: 'L', name: '保單號碼要是數字', assert: { field: { fn: 'num', args: ['policyNo'] }, op: 'gt', value: 0 } },
-      { id: 'U2', file: 'L', name: '不安全的式樣', assert: { field: 'policyNo', op: 'matches', value: '(a+)+' } }])));
-    await page.reload(); await page.waitForTimeout(800);
+    // 主管核可的更新包裡有一條無法判定的規則、一條格式不對的規則
+    const pack = await approvedFile({ id: 'custom', name: '測試：自訂規則', rules: [
+      { id: 'U1', file: 'L', name: '保單號碼要是數字', scope: 'record', assert: { field: { fn: 'num', args: ['policyNo'] }, op: 'gt', value: 0 }, message: '測試' },
+      { id: 'U2', file: 'L', name: '不安全的式樣', scope: 'record', assert: { field: 'policyNo', op: 'matches', value: '(a+)+' }, message: '測試' }] }, 'custom.json');
+    const { browser, page, log } = await open({ pin: BOSS.id });
+    await page.evaluate(() => DQ.app.showTab('updates')); await page.setInputFiles('#file-pack', pack); await page.waitForTimeout(800); await page.evaluate(() => DQ.app.showTab('check'));
     await page.setInputFiles('#file-book', onlyL); await page.waitForTimeout(2500);
     const s = await screen(page);
     const rep = fs.readFileSync((await grab(page, '#btn-dl-report')).path, 'utf8');

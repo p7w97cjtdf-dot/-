@@ -1,0 +1,29 @@
+{
+  "id": "test-add",
+  "name": "【測試】高保額保單提醒",
+  "version": "1",
+  "issuedAt": "20261025",
+  "basis": "測試用，非真實函令",
+  "note": "測試用：臺幣保險金額超過 2,000 萬的保單列為「建議確認」。用「試用資料_含錯誤.xlsx」會找到 2 筆。",
+  "rules": [
+    {
+      "id": "T-HIGH-01",
+      "name": "臺幣保險金額超過 2,000 萬須加強審核",
+      "file": "L",
+      "scope": "record",
+      "severity": "warning",
+      "assert": {
+        "field": {
+          "fn": "amount",
+          "args": [
+            "sumInsuredTwd"
+          ]
+        },
+        "op": "lte",
+        "value": 20000000
+      },
+      "message": "臺幣保險金額超過 2,000 萬，請確認核保紀錄",
+      "suggestion": "確認核保與再保安排後保留"
+    }
+  ]
+}

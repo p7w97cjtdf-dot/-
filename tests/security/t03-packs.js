@@ -15,46 +15,22 @@ const evilFile = path.join(TMP, 'test-disable.json'); fs.writeFileSync(evilFile,
 const sha = t => crypto.createHash('sha256').update(t).digest('hex');
 const OFF = 'https://p7w97cjtdf-dot.github.io/-/rules/updates/';
 
-// 用本機伺服器開啟工具：src/app.js 的 PACK_KEY_PINS 換成測試金鑰的指紋 (模擬「這個版本核准的公鑰」)；
-// 不換時就是正式版本固定的指紋
-const http = require('http');
-function server(pin) {
-  return new Promise(res => {
-    const srv = http.createServer((q, r) => {
-      const f = path.join(ROOT, decodeURIComponent(q.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
-      if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); return r.end(); }
-      let body = fs.readFileSync(f);
-      if (pin && f.endsWith(path.join('src', 'app.js'))) body = Buffer.from(String(body).replace(/PACK_KEY_PINS = Object\.freeze\(\[[^\]]*\]\)/, `PACK_KEY_PINS = Object.freeze(['${pin}'])`));
-      const type = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.json': 'application/json' }[path.extname(f)] || 'application/octet-stream';
-      r.writeHead(200, { 'content-type': type + '; charset=utf-8' }); r.end(body);
-    }).listen(0, () => res(srv));
-  });
-}
 async function scenario(name, opts, act) {
-  let srv = null;
-  if (opts.pin !== undefined) {
-    srv = await server(opts.pin);
-    const port = srv.address().port, inner = opts.serve;
-    opts = Object.assign({}, opts, { url: `http://localhost:${port}/index.html`, serve: (u, r) => {
-      if (inner && inner(u.replace(`http://localhost:${port}/rules/updates/`, OFF), r)) return true;
-      if (u.startsWith(`http://localhost:${port}/`)) { r.continue(); return true; }
-      return false;
-    } });
-  }
   const t = await open(opts);
   await t.page.setInputFiles('#file-book', SAMPLE); await t.page.waitForTimeout(2500);
   const before = await t.page.evaluate(() => DQ.app.state.all.length);
   const r = await act(t);
   const after = await t.page.evaluate(() => ({ n: DQ.app.state.all.length, hidden: DQ.app.state.disabledCount, note: document.querySelector('#hidden-note').hidden ? '' : document.querySelector('#hidden-note').textContent,
     report: /hidden-note/.test(document.querySelector('#report-frame').srcdoc), packs: DQ.app.state.packs.map(x => ({ id: x.pack.id, on: x.on, official: !!x.official, imported: !!x.imported })), rejected: DQ.app.state.officialRejected || [] }));
-  await t.browser.close(); if (srv) srv.close();
+  await t.browser.close();
   return Object.assign({ name, before, dialogs: t.log.dialogs.map(d => d.split('\n')[0]) }, after, r || {});
 }
 (async () => {
   const out = [];
   const imp = async t => { await t.page.evaluate(() => DQ.app.showTab('updates')); await t.page.setInputFiles('#file-pack', evilFile); await t.page.waitForTimeout(1200); await t.page.evaluate(() => DQ.app.showTab('check')); await t.page.waitForTimeout(300); };
-  out.push(await scenario('自行匯入停用包，按「取消」', {}, imp));
-  out.push(await scenario('自行匯入停用包，按「確定」', { acceptDialogs: true }, imp));
+  // 自行匯入、沒有主管核可：不論按什麼都不套用 (要主管核可)
+  out.push(await scenario('自行匯入停用包 (沒有主管核可)', {}, imp));
+  out.push(await scenario('自行匯入停用包 (對話框都按確定，仍沒有主管核可)', { acceptDialogs: true }, imp));
   // 官方清單：同一個停用包，分別是 雜湊不符 / 雜湊相符 / 停用不存在的檢查
   const text = JSON.stringify(evil), bad = JSON.stringify(Object.assign({}, evil, { id: 'bad', disable: ['NO_SUCH_RULE'] }));
   const serve = (idx, pk) => (u, r) => {
@@ -83,7 +59,7 @@ async function scenario(name, opts, act) {
   const pass = out.map(o => {
     const applied = o.packs.some(p => p.official && p.on);
     const expectApplied = /^簽章正確/.test(o.name);
-    const ok = /自行匯入/.test(o.name) ? true : expectApplied ? applied && o.n < out[0].before && !!o.note : !applied && o.n === o.before && o.rejected.length > 0;
+    const ok = /自行匯入/.test(o.name) ? o.n === o.before && !o.note : expectApplied ? applied && o.n < out[0].before && !!o.note : !applied && o.n === o.before && o.rejected.length > 0;
     return { name: o.name, ok, rejected: o.rejected.map(x => x.why || x.reason || x).join('；').slice(0, 120) };
   });
   console.log(JSON.stringify({ scenarios: out, pass }, null, 2));

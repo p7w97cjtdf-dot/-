@@ -4,8 +4,32 @@ const ROOT = path.join(__dirname, '..', '..');
 function load() {
   try { return require('playwright'); } catch (e) { return require(path.join(process.env.PW_PATH || '', 'playwright')); }
 }
+// 本機伺服器：src/app.js 的 PACK_KEY_PINS 換成測試金鑰的指紋 (模擬「這個版本核准的金鑰」)
+function pinServer(pin) {
+  const http = require('http'), fs = require('fs');
+  return new Promise(res => {
+    const srv = http.createServer((q, r) => {
+      const f = path.join(ROOT, decodeURIComponent(q.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
+      if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); return r.end(); }
+      let body = fs.readFileSync(f);
+      if (f.endsWith(path.join('src', 'app.js'))) body = Buffer.from(String(body).replace(/PACK_KEY_PINS = Object\.freeze\(\[[^\]]*\]\)/, `PACK_KEY_PINS = Object.freeze(['${pin}'])`));
+      const type = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.json': 'application/json' }[path.extname(f)] || 'application/octet-stream';
+      r.writeHead(200, { 'content-type': type + '; charset=utf-8' }); r.end(body);
+    }).listen(0, () => res(srv));
+  });
+}
 async function open(opts) {
   opts = Object.assign({ viewport: { width: 1360, height: 950 }, ai: false, url: 'file://' + path.join(ROOT, 'index.html') }, opts);
+  let srv = null;
+  if (opts.pin) {
+    srv = await pinServer(opts.pin);
+    const port = srv.address().port, inner = opts.serve, OFF = 'https://p7w97cjtdf-dot.github.io/-/';
+    opts = Object.assign({}, opts, { url: `http://localhost:${port}/index.html`, serve: (u, r) => {
+      if (inner && inner(u.replace(`http://localhost:${port}/`, OFF), r)) return true;
+      if (u.startsWith(`http://localhost:${port}/`)) { r.continue(); return true; }
+      return false;
+    } });
+  }
   const { chromium } = load();
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const ctx = await browser.newContext({ viewport: opts.viewport, acceptDownloads: true, serviceWorkers: 'block' });
@@ -35,6 +59,7 @@ async function open(opts) {
   const click = page.click.bind(page);
   page.click = async (sel, o) => { await page.evaluate(q => { const el = document.querySelector(q), m = el && el.closest('details.more-menu'); if (m) m.open = true; }, sel).catch(() => {}); return click(sel, o); };
   await page.goto(opts.url); await page.waitForTimeout(800);
+  if (srv) { const close = browser.close.bind(browser); browser.close = async () => { await close(); srv.close(); }; }
   return { browser, ctx, page, log, ROOT };
 }
 module.exports = { open, ROOT };
