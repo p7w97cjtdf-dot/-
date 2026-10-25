@@ -273,7 +273,7 @@
     <div class="block">
       <div class="block-head">
         <div><h2>法規更新</h2>
-          <p class="hint">主管機關調整申報格式或新增檢核時，不必等系統改版：匯入法遵或主管單位發布的「規則更新包」，或直接在下面新增檢查。更新會立刻套用到檢查結果，只存在這台電腦的瀏覽器；可以下載成檔案發給同事，大家用同一套規則。</p></div>
+          <p class="hint">主管機關調整申報格式或新增檢核時，不必等系統改版：匯入規則更新包，或在下面新增檢查。<b>所有更新都要主管核可才會套用</b>：先「試跑」看影響，再「申請主管核可」產生申請檔寄給主管；主管核可後回傳「已核可」檔，匯入後才會套用。官方網站發布的更新已由核准者簽章，會自動套用。</p></div>
       </div>
       <div class="actions">
         <label class="btn cta" for="file-pack">匯入規則更新包<input type="file" id="file-pack" accept=".json,application/json" hidden></label>
@@ -283,6 +283,18 @@
       <p class="hint" id="pack-official" role="status"></p>
       <div id="pack-list" class="pack-list"></div>
     </div>
+
+    <details class="block approve" id="approve-box">
+      <summary><b>主管核可</b><span class="hint">　給持有核可金鑰的主管使用</span></summary>
+      <p class="hint">放入同仁寄來的「核可申請」檔，確認內容後，用核可私鑰簽章，產生「已核可」檔回傳給申請人。私鑰只在這台電腦的瀏覽器裡用來簽章，不會上傳、不會保存；只有這個版本核准的主管金鑰簽的檔案才會被接受。</p>
+      <div class="form-grid">
+        <label>核可申請檔<input type="file" id="ap-req" accept=".json,application/json"></label>
+        <label>核可私鑰（.pem）<input type="file" id="ap-key" accept=".pem,.key,.txt"></label>
+        <label>核可人姓名<input id="ap-name" placeholder="例如：法遵部 陳經理" autocomplete="off"></label>
+      </div>
+      <div id="ap-preview"></div>
+      <div class="actions"><button class="btn cta" type="button" id="btn-approve">核可並產生已核可檔</button><span class="hint" id="ap-note" role="status"></span></div>
+    </details>
 
     <div class="block">
       <h2>新增一條檢查</h2>
@@ -450,6 +462,7 @@
 <script src="src/ai-payload.js"></script>
 <script src="src/ai-verify.js"></script>
 <script src="src/ai.js"></script>
+<script src="src/approval.js"></script>
 <script src="src/app.js"></script>
 <script src="src/app-import.js"></script>
 <script src="src/app-packs.js"></script>

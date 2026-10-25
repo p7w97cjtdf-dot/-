@@ -240,3 +240,26 @@ test('自訂規則：無法判定的筆數與格式不對的規則都記下來�
   assert.deepStrictEqual(ext.dslStats.invalid, ['U2']);
   assert.ok(!ext.dslStats.unjudged.U3);
 });
+
+test('主管核可：簽章綁定更新包內容、核可人與時間；只接受固定的主管金鑰', async () => {
+  const crypto = require('crypto'), A = require('../src/approval.js');
+  const mk = () => { const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }); const j = publicKey.export({ format: 'jwk' }); return { pem: privateKey.export({ type: 'pkcs8', format: 'pem' }), id: crypto.createHash('sha256').update(JSON.stringify([j.x, j.y])).digest('hex').slice(0, 16) }; };
+  const boss = mk(), other = mk();
+  const req = await A.request({ id: 'p1', name: '測試', disable: ['L6101'] }, { found: 0, hidden: 1 }, '小王');
+  const ok = await A.approve(req, boss.pem, '陳經理');
+  assert.strictEqual((await A.verify(ok, [boss.id])).ok, true);
+  assert.match((await A.verify(ok, [other.id])).why, /不是這個版本核准的主管金鑰/);
+  for (const mut of [f => { f.packText = f.packText.replace('L6101', 'L6102'); }, f => { f.approval.approver = '別人'; }, f => { f.approval.approvedAt = '2030-01-01T00:00:00.000Z'; }]) {
+    const t = JSON.parse(JSON.stringify(ok)); mut(t);
+    assert.match((await A.verify(t, [boss.id])).why, /主管簽章不正確/);
+  }
+  const bad = JSON.parse(JSON.stringify(req)); bad.packText = bad.packText.replace('L6101', 'X');
+  await assert.rejects(A.approve(bad, boss.pem, '陳經理'), /被改過/);
+  await assert.rejects(A.approve(req, 'not a key', '陳經理'), /私鑰/);
+  await assert.rejects(A.approve(req, boss.pem, ''), /核可人/);
+  // samples/updates 的已核可測試檔：正式主管金鑰簽的會通過、被竄改的不會
+  const pins = [JSON.parse(read('rules/updates/public-key.json')).keyId];
+  const dir = 'samples/updates/', f = n => JSON.parse(read(dir + require('fs').readdirSync(path.join(__dirname, '..', dir)).find(x => x.startsWith(n))));
+  assert.strictEqual((await A.verify(f('6_'), pins)).ok, true);
+  assert.match((await A.verify(f('7_'), pins)).why, /主管簽章不正確/);
+});

@@ -1,0 +1,24 @@
+{
+  "id": "test-broken",
+  "name": "【測試】有錯的更新包",
+  "version": "1",
+  "issuedAt": "20261025",
+  "basis": "測試用",
+  "note": "測試用：一條規則用了不存在的欄位、停用不存在的檢查編號。匯入後會列出「無法使用、已略過」。",
+  "rules": [
+    {
+      "id": "T-BAD-01",
+      "name": "不存在的欄位",
+      "file": "L",
+      "scope": "record",
+      "assert": {
+        "field": "noSuchField",
+        "op": "notBlank"
+      },
+      "message": "測試"
+    }
+  ],
+  "disable": [
+    "NO_SUCH_RULE"
+  ]
+}

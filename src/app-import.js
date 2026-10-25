@@ -120,11 +120,8 @@
   $('#btn-apply').onclick = () => {
     const pick = st.reviewed.filter(r => r.enabled && !r.errors.length).map(r => r.rule);
     if (!pick.length) return note('#conv-note', '沒有勾選任何規則。');
-    const before = app.state.res.issues.length;
-    const ids = new Set(pick.map(r => r.id));
-    app.setCustomRules(app.state.customRules.filter(r => !ids.has(r.id)).concat(pick));
-    const added = app.state.res.issues.filter(i => i.imported && ids.has(i.ruleId)).length;
-    note('#conv-note', `已開始使用 ${pick.length} 條規則，「檢查結果」多找到 ${added} 個問題（${before} → ${app.state.res.issues.length}）。`);
+    app.addDraftRules(pick, 'ai');
+    note('#conv-note', `已把 ${pick.length} 條規則放進「本機自訂更新」。所有規則更新都要主管核可才會套用：請到「法規更新」試跑並申請主管核可。`);
     $('#imp-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   $('#btn-dl-rules').onclick = () => app.download('custom_rules.json', JSON.stringify(st.reviewed.filter(r => r.enabled).map(r => r.rule), null, 2), 'application/json');
@@ -139,22 +136,24 @@
     } catch (err) { note('#conv-note', '這個備份檔無法讀取：' + err.message); }
   });
   const showTab = v => app.showTab(v);
-  $('#btn-clear-rules').onclick = () => { app.setCustomRules([]); note('#conv-note', '已移除所有自訂規則。'); };
+  const local = () => app.state.packs.find(x => x.pack.id === 'local');
+  const dropAi = keep => { const x = local(); if (!x) return; x.pack.rules = x.pack.rules.filter(keep); x.approvedFile = null; x.approval = null; x.verified = false; app.setPacks(app.state.packs.slice()); };
+  $('#btn-clear-rules').onclick = () => { dropAi(r => r.src !== 'ai'); note('#conv-note', '已移除 AI 產生的自訂規則。'); };
 
   function renderApplied() {
-    const rules = app.state.customRules, issues = app.state.res ? app.state.res.issues : [];
+    const x = local(), rules = x ? x.pack.rules.filter(r => r.src === 'ai') : [], issues = app.state.res ? app.state.res.issues : [], ok = x && app.usable(x);
     $('#applied-count').textContent = rules.length ? `${rules.length} 條` : '';
     $('#tc-import').textContent = rules.length || '';
     $('#applied-list').innerHTML = rules.length ? rules.map(r => {
       const d = dsl.describe(r, rs.layouts), hits = issues.filter(i => i.ruleId === r.id && i.imported);
       return `<div class="applied-row"><span class="mono">${esc(r.id)}</span><span><b>${esc(r.name)}</b> <span class="ai-tag">AI 產生</span><span class="hint">${d.when ? `當 ${esc(d.when)}，` : ''}必須 ${esc(d.assert)}</span></span>
-        <span>${hits.length ? `<button class="chip jump" data-id="${hits[0].id}">${hits.length} 筆不符合</button>` : '<span class="hint">0 筆</span>'}</span>
+        <span>${!ok ? '<span class="unofficial">待主管核可</span>' : hits.length ? `<button class="chip jump" data-id="${hits[0].id}">${hits.length} 筆不符合</button>` : '<span class="hint">0 筆</span>'}</span>
         <button class="chip" data-remove="${esc(r.id)}">移除</button></div>`;
     }).join('') : '<p class="hint">目前沒有使用自訂規則。</p>';
   }
   $('#applied-list').addEventListener('click', e => {
     const b = e.target.closest('[data-remove]'); if (!b) return;
-    app.setCustomRules(app.state.customRules.filter(r => r.id !== b.dataset.remove));
+    dropAi(r => r.id !== b.dataset.remove);
   });
   app.onRun = renderApplied;
   renderApplied();

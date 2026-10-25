@@ -1,0 +1,95 @@
+{
+  "id": "demo-2026-01",
+  "name": "2026 年度填報格式修正（示範）",
+  "version": "1",
+  "issuedAt": "20260105",
+  "basis": "示範用，非真實函令",
+  "note": "測試用 (虛構情境)：保留欄位第 1 碼改為「數位投保註記」、2025/07/01 起的新契約必填；並停用 L6101。用「試用資料_含錯誤.xlsx」會找到 6 筆新契約沒有填。",
+  "fields": [
+    {
+      "file": "L",
+      "key": "digitalFlag",
+      "name": "數位投保註記",
+      "start": 422,
+      "len": 1,
+      "type": "X",
+      "values": [
+        "Y",
+        "N",
+        "0"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "U2026-01",
+      "name": "新契約須填數位投保註記",
+      "file": "L",
+      "scope": "record",
+      "severity": "error",
+      "when": {
+        "field": "addType",
+        "op": "eq",
+        "value": "NEW"
+      },
+      "effective": {
+        "field": "startDate",
+        "from": "20250701"
+      },
+      "assert": {
+        "field": "digitalFlag",
+        "op": "in",
+        "values": [
+          "Y",
+          "N"
+        ]
+      },
+      "message": "2025/07/01 起生效的新契約，數位投保註記須填 Y 或 N",
+      "suggestion": "網路投保填 Y，其他招攬方式填 N"
+    },
+    {
+      "id": "U2026-02",
+      "name": "保留欄位第 2~4 碼仍填 000",
+      "file": "L",
+      "scope": "record",
+      "severity": "error",
+      "assert": {
+        "field": "reserved",
+        "op": "eq",
+        "value": "000",
+        "pos": [
+          2,
+          4
+        ]
+      },
+      "message": "保留欄位第 2~4 碼應填 000（第 1 碼改為數位投保註記）",
+      "suggestion": "第 2~4 碼改為 000"
+    },
+    {
+      "id": "U2026-03",
+      "name": "癌症險等待期間不得超過 60 天",
+      "file": "CL",
+      "scope": "record",
+      "severity": "warning",
+      "effective": {
+        "field": "startDate",
+        "from": "20260101"
+      },
+      "assert": {
+        "field": {
+          "fn": "num",
+          "args": [
+            "waitDays"
+          ]
+        },
+        "op": "lte",
+        "value": 60
+      },
+      "message": "2026/01/01 起投保的癌症險，等待期間不得超過 60 天",
+      "suggestion": "確認商品條款的等待期間"
+    }
+  ],
+  "disable": [
+    "L6101"
+  ]
+}
