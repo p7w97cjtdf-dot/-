@@ -1139,3 +1139,5 @@ details.approve > summary::-webkit-details-marker { display: none; }
 .rule-sources ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.6; }
 .rule-sources li { margin-bottom: 8px; overflow-wrap: anywhere; }
 .lib-note { margin: 10px 0 0; padding: 8px 10px; border: 1px solid #fdba74; background: #fff7ed; color: #9a3412; border-radius: 8px; font-size: 13px; line-height: 1.5; }
+.privacy-line { margin: 10px 0 0; font-size: 13px; line-height: 1.6; color: var(--mut); }
+.privacy-line b { color: var(--fg); }

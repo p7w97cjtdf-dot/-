@@ -47,7 +47,7 @@
         $('#rule-text').value = new TextDecoder('utf-8').decode(buf);
       }
       note('#conv-note', `已讀取 ${$('#rule-text').value.length.toLocaleString()} 字`);
-    } catch (err) { note('#conv-note', '讀取失敗：' + err.message); }
+    } catch (err) { note('#conv-note', '讀取失敗：' + DQ.safeError(err)); }
   });
   function fillPages() {
     const a = Math.max(1, +$('#pg-from').value), b = Math.min(st.pages.length, +$('#pg-to').value);
@@ -137,7 +137,7 @@
       st.source = f.name; st.unconvertible = data.unconvertible || [];
       show(Array.isArray(data) ? data : data.rules || [], '', `來源：${f.name}`);
       showTab('import');
-    } catch (err) { note('#conv-note', '這個備份檔無法讀取：' + err.message); }
+    } catch (err) { note('#conv-note', '這個備份檔無法讀取：' + DQ.safeError(err)); }
   });
   const showTab = v => app.showTab(v);
   const local = () => app.state.packs.find(x => x.pack.id === 'local');

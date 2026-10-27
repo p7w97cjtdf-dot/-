@@ -136,13 +136,16 @@
     const el = $('#data-map'), have = SLOTS.filter(k => state.files[k]);
     el.hidden = !have.length && !state.notes.length;
     if (el.hidden) return;
-    const row = (k, src, n, cls, fix) => `<li class="dm-row${cls ? ' ' + cls : ''}"><b class="dm-k">${esc(k)}</b><span class="dm-src">${esc(src)}</span><span class="dm-n">${n}</span>${fix ? `<span class="dm-fix">已自動調整：${esc(fix.join('；'))}</span>` : ''}</li>`;
+    // 檔名、工作表名稱、沒有讀取的原因都是外來的文字：用文字節點放入 (DQ.safe.texts)
+    const T = DQ.safe.texts();
+    const row = (k, src, n, cls, fix) => `<li class="dm-row${cls ? ' ' + cls : ''}"><b class="dm-k">${T(k)}</b><span class="dm-src">${T(src)}</span><span class="dm-n">${T(n)}</span>${fix ? `<span class="dm-fix">已自動調整：${T(fix.join('；'))}</span>` : ''}</li>`;
     DQ.safe(el).innerHTML = `<div class="dm-head"><b>${have.length ? `這次檢查的資料（${have.length} 份）` : '這次沒有可以檢查的資料'}</b>${have.length ? '<button class="linkish" type="button" id="btn-clear-files">清除，重新放入</button>' : ''}</div>
       <ul class="dm-list">${have.map(k => row(SLOT_NAME[k] || k, state.src[k] || state.files[k].name, `${recCount(k).toLocaleString()} 筆`, '', state.fixed[k])).join('')}
       ${unused().map(([why, srcs]) => row('沒有使用', srcs.join('、'), why, 'dm-off')).join('')}</ul>
       ${have.length && !DETAIL.some(k => state.files[k]) ? '<p class="dm-foot">還需要保單資料或理賠資料（壽險、癌症險或傷害險）才能開始檢查。</p>' : ''}
       ${!have.length ? '<p class="dm-foot">之前放入的資料與結果已清除。請放入有資料的檔案（第一列是欄位名稱，從第二列開始每列一筆）。</p>' : ''}
       ${state.notes.some(n => /欄位對不上/.test(n.why)) ? '<p class="dm-foot dm-tpl">欄位名稱要和申報格式一樣。<button class="linkish" type="button" id="btn-template">下載正確格式的空白範本</button>（每張工作表的第一列就是要用的欄位名稱）</p>' : ''}`;
+    T.fill(el);
     const t = $('#btn-template'); if (t) t.onclick = downloadTemplate;
     const b = $('#btn-clear-files'); if (b) b.onclick = () => { clearFiles(); state.notes = []; $('#sample-note').textContent = ''; run(); };
   }
@@ -189,6 +192,8 @@
   }
   // Excel 活頁簿：依工作表名稱分配到各檔案 (src/workbook.js)
   const BOOK = /\.(xlsx|xlsm|xls|ods)$/i;
+  // 讀檔或解析的例外訊息可能夾帶檔案內容 (例如 JSON 解析錯誤會引用一段原文)：畫面只顯示固定的說明，不顯示原始內容
+  const READ_FAIL = '讀取時發生錯誤（檔案可能已損毀或格式不正確）';
   // 檔案沒有讀取時 (太大、不是文字檔、標題不符、Excel 損毀或預檢不通過、讀取失敗)，處理方式都一樣：
   // 這個檔案原本要放的資料格 (Excel 是一整套，就是全部) 清掉舊資料、重新計算結果，並說明沒有讀取的原因，
   // 不會讓畫面上的結果看起來像是新檔案檢查通過
@@ -273,7 +278,7 @@
       if (fx.problem) return rejectFile(file.name, fx.problem, [fid]);
       setFile(fid, file.name, fx.text); keepFix(fid, file.name, fx.notes);
       run();
-    } catch (e) { rejectFile(file.name, `讀取時發生錯誤（${e && e.message ? e.message.slice(0, 80) : '未知原因'}）`, BOOK.test(file.name) ? SLOTS : [fid]); }
+    } catch (e) { rejectFile(file.name, READ_FAIL, BOOK.test(file.name) ? SLOTS : [fid]); }
   }
   for (const fid of SLOTS) {
     const input = $('#file-' + fid), drop = $('#drop-' + fid);
@@ -313,7 +318,7 @@
     const unknown = [];
     for (const f of files) {
       try { await readOne(f, unknown); }
-      catch (e) { rejectFile(f.name, `讀取時發生錯誤（${e && e.message ? e.message.slice(0, 80) : '未知原因'}）`, BOOK.test(f.name) ? SLOTS : [guessSlot(f.name, null)].filter(Boolean)); }
+      catch (e) { rejectFile(f.name, READ_FAIL, BOOK.test(f.name) ? SLOTS : [guessSlot(f.name, null)].filter(Boolean)); }
     }
     for (const n of unknown) state.notes.push({ source: n, why: '看不出是哪一份資料' });
     if (unknown.length) renderMap();
@@ -514,7 +519,7 @@
     if (f && /Date$|^birthDate$/.test(f.key)) return /^0+$/.test(v) ? v : v.replace(/\b(\d{4})(\d{2})(\d{2})\b/g, '$1/$2/$3');
     return v.replace(/\s+/g, ' ');
   }
-  function sideText(i, val, fixable) {
+  function sideText(i, val, fixable, T) {
     const lay = rs.layouts[i.file];
     const fs = lay ? (i.fields || []).map(k => lay.field(k)).filter(Boolean) : [];
     // 欄位名稱去掉括號說明；去掉後同名時保留括號 (例如原幣金額／臺幣金額)
@@ -526,14 +531,14 @@
       const f = lay && lay.field(i.fix.field), rec = (state.res.data[i.file] || []).find(r => r._line === i.line);
       const now = niceVal(f, rec && f ? rec[f.key] : val), to = niceVal(f, i.fix.value);
       const name = f ? f.name.replace(/\(.*?\)|（.*?）/g, '') : '';
-      return esc(`${name ? name + '：' : ''}${cut(now)}`) + ` <span class="to">${now === to ? '（調整格式）' : '→ ' + esc(cut(to))}</span>`;
+      return T(`${name ? name + '：' : ''}${cut(now)}`) + ` <span class="to">${now === to ? '（調整格式）' : T('→ ' + cut(to))}</span>`;
     }
     if (!val) return '';
     // 多個欄位一起比對 (值以 / 或 vs 等分隔)：逐一寫出「欄位 值」
     const parts = val.split(/\s*(?:\/| vs |≤|≥|<|>)\s*/);
-    if (fs.length > 1 && parts.length === fs.length) return esc(cut(fs.map((f, k) => `${names[k]} ${niceVal(f, parts[k])}`).join('・')));
+    if (fs.length > 1 && parts.length === fs.length) return T(cut(fs.map((f, k) => `${names[k]} ${niceVal(f, parts[k])}`).join('・')));
     const label = names[0] || shortFields(i).split(/[、 ]/)[0] || '內容';
-    return esc(cut(`${label ? label + '：' : ''}${niceVal(fs[0], val)}`));
+    return T(cut(`${label ? label + '：' : ''}${niceVal(fs[0], val)}`));
   }
   // 清單分 5 大類 (13 種問題類型歸併)，一類一個收合區；一開始只展開第一個有問題的類別
   const GROUPS = [['format', '格式錯誤'], ['logic', '內容矛盾'], ['cross', '檔案對不上'], ['total', '總數不符'], ['judge', '需人工判斷']];
@@ -565,12 +570,14 @@
     const SHOW = 500, FIRST = 5;
     state.fullGroups = state.fullGroups || new Set();
     // 一項兩行：問題；位置・「欄位：值」(能一鍵修改時加上改成的值)。只有「建議確認」加標籤，其餘都是必須修改
+    // 問題說明、工作表名稱、欄位的值都是外來的文字：用文字節點放入
+    const T = DQ.safe.texts();
     const item = i => {
-      const val = String(i.value == null ? '' : i.value).trim(), side = sideText(i, val, i.fix && state.res.issues.includes(i));
+      const val = String(i.value == null ? '' : i.value).trim(), side = sideText(i, val, i.fix && state.res.issues.includes(i), T);
       return `<div class="issue ${i.severity}${state.sel === i.id ? ' sel' : ''}" data-id="${i.id}" role="listitem" tabindex="0">
         <div class="issue-main">
-          <p class="issue-msg">${i.severity === 'warning' ? '<span class="sev-tag warning">建議確認</span>' : ''}${esc(i.message)}</p>
-          <p class="issue-where">${esc(i.sheet || '')} ${rowLabel(i)}${side ? `<span class="issue-side">・${side}</span>` : ''}</p>
+          <p class="issue-msg">${i.severity === 'warning' ? '<span class="sev-tag warning">建議確認</span>' : ''}${T(i.message)}</p>
+          <p class="issue-where">${T(i.sheet || '')} ${rowLabel(i)}${side ? `<span class="issue-side">・${side}</span>` : ''}</p>
         </div>
       </div>`;
     };
@@ -584,6 +591,7 @@
         })() : ''}
       </div>`;
     }).join('') : `<p class="empty">${state.all.length ? '沒有符合條件的問題' : (state.scope && !state.scope.complete ? '目前執行的檢查沒有發現問題，但檢查不完整（見上方說明），不代表資料都正確。' : '目前的檢核沒有發現問題；送件前仍請依正式手冊與主管機關規範確認。')}</p>`;
+    T.fill($('#issue-list'));
   }
 
   // 行號：文字檔為第 N 筆；由 Excel 匯入時換算成 Excel 列號 (第 1 列為標題)；CSV 工作表為檔案中的列號
@@ -642,7 +650,9 @@
     const okLen = rec && rec._raw.length === lay.recordLength;
     const all = okLen ? lay.fields.map(f => ({ f, hit: i.fields.includes(f.key) })) : [];
     const hits = all.filter(x => x.hit), rest = all.filter(x => !x.hit);
-    const row = ({ f, hit }) => `<tr class="${hit ? 'hit' : ''}"><td class="num">${f.no}</td><td>${esc(f.name)}</td><td class="num mono">${f.start}-${f.start + f.len - 1}</td><td class="v">${esc(rec[f.key])}</td></tr>`;
+    // 欄位名稱、資料值、問題說明、保單號碼都用文字節點放入 (屬性裡的文字用 esc 跳脫)
+    const T = DQ.safe.texts();
+    const row = ({ f, hit }) => `<tr class="${hit ? 'hit' : ''}"><td class="num">${f.no}</td><td>${T(f.name)}</td><td class="num mono">${f.start}-${f.start + f.len - 1}</td><td class="v">${T(rec[f.key])}</td></tr>`;
     // 原始資料預設收合；摘要顯示出問題欄位的字元起迄 (多個欄位分別列出，例：第 87–94、117–124 字)
     const spans = hits.map(x => x.f).sort((a, b) => a.start - b.start).map(f => f.len > 1 ? `${f.start}–${f.start + f.len - 1}` : `${f.start}`);
     const range = spans.length ? `（第 ${spans.join('、')} 字）` : '';
@@ -650,26 +660,27 @@
     const fixable = i.fix && state.res.issues.includes(i);
     DQ.safe(el).innerHTML = `
       <div class="detail-head">
-        <div class="d-title"><div><h3>詳細說明</h3><p class="hint">${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}</p></div></div>
+        <div class="d-title"><div><h3>詳細說明</h3><p class="hint">${T(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.policy ? `・保單 <span class="mono">${T(i.policy.trim())}</span>` : ''}${i.code ? `・科目 <span class="mono">${T(i.code)}</span>` : ''}</p></div></div>
         <span class="sev-pill ${i.severity}">${SEV[i.severity]}</span>
         <button class="d-close" type="button" aria-label="收起這個問題的說明">收起</button>
       </div>
       <section class="d-sec"><p class="d-label">問題</p>
-        <div class="d-box ${i.severity}"><b>${esc(i.message)}</b></div></section>
+        <div class="d-box ${i.severity}"><b>${T(i.message)}</b></div></section>
       <section class="d-sec"><p class="d-label">怎麼改</p>
-        <div class="d-box plain">${esc(i.suggestion || '請人工確認')}
-          ${i.fix ? `<p class="d-meta">建議值：<b class="mono fixval">${esc(i.fix.value)}</b></p>` : ''}</div></section>
+        <div class="d-box plain">${T(i.suggestion || '請人工確認')}
+          ${i.fix ? `<p class="d-meta">建議值：<b class="mono fixval">${T(i.fix.value)}</b></p>` : ''}</div></section>
       <section class="d-sec"><p class="d-label">依據</p>
-        <div class="d-box basis">${esc(i.ruleName || LB.cat(i.category))}（檢核編號 <span class="mono">${esc(i.ruleId)}</span>${i.ref ? `・${esc(i.ref)}` : ''}）</div></section>
+        <div class="d-box basis">${T(i.ruleName || LB.cat(i.category))}（檢核編號 <span class="mono">${T(i.ruleId)}</span>${i.ref ? `・${T(i.ref)}` : ''}）</div></section>
       ${rec ? `<details class="raw"><summary>原始資料${range}</summary>
         <p class="hint">左邊數字是第幾個字；「·」代表空白；黃色是有問題的地方。</p>
         <div class="ruler">${ruler(lay, rec._raw, i.fields)}</div>
         ${hits.length ? `<table class="fields"><tbody>${hits.map(row).join('')}</tbody></table>` : ''}
         ${rest.length ? `<details><summary class="hint">看這一行的其他 ${rest.length} 個欄位</summary><table class="fields"><tbody>${rest.map(row).join('')}</tbody></table></details>` : ''}
       </details>` : ''}
-      ${siblings.length ? `<details class="raw"><summary>同一張保單的其他資料（${siblings.length} 筆）</summary><table class="fields"><tbody>${[rec].concat(siblings).sort((a, b) => a.txnSeq.localeCompare(b.txnSeq)).map(r => `<tr class="${r === rec ? 'hit' : ''}"><td class="num">第${r._line}行</td><td class="v">${r.txnSeq}</td><td class="v">${r.addType} ${r.addDate}</td><td class="v">→ ${r.exitType} ${r.exitDate}</td></tr>`).join('')}</tbody></table></details>` : ''}
+      ${siblings.length ? `<details class="raw"><summary>同一張保單的其他資料（${siblings.length} 筆）</summary><table class="fields"><tbody>${[rec].concat(siblings).sort((a, b) => a.txnSeq.localeCompare(b.txnSeq)).map(r => `<tr class="${r === rec ? 'hit' : ''}"><td class="num">第${r._line}行</td><td class="v">${T(r.txnSeq)}</td><td class="v">${T(`${r.addType} ${r.addDate}`)}</td><td class="v">${T(`→ ${r.exitType} ${r.exitDate}`)}</td></tr>`).join('')}</tbody></table></details>` : ''}
       <div class="ai-explain"><button class="linkish ai-btn" type="button" id="btn-explain">請 AI 用白話解釋</button><p class="ai-notice" hidden>按下後會把這個問題和相關欄位送給 AI（Claude），不會送出整筆資料；身分證號、姓名、地址、電話、Email 會先遮蔽。</p><div class="ask" id="explain-out"></div></div>
       ${fixable ? `<div class="detail-foot"><button class="btn cta" id="btn-fix-one" title="${esc(lay.field(i.fix.field).name)} → ${esc(i.fix.value)}">套用建議值</button></div>` : ''}`;
+    T.fill(el);
     el.querySelector('.d-close').onclick = closeDetail;
     const one = $('#btn-fix-one');
     if (one) one.onclick = () => applyFix([i.id]);

@@ -42,8 +42,23 @@
     const out = P().sanitize(String(html), Object.assign({}, CFG, { WHOLE_DOCUMENT: true, ADD_TAGS: ['meta', 'style'], ADD_ATTR: ['target', 'charset', 'content', 'name'] }));
     return /^\s*<!doctype/i.test(html) ? '<!doctype html>\n' + out : out;
   };
+  // 文字節點：組 HTML 時，不可信的文字 (檔名、儲存格、錯誤訊息) 先放一個空的佔位元素，寫入結構後再用 textContent 填進去，
+  // 文字從頭到尾都不會被當成 HTML 解析。用法：const T = DQ.safe.texts(); DQ.safe(el).innerHTML = `<b>${T(檔名)}</b>`; T.fill(el);
+  safe.texts = () => {
+    const vals = [];
+    const T = v => { vals.push(String(v == null ? '' : v)); return `<span data-txt="${vals.length - 1}"></span>`; };
+    T.fill = el => { for (const n of el.querySelectorAll('[data-txt]')) { const k = +n.getAttribute('data-txt'); if (k >= 0 && k < vals.length) n.replaceWith(document.createTextNode(vals[k])); else n.remove(); } };
+    return T;
+  };
   safe.clean = html => P() ? (hook(), clean(html)) : '';
   safe.ready = () => !!P();
   root.DQ = root.DQ || {};
   root.DQ.safe = safe;
+  // 錯誤訊息給畫面用：解析例外 (JSON、PDF、Word、Excel 元件丟出的英文訊息) 可能夾帶檔案原文，只顯示固定說明；
+  // 工具自己寫的中文說明才照原文顯示
+  root.DQ.safeError = e => {
+    const m = e && typeof e.message === 'string' ? e.message : '';
+    if (!m || e instanceof SyntaxError || !/[\u4e00-\u9fff]/.test(m)) return '檔案格式不正確或已損毀';
+    return m.slice(0, 300);
+  };
 })(typeof self !== 'undefined' ? self : this);

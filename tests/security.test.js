@@ -518,3 +518,34 @@ test('CSV 公式注入：= + - @、前置空白或控制字元、全形符號開
   const cell = /(?:^|,)(?:"((?:[^"]|"")*)"|([^,]*))/g;
   for (const r of rows) for (const m of r.matchAll(cell)) { const v = (m[1] != null ? m[1].replace(/""/g, '"') : m[2]) || ''; if (!/^-?\d+(\.\d+)?$/.test(v)) assert.doesNotMatch(v, /^[\s\u0000-\u001f]*[=+\-@＝＋－＠]/, `${v}（${r.slice(0, 60)}）`); }
 });
+
+test('匯出的 Excel：使用者內容以 = + - @ 開頭也寫成文字儲存格，不會變成公式', () => {
+  const XLSX = require('../vendor/xlsx.core.min.js');
+  const bad = ['=1+2', '=HYPERLINK("http://evil.example","x")', '+SUM(A1)', '-1+2', '@SUM(1)', '=cmd|\' /C calc\'!A0'];
+  const ws = XLSX.utils.aoa_to_sheet([['欄位'], ...bad.map(v => [v])]), wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '問題清單');
+  for (const v of bad) assert.notStrictEqual(Object.values(ws).find(c => c && c.v === v).t, 'n');
+  assert.ok(Object.values(ws).every(c => !c || typeof c !== 'object' || !('f' in c)), '工作表沒有公式欄');
+  // 解開寫出的 xlsx，工作表 XML 裡沒有 <f> (公式) 標籤
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const cfb = XLSX.CFB.read(buf, { type: 'buffer' });
+  const sheets = cfb.FullPaths.map((n, i) => [n, cfb.FileIndex[i]]).filter(([n]) => /worksheets\/sheet\d+\.xml$/.test(n));
+  const found = sheets.length > 0;
+  for (const [n, f] of sheets) { const xml = Buffer.from(f.content).toString(); assert.doesNotMatch(xml, /<f[ >]/, n); assert.match(xml, /t="str"><v>=1\+2<\/v>/); }
+  assert.ok(found);
+  const back = XLSX.read(buf, { type: 'buffer' }).Sheets['問題清單'];
+  assert.deepStrictEqual(bad.map((v, i) => back['A' + (i + 2)].v), bad, '讀回來是原本的文字');
+});
+
+test('頁面寫清楚資料只在瀏覽器處理；claude.ai 展示版標示是第三方網站、只用試用資料', () => {
+  assert.match(read('index.html'), /不上傳、不存到伺服器、不寫任何遠端紀錄/);
+  const out = path.join(require('os').tmpdir(), 'dq-artifact-test.html');
+  require('child_process').execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'build-artifact.js'), out]);
+  const html = fs.readFileSync(out, 'utf8');
+  assert.match(html, /這是放在 claude\.ai 的展示版/);
+  assert.match(html, /沒有公司的存取控制、稽核紀錄或資料刪除保證/);
+  // 單一檔案不從外部載入程式，也不送任何分析或紀錄
+  assert.doesNotMatch(html, /<script[^>]+src=/);
+  assert.doesNotMatch(html, /google-analytics\.com|googletagmanager|gtag\(|sentry\.io|Sentry\.init|navigator\.sendBeacon/);
+  fs.rmSync(out, { force: true });
+});
