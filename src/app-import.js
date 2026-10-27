@@ -62,7 +62,8 @@
     if (!DQ.ai.available()) return note('#conv-note', DQ.ai.OFFLINE + '可以先按「使用範例的轉換結果」看看效果。');
     $('#btn-convert').disabled = true;
     try {
-      const out = await RI.convert(text, p => DQ.ai.convertRules(p), (i, n) => note('#conv-note', i < n ? `AI 轉換中：第 ${i + 1} / ${n} 段…（每段約 30–90 秒）` : '轉換完成，正在用範例資料試跑…'));
+      // 整份文件的轉換算一次 AI 操作：分段送出時只需貼一次 Dify 金鑰，全部完成後清除
+      const out = await DQ.ai.op(() => RI.convert(text, p => DQ.ai.convertRules(p), (i, n) => note('#conv-note', i < n ? `AI 轉換中：第 ${i + 1} / ${n} 段…（每段約 30–90 秒）` : '轉換完成，正在用範例資料試跑…')));
       st.unconvertible = out.unconvertible;
       show(out.rules, out.failures.length ? `${out.failures.length} 段沒有轉換成功（${out.failures.map(f => `第 ${f.part} 段：${f.message}`).join('；')}）` : '');
     } catch (err) { note('#conv-note', err.message); }
@@ -82,13 +83,13 @@
     const n = s => st.reviewed.filter(r => r.status === s).length;
     $('#imp-result').hidden = false;
     $('#imp-meta').textContent = `${label || `來源：${st.source || '貼上的文字'}`}。共 ${st.reviewed.length} 條規則${st.unconvertible.length ? `，${st.unconvertible.length} 條無法轉換` : ''}。${warn || ''}`;
-    $('#imp-chips').innerHTML = ['可執行', '與內建相同', '疑似轉錯', '格式錯誤'].map(s => `<span class="st ${ST[s]}">${STN[s]} <b>${n(s)}</b></span>`).join('');
+    DQ.safe($('#imp-chips')).innerHTML = ['可執行', '與內建相同', '疑似轉錯', '格式錯誤'].map(s => `<span class="st ${ST[s]}">${STN[s]} <b>${n(s)}</b></span>`).join('');
     renderCards();
     note('#conv-note', `AI 轉出 ${st.reviewed.length} 條規則，請對照原文確認後勾選使用。`);
     $('#imp-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function renderCards() {
-    $('#imp-cards').innerHTML = st.reviewed.map((r, k) => {
+    DQ.safe($('#imp-cards')).innerHTML = st.reviewed.map((r, k) => {
       const rule = r.rule, hits = r.hits || [];
       const statusNote = {
         可執行: '可以執行，在全部正確的範例資料上沒有誤報。',
@@ -112,7 +113,7 @@
         <details><summary class="hint">技術細節</summary><pre class="rc-json">${esc(JSON.stringify(rule, null, 2))}</pre></details>
       </article>`;
     }).join('');
-    $('#imp-unconv').innerHTML = st.unconvertible.length ? `<h3 class="mt">無法轉換的條文</h3>${st.unconvertible.map(u => `<div class="chain single"><span class="st bad">無法轉換</span> ${esc(u.source)}<div class="hint">${esc(u.reason)}</div></div>`).join('')}` : '';
+    DQ.safe($('#imp-unconv')).innerHTML = st.unconvertible.length ? `<h3 class="mt">無法轉換的條文</h3>${st.unconvertible.map(u => `<div class="chain single"><span class="st bad">無法轉換</span> ${esc(u.source)}<div class="hint">${esc(u.reason)}</div></div>`).join('')}` : '';
   }
   $('#imp-cards').addEventListener('change', e => { const k = e.target.dataset.k; if (k != null) st.reviewed[+k].enabled = e.target.checked; });
 
@@ -144,7 +145,7 @@
     const x = local(), rules = x ? x.pack.rules.filter(r => r.src === 'ai') : [], issues = app.state.res ? app.state.res.issues : [], ok = x && app.usable(x);
     $('#applied-count').textContent = rules.length ? `${rules.length} 條` : '';
     $('#tc-import').textContent = rules.length || '';
-    $('#applied-list').innerHTML = rules.length ? rules.map(r => {
+    DQ.safe($('#applied-list')).innerHTML = rules.length ? rules.map(r => {
       const d = dsl.describe(r, rs.layouts), hits = issues.filter(i => i.ruleId === r.id && i.imported);
       return `<div class="applied-row"><span class="mono">${esc(r.id)}</span><span><b>${esc(r.name)}</b> <span class="ai-tag">AI 產生</span><span class="hint">${d.when ? `當 ${esc(d.when)}，` : ''}必須 ${esc(d.assert)}</span></span>
         <span>${!ok ? '<span class="unofficial">待主管核可</span>' : hits.length ? `<button class="chip jump" data-id="${hits[0].id}">${hits.length} 筆不符合</button>` : '<span class="hint">0 筆</span>'}</span>

@@ -21,18 +21,18 @@
   const opt = (v, t, sel) => `<option value="${esc(v)}"${sel ? ' selected' : ''}>${esc(t)}</option>`;
   function fillFiles() {
     const html = FILES.map(k => opt(k, LB.SHEET[k])).join('');
-    $('#nr-file').innerHTML = html; $('#nf-file').innerHTML = html;
-    $('#nr-op').innerHTML = OPS.map(([v, t]) => opt(v, t)).join('');
-    $('#nr-wop').innerHTML = WOPS.map(([v, t]) => opt(v, t)).join('');
+    DQ.safe($('#nr-file')).innerHTML = html; DQ.safe($('#nf-file')).innerHTML = html;
+    DQ.safe($('#nr-op')).innerHTML = OPS.map(([v, t]) => opt(v, t)).join('');
+    DQ.safe($('#nr-wop')).innerHTML = WOPS.map(([v, t]) => opt(v, t)).join('');
     fillFields();
   }
   function fillFields() {
     const lay = layouts()[$('#nr-file').value];
     const fields = lay.fields.filter(f => f.key !== 'reserved' || true);
     const list = fields.map(f => opt(f.key, `${f.name}${f.added ? '（新欄位）' : ''}（第 ${f.start}${f.len > 1 ? '–' + (f.start + f.len - 1) : ''} 字）`)).join('');
-    $('#nr-field').innerHTML = list;
-    $('#nr-wfield').innerHTML = opt('', '（不限）') + list;
-    $('#nr-efield').innerHTML = opt('', '（不限）') + fields.filter(f => f.type === '9' && f.len === 8).map(f => opt(f.key, f.name)).join('');
+    DQ.safe($('#nr-field')).innerHTML = list;
+    DQ.safe($('#nr-wfield')).innerHTML = opt('', '（不限）') + list;
+    DQ.safe($('#nr-efield')).innerHTML = opt('', '（不限）') + fields.filter(f => f.type === '9' && f.len === 8).map(f => opt(f.key, f.name)).join('');
     preview();
   }
   $('#nr-file').addEventListener('change', fillFields);
@@ -164,48 +164,50 @@
   // ---------- 主管核可：讀申請檔與核可私鑰，簽章後產生「已核可」檔 (私鑰只在記憶體裡用，不保存、不上傳) ----------
   let apReq = null;
   $('#ap-req').addEventListener('change', async e => {
-    const f = e.target.files[0]; apReq = null; $('#ap-preview').innerHTML = ''; if (!f) return;
+    const f = e.target.files[0]; apReq = null; DQ.safe($('#ap-preview')).innerHTML = ''; if (!f) return;
     try {
       const r = JSON.parse(await f.text());
       if (r.type !== 'dq-approval-request') throw new Error('這不是核可申請檔');
       const p = P.normalize(JSON.parse(r.packText)), lay = layouts(), imp = r.impact;
       apReq = r;
-      $('#ap-preview').innerHTML = `<div class="ap-card"><b>${esc(p.name)}</b>　<span class="hint">${esc(P.summary(p))}${r.requestedBy ? `・申請人 ${esc(r.requestedBy)}` : ''}・${esc(r.requestedAt.slice(0, 10))}</span>
+      DQ.safe($('#ap-preview')).innerHTML = `<div class="ap-card"><b>${esc(p.name)}</b>　<span class="hint">${esc(P.summary(p))}${r.requestedBy ? `・申請人 ${esc(r.requestedBy)}` : ''}・${esc(r.requestedAt.slice(0, 10))}</span>
         ${imp ? `<p>申請時試跑：新檢查會找到 ${imp.found} 個問題${p.disable.length ? `；停用會隱藏 ${imp.hidden} 個問題` : ''}</p>` : '<p class="hint">申請時沒有試跑。</p>'}
         <ul>${p.rules.map(rr => { const d = dsl.describe(P.withEffective(rr), lay); return `<li>新增檢查：${esc(LB.SHEET[rr.file] || rr.file)}${d.when ? `，當 ${esc(d.when)}` : ''}，必須 ${esc(d.assert)}（${esc(rr.message || rr.name)}）</li>`; }).join('')}
         ${p.fields.map(ff => `<li>新欄位：${esc(LB.SHEET[ff.file] || ff.file)}「${esc(ff.name)}」第 ${ff.start}–${+ff.start + +ff.len - 1} 字</li>`).join('')}
         ${p.disable.map(id => `<li>停用：${esc(id)}${p.disableWhy && p.disableWhy[id] ? `（${esc(p.disableWhy[id])}）` : ''}</li>`).join('')}</ul></div>`;
-    } catch (err) { $('#ap-preview').innerHTML = `<p class="pack-warn">${esc(err.message)}</p>`; }
+    } catch (err) { DQ.safe($('#ap-preview')).innerHTML = `<p class="pack-warn">${esc(err.message)}</p>`; }
   });
   $('#btn-approve').onclick = async () => {
     const kf = $('#ap-key').files[0], who = $('#ap-name').value.trim();
     if (!apReq) return note('#ap-note', '請先放入核可申請檔。');
     if (!kf) return note('#ap-note', '請放入核可私鑰（.pem）。');
+    let pem = null;
     try {
-      let pem = await kf.text();
+      pem = await kf.text();
       const out = await DQ.approval.approve(apReq, pem, who);
-      pem = null; $('#ap-key').value = '';   // 私鑰用完就清掉
+      pem = null; $('#ap-key').value = '';   // 私鑰用完就清掉 (變數覆寫為 null、選擇的檔案清除)
       if (!app.pins.includes(out.approval.keyId)) return note('#ap-note', `這把私鑰（${out.approval.keyId}）不是這個版本核准的主管金鑰，產生的檔案也不會被接受。`);
       const p = JSON.parse(apReq.packText);
       app.download(`已核可_${String(p.id).replace(/[^\w.-]/g, '_')}.json`, JSON.stringify(out, null, 2) + '\n', 'application/json');
       app.audit && app.audit('主管核可', `${who} 核可「${p.name}」（金鑰 ${out.approval.keyId}）`);
       note('#ap-note', `已核可「${p.name}」，請把「已核可」檔回傳給申請人，匯入後就會套用。`);
-    } catch (err) { $('#ap-key').value = ''; note('#ap-note', err.message); }
+    } catch (err) { note('#ap-note', err.message); }
+    finally { pem = null; $('#ap-key').value = ''; }
   };
 
   // ---------- 清單 ----------
   function render() {
     const packs = app.state.packs, all = app.state.all || [], hidden = app.state.disabledCount || {};
     $('#tc-updates').textContent = packs.filter(x => x.on).length || '';
-    $('#dis-ids').innerHTML = allCatalog().slice(0, 2000).map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
+    DQ.safe($('#dis-ids')).innerHTML = allCatalog().slice(0, 2000).map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
     const ol = app.state.officialLoaded;
     $('#pack-official').textContent = (ol ? (ol.count ? `已從公開網站取得 ${ol.count} 個官方更新包，打開工具時會自動檢查有沒有新版。` : '已檢查公開網站：目前沒有官方發布的法規更新。') : '尚未取得官方更新（直接開啟檔案或沒有網路時不會自動更新）。')
       + (app.state.packKey ? `　官方更新包須經核准者簽章（公鑰 ${app.state.packKey}）。` : '')
       + ((app.state.officialRejected || []).length ? `　有 ${app.state.officialRejected.length} 個官方更新包沒有通過檢查、未套用：${app.state.officialRejected.join('；')}` : '');
     // 公鑰正式更換時，由使用者確認後才接受新公鑰
-    if (!packs.length) { $('#pack-list').innerHTML = '<p class="hint">目前沒有套用任何法規更新，使用內建規則檢查。</p>'; return; }
+    if (!packs.length) { DQ.safe($('#pack-list')).innerHTML = '<p class="hint">目前沒有套用任何法規更新，使用內建規則檢查。</p>'; return; }
     const base = Object.assign({}, app.base, { catalog: allCatalog() });
-    $('#pack-list').innerHTML = packs.map((x, k) => {
+    DQ.safe($('#pack-list')).innerHTML = packs.map((x, k) => {
       const p = x.pack, ids = new Set(p.rules.map(r => r.id).concat(p.fields.map(f => `${p.id}:${f.key}`)));
       const found = all.filter(i => ids.has(i.ruleId)).length, hid = p.disable.reduce((s, id) => s + (hidden[id] || 0), 0);
       const v = P.validate(p, base, packs.filter(y => y !== x).map(y => y.pack));

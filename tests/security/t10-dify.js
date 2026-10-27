@@ -7,7 +7,7 @@ const DIFY = 'https://api.dify.ai/v1';
 const reply = '1. 整體狀況：有格式錯誤。\n```json\n{"insights":[{"title":"出生日期不是合法日期","file":"L","condition":{"not":{"field":"birthDate","op":"isDate"}},"ruleIds":["23900_L0802"],"claim":2}],"risk":"高"}\n```';
 (async () => {
   const got = [];
-  const { browser, page, log } = await open({ serve: (u, r) => {
+  const { browser, page, log } = await open({ difyKey: 'app-test12345', serve: (u, r) => {
     if (!u.startsWith(DIFY)) return false;
     const q = r.request();
     got.push({ url: u, auth: q.headers().authorization, body: JSON.parse(q.postData() || '{}') });
