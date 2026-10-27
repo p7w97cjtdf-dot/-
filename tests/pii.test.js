@@ -124,3 +124,42 @@ test('實際送給 AI 的內容 (三個險種＋客戶資料)：遮罩後掃描�
   // 遮罩後再經最後關卡，不會被擋
   assert.doesNotThrow(() => pii.guard(sum, ctx));
 });
+
+// 9 筆範例 (a–f)：每一筆送給 AI 前都要被遮罩；遮罩後再掃描為 0
+const NINE = [
+  { what: 'a 看不見的空白字元夾在身分證中間', text: '證號 A1​2345‍6789', gone: /A1.?2345.?6789|23456789/ },
+  { what: 'a 特殊連字號、破折號的手機', text: '手機 0912‑345—678、0912−345–678', gone: /345.?678/ },
+  { what: 'a 全形 ＠ ． 與 [at] (dot) 的 Email', text: '信箱 wang＠example．com、lin[at]mail[dot]com、chen (at) corp (dot) com.tw', gone: /wang|lin\b|chen|example|corp/ },
+  { what: 'b 沒寫「生日」：民國／西元年月日後面接「生」', text: '王先生民國79年1月1日生，配偶1990/02/03生，子女0950405 生', gone: /79年1月1日|1990\/02\/03|0950405/ },
+  { what: 'b 「出生於」後面的日期', text: '被保人出生於 79.01.01，另一位出生於1985年12月31日', gone: /79\.01\.01|1985年12月31日/ },
+  { what: 'c 被保險人／要保人／受益人後面的姓名 (有沒有冒號都算)', text: '被保險人王小明投保，要保人林美華，受益人：陳大文', gone: /王小明|林美華|陳大文/ },
+  { what: 'd 13–19 碼且通過檢查碼的卡號只留末 4 碼', text: '卡號 4111111111111111、5555555555554444、378282246310005', gone: /411111111111|555555555555|37828224631/, keep: /1111|4444|0005/ },
+  { what: 'e 護照號碼、統一編號', text: '護照號碼：312345678，護照 AB1234567，統一編號 12345678，統編:87654321', gone: /312345678|AB1234567|12345678|87654321/ },
+  { what: 'f 填在保單號碼欄位、其實是檢查碼正確的身分證號', text: '保單號碼 A123456789／F131104093', ctx: { exempt: new Set(['A123456789', 'F131104093']) }, gone: /A123456789|F131104093/ },
+];
+test('9 筆範例：送給 AI 前都被遮罩，遮罩後再掃描為 0', () => {
+  for (const c of NINE) {
+    const out = pii.redact(c.text, c.ctx).text;
+    assert.doesNotMatch(out, c.gone, `${c.what}：${out}`);
+    if (c.keep) assert.match(out, c.keep, `${c.what}：末 4 碼要保留：${out}`);
+    assert.deepStrictEqual(pii.scan(out, c.ctx), [], `${c.what}：遮罩後掃描仍有個資：${out}`);
+    assert.doesNotThrow(() => pii.guard(c.text, c.ctx), c.what);
+  }
+});
+test('不誤遮：生效日、不通過檢查碼的長數字、保單號碼、規則文字', () => {
+  for (const t of ['生效日 2025/01/01 生效', '1990/01/01 生存給付', '金額 000000001000000', '序號 4111111111111112', '承保保單須有要保人與被保險人資料', '被保險人性別代碼錯誤', '要保人住所郵遞區號', '受益人比例合計', '被保險人兩張保單'])
+    assert.strictEqual(pii.redact(t).text, t, t);
+  assert.strictEqual(pii.redact('保單 P250000001', { exempt: new Set(['P250000001']) }).text, '保單 P250000001', '檢查碼不正確的保單號碼照舊');
+  assert.ok(pii.twIdValid('A123456789') && !pii.twIdValid('A123456788') && pii.luhn('4111111111111111') && !pii.luhn('4111111111111112'));
+});
+test('第二道檢查先正規化再掃描：用變形寫法躲過的個資會被攔下，並說明是哪一類', () => {
+  // 遮罩前直接掃描 (模擬遮罩被繞過)：看不見的字元、全形、[at] 都要偵測到
+  const kinds = s => [...new Set(pii.scan(s).map(x => x.type))].sort();
+  assert.deepStrictEqual(kinds('A1​23456789'), ['id']);
+  assert.deepStrictEqual(kinds('ｗａｎｇ［at］example［dot］com'), ['email']);
+  assert.deepStrictEqual(kinds('民國79年1月1日生'), ['birth']);
+  assert.deepStrictEqual(kinds('護照 312345678'), ['doc']);
+  assert.deepStrictEqual(kinds('4111111111111111'), ['card']);
+  // 遮罩無法處理的情況：停止送出，訊息寫出類別
+  assert.throws(() => pii.guard('客戶 王○明', { names: ['王○明'] }), e => e.code === 'pii_blocked' && /姓名/.test(e.message));
+});

@@ -129,7 +129,7 @@
       fillFields();
       note('#pack-note', `已匯入「${pack.name}」：${P.summary(pack)}。` + (v.errors.length || bad.length ? `有 ${v.errors.length + bad.length} 項無法使用，已略過（見下方說明）。` : '') +
         (approval ? `主管 ${approval.approver} 已核可（${approval.approvedAt.slice(0, 10)}），已套用到檢查結果。` : '還沒有主管核可，不會套用：可以先「試跑」看影響，再「申請主管核可」。'));
-    } catch (err) { note('#pack-note', `「${f.name}」不是規則更新包，或檔案內容有誤：${err.message}`); }
+    } catch (err) { note('#pack-note', `「${f.name}」不是規則更新包，或檔案內容有誤：${DQ.safeError(err)}`); }
   });
   const download = x => app.download(`rule-pack-${String(x.pack.id).replace(/[^\w.-]/g, '_')}.json`, JSON.stringify(x.pack, null, 2) + '\n', 'application/json');
   $('#btn-pack-export').onclick = () => { const x = app.state.packs.find(p => p.pack.id === LOCAL); if (!x) return note('#pack-note', '本機還沒有自訂更新。'); download(x); };

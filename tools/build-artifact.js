@@ -18,6 +18,9 @@ const links = head.match(/<link[^>]+>/g).filter(l => /href="https:/.test(l)).joi
 const styles = head.match(/<style>[\s\S]*?<\/style>/g).join('\n');
 // 使用說明、限制與風險說明等 docs/ 頁面改連到公開網站 (GitHub Pages)
 const body = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>')).replace(/href="docs\/([\w.-]+\.html)"/g, 'href="https://p7w97cjtdf-dot.github.io/-/docs/$1" target="_blank" rel="noopener"');
+// claude.ai 線上版放在第三方網站：拿到連結的人都能開啟，沒有公司的存取控制、稽核或資料刪除保證。頁面最上方明確說明，只用來試用
+const DEMO = `<div class="demo-banner" role="note"><b>這是放在 claude.ai 的展示版</b>：網址由第三方網站提供，拿到連結的人都能開啟，沒有公司的存取控制、稽核紀錄或資料刪除保證。請只用試用資料；正式給同事使用，請部署到公司控管的網站。</div>\n`;
+const demoCss = '<style>.demo-banner{background:#fff7ed;color:#9a3412;border-bottom:1px solid #fdba74;padding:8px 16px;font-size:13px;line-height:1.5}</style>';
 fs.mkdirSync(path.dirname(out), { recursive: true });
-fs.writeFileSync(out, `${title}\n${links}\n${styles}\n${body}`);
+fs.writeFileSync(out, `${title}\n${links}\n${styles}\n${demoCss}\n${DEMO}${body}`);
 console.log(`已輸出 ${out} (${(fs.statSync(out).size / 1024).toFixed(0)} KB)`);

@@ -46,9 +46,13 @@ async function open(opts) {
   });
   if (opts.aiPreview) await page.addInitScript(() => { window.__keepPreview = true; });
   // Dify 金鑰每次操作完就清除：確認視窗要求金鑰時，自動貼上測試用的金鑰 (opts.difyKey)
+  // 第一次送到某個 AI 網址的確認視窗：自動勾選並同意 (opts.originPrompt 為 true 時不自動按，用來測試這個視窗)
+  if (opts.originPrompt) await page.addInitScript(() => { window.__keepOrigin = true; });
   if (opts.difyKey) await page.addInitScript(k => { window.__testDifyKey = k; }, opts.difyKey);
   // 測試時自動按「送出前確認」視窗的「送出」，和使用者操作一樣 (opts.aiPreview 為 true 時不自動按，用來測試這個視窗)
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
+    const o = document.querySelector('#ai-origin');
+    if (o && !window.__keepOrigin) new MutationObserver(() => { if (o.open) setTimeout(() => { const c = document.querySelector('#ai-origin-check'); c.checked = true; c.onchange && c.onchange(); document.querySelector('#ai-origin-yes').click(); }, 0); }).observe(o, { attributes: true, attributeFilter: ['open'] });
     const d = document.querySelector('#ai-preview'); if (!d || window.__keepPreview) return;
     new MutationObserver(() => { if (d.open) setTimeout(() => { const kb = document.querySelector('#ai-preview-key-box'); if (kb && !kb.hidden) document.querySelector('#ai-preview-key').value = window.__testDifyKey || ''; const b = document.querySelector('#ai-preview-yes'); if (d.open && b) b.click(); }, 0); }).observe(d, { attributes: true, attributeFilter: ['open'] });
   }));

@@ -52,10 +52,15 @@
       fieldLabel(rs, i).replace(/欄\d+ /g, ''), String(i.value == null ? '' : i.value).trim(), i.message + (i.explain ? '；' + i.explain : ''), i.suggestion || '', i.fix ? i.fix.value : '', i.ruleId]));
   }
   // CSV：加上 BOM 與 Windows 換行，Excel 直接開啟中文不會變亂碼
+  // CSV 公式注入：以 = + - @ 開頭 (前面有空白、Tab、換行或其他控制字元也算；全形 ＝＋－＠ 也算)，
+  // 或以控制字元開頭的內容，Excel 可能當成公式執行：前面加 ' 讓它保持文字。單純的數字 (含負數 -100、-1.5) 不加
+  function csvCell(v) {
+    v = String(v == null ? '' : v);
+    if (!/^-?\d+(?:\.\d+)?$/.test(v) && (/^[\s\u0000-\u001f\u007f\u3000]*[=+\-@＝＋－＠]/.test(v) || /^[\u0000-\u001f\u007f]/.test(v))) v = "'" + v;
+    return /[",\r\n]/.test(v) || /^\s|\s$/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  }
   function toCSV(rs, res, extra) {
-    // 以 = + @ 或「- 加非數字」開頭的內容，Excel 會當成公式執行 (CSV 公式注入)：前面加 ' 讓它保持文字
-    const q = v => { v = String(v == null ? '' : v); if (/^[=+@\t\r]|^-[^\d]/.test(v)) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-    return '\uFEFF' + toRows(rs, res, extra).map(r => r.map(q).join(',')).join('\r\n') + '\r\n';
+    return '\uFEFF' + toRows(rs, res, extra).map(r => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
   }
 
   // 保發中心風格的「不符資料檔」：原始資料列 + 錯誤代碼
@@ -104,7 +109,7 @@ ${reconHTML(opts.recon)}
 <h2>最常出現的問題</h2><div class="scroll"><table><thead><tr><th>檢查項目</th><th>狀況</th><th class="num">次數</th><th>例子</th><th>建議怎麼改</th></tr></thead><tbody>
 ${tops.map(t => `<tr><td>${esc(t.name)}</td><td><span class="sev ${t.severity}">${SEV[t.severity]}</span></td><td class="num">${t.count}</td><td>${esc(t.sample.message)}</td><td>${esc(t.sample.suggestion)}</td></tr>`).join('')}</tbody></table></div>
 <h2>全部問題（${res.issues.length} 項）</h2><div class="scroll"><table><thead><tr><th>#</th><th>狀況</th><th>資料</th><th class="num">行號</th><th>保單號碼</th><th>欄位</th><th>目前的值</th><th>問題說明</th><th>建議怎麼改</th></tr></thead><tbody>${rows}</tbody></table></div>
-<p class="meta">檢查依據：個人壽險填報手冊與檢核規則（2025 填報年度），以及本工具另外加的合理性檢查。</p>
+<p class="meta">檢查依據：個人壽險填報手冊與檢核規則（2025 填報年度），以及本工具另外加的合理性檢查。${opts.versionStatus ? `法規版本核實狀態：${esc(opts.versionStatus)}。` : ''}</p>
 </main></body></html>`;
   }
 
@@ -150,5 +155,5 @@ ${tops.map(t => `<tr><td>${esc(t.name)}</td><td><span class="sev ${t.severity}">
     return h;
   }
 
-  return { toText, toRows, toCSV, toHTML, toRejectFile, topRules, fieldLabel };
+  return { toText, toRows, toCSV, csvCell, toHTML, toRejectFile, topRules, fieldLabel };
 });
