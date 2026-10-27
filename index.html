@@ -4,11 +4,9 @@
 <meta charset="utf-8">
 <!-- 內容安全政策 (CSP)：只執行同網站的程式檔，禁止內嵌程式與 eval；只連線到同網站、官方更新來源與 Dify。
      自架 Dify 請把網址加進 connect-src；修改下方「找不到程式檔」那段提示時，要重新計算 sha256 (tests/security.test.js 會檢查) -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-/CViNwGeidYcyxi6MUcmx3kj81XRdjsEeCRjc+S/Jas='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://p7w97cjtdf-dot.github.io https://api.dify.ai http://localhost:* http://127.0.0.1:*; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-/CViNwGeidYcyxi6MUcmx3kj81XRdjsEeCRjc+S/Jas='; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https://p7w97cjtdf-dot.github.io https://api.dify.ai http://localhost:* http://127.0.0.1:*; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>申報資料檢核助手</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="src/app.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#FFFFFF">

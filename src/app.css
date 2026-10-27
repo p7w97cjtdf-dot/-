@@ -31,8 +31,8 @@
   --cta-soft: #FDE8F3;
   --cta-ink2: #A3005B;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, .05);
-  --font-display: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
-  --font-body: "Inter", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-display: system-ui, -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans TC", monospace;
 }
 
