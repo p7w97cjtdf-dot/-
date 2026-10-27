@@ -4,13 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>限制與風險評估｜申報資料檢核助手</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <style>
 :root {
   --bg: #FAF6EF; --ink: #2B2520; --grey: #74695E; --rule: #E4DACC; --tile: #F4ECDF; --red: #B4532E;
-  --body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; }
@@ -89,7 +86,7 @@ td.num, th.num { text-align: right; font-family: var(--mono); white-space: nowra
   <p>AI 功能可以用兩種方式提供：claude.ai 線上版使用開啟者自己的 Claude 帳號，<b>不需要 API key</b>；或在「AI 服務設定」填入公司自己的 Dify（金鑰只存在該瀏覽器，送出的內容會經過 Dify 再到 Dify 設定的模型供應商）。兩種都沒有時 AI 按鈕會隱藏，其餘功能完全相同。</p>
 
   <h2><small>04 VALIDATION</small>驗證結果</h2>
-  <p>每次修改後執行自動測試（<span class="mono">npm test</span> 與瀏覽器測試頁 <span class="mono">tests/run.html</span>）：</p>
+  <p>每次修改後執行自動測試（<span class="mono">npm test</span> 、瀏覽器測試頁 <span class="mono">tests/run.html</span>；每個 Pull Request 另由 CI 自動以 Chromium 跑完整流程、主管核可等瀏覽器測試）：</p>
   <div class="table-wrap"><table>
     <thead><tr><th>資料</th><th class="num">刻意放入的錯誤</th><th class="num">找到</th><th class="num">正確資料誤報</th></tr></thead>
     <tbody id="val-rows">

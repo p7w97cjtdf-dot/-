@@ -156,6 +156,9 @@ test('紅隊：CSP 只允許同網站程式檔與指定的內嵌提示，不允�
   assert.doesNotMatch(html, /\son[a-z]+=/i);   // 不用 onclick= 之類的內嵌事件
   const vercel = JSON.parse(read('vercel.json'));
   assert.ok(JSON.stringify(vercel).includes("frame-ancestors 'none'"));
+  // 不連到外部字型網站：工具與說明頁都只用電腦內建字型
+  assert.doesNotMatch(csp, /fonts\.(googleapis|gstatic)/);
+  for (const f of ['index.html', 'docs/index.html', 'docs/guide.html', 'docs/limits.html']) assert.doesNotMatch(read(f), /fonts\.googleapis\.com/, f);
 });
 
 test('上傳：CSV 依標題列判斷是哪一份申報檔，不看檔名', () => {
