@@ -23,7 +23,7 @@ jobs:
       - name: 官方更新包檢查
         run: node tools/publish-pack.js --check
 
-  # 瀏覽器測試：用真的 Chromium 操作工具 (更新包信任、上傳對應、收回與返回、AI 傳輸、完整流程、主管核可)
+  # 瀏覽器測試：用真的 Chromium 操作工具 (更新包信任、提示注入、HTML 注入、上傳對應、收回與返回、AI 傳輸與金鑰、完整流程、主管核可)
   browser:
     runs-on: ubuntu-latest
     steps:
@@ -41,7 +41,7 @@ jobs:
           cp "samples/excel/試用資料_含錯誤.xlsx" "$RUNNER_TEMP/dirty.xlsx"
           export SAMPLE="$RUNNER_TEMP/dirty.xlsx"
           fail=0
-          for t in t03-packs t11-upload t12-close t13-ai-transmit t14-e2e t15-approval; do
+          for t in t03-packs t05-prompt t06-html t11-upload t12-close t13-ai-transmit t14-e2e t15-approval; do
             echo "::group::$t"
             node "tests/security/$t.js" || { echo "::error::$t 沒有通過"; fail=1; }
             echo "::endgroup::"

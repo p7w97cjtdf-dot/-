@@ -103,7 +103,7 @@
         const fresh = packs.filter(p => !seen.has(offKey(p)));
         if (fresh.length) {
           $('#update-notice').hidden = false;
-          $('#update-notice').innerHTML = `已自動套用最新法規更新：${fresh.map(p => esc(p.name + (p.version ? ` 第 ${p.version} 版` : '') + (p.basis ? `（${p.basis}）` : ''))).join('、')}。<a href="#updates" data-goto="updates">查看內容</a>`;
+          DQ.safe($('#update-notice')).innerHTML = `已自動套用最新法規更新：${fresh.map(p => esc(p.name + (p.version ? ` 第 ${p.version} 版` : '') + (p.basis ? `（${p.basis}）` : ''))).join('、')}。<a href="#updates" data-goto="updates">查看內容</a>`;
           try { localStorage.setItem('dq-official-seen', JSON.stringify([...seen, ...fresh.map(offKey)])); } catch (e) { /* ignore */ }
         }
         if (DQ.app && DQ.app.setPacks) DQ.app.setPacks(state.packs);
@@ -135,7 +135,7 @@
     el.hidden = !have.length && !state.notes.length;
     if (el.hidden) return;
     const row = (k, src, n, cls, fix) => `<li class="dm-row${cls ? ' ' + cls : ''}"><b class="dm-k">${esc(k)}</b><span class="dm-src">${esc(src)}</span><span class="dm-n">${n}</span>${fix ? `<span class="dm-fix">已自動調整：${esc(fix.join('；'))}</span>` : ''}</li>`;
-    el.innerHTML = `<div class="dm-head"><b>${have.length ? `這次檢查的資料（${have.length} 份）` : '這次沒有可以檢查的資料'}</b>${have.length ? '<button class="linkish" type="button" id="btn-clear-files">清除，重新放入</button>' : ''}</div>
+    DQ.safe(el).innerHTML = `<div class="dm-head"><b>${have.length ? `這次檢查的資料（${have.length} 份）` : '這次沒有可以檢查的資料'}</b>${have.length ? '<button class="linkish" type="button" id="btn-clear-files">清除，重新放入</button>' : ''}</div>
       <ul class="dm-list">${have.map(k => row(SLOT_NAME[k] || k, state.src[k] || state.files[k].name, `${recCount(k).toLocaleString()} 筆`, '', state.fixed[k])).join('')}
       ${unused().map(([why, srcs]) => row('沒有使用', srcs.join('、'), why, 'dm-off')).join('')}</ul>
       ${have.length && !DETAIL.some(k => state.files[k]) ? '<p class="dm-foot">還需要保單資料或理賠資料（壽險、癌症險或傷害險）才能開始檢查。</p>' : ''}
@@ -386,7 +386,7 @@
     // 手機上資料一放進來就捲到結果區 (上傳區在畫面上方會佔掉整個螢幕)
     if (window.matchMedia('(max-width: 720px)').matches) requestAnimationFrame(() => $('#summary').scrollIntoView({ block: 'start', behavior: 'smooth' }));
     if (DQ.app && DQ.app.onRun) DQ.app.onRun();
-    $('#dec-out').innerHTML = ''; $('#dec-ai').textContent = '';
+    DQ.safe($('#dec-out')).innerHTML = ''; $('#dec-ai').textContent = '';
     $('#ai-box').hidden = true; $('#ai-out').className = 'ai-out'; $('#ai-out').textContent = '';
     const reconErr = state.extra.filter(i => i.severity === 'error').length;
     $('#tc-check').textContent = state.all.filter(i => i.severity === 'error').length || '';
@@ -409,7 +409,7 @@
     const nRec0 = Object.values(s.byFile).reduce((t, b) => t + b.records, 0), nBad0 = Object.values(s.byFile).reduce((t, b) => t + b.badRecords, 0);
     const pending = n('error') + n('warning');
     // 三張卡：資料正確的比例、待修正的問題、可以一鍵修改的問題
-    $('#summary').innerHTML =
+    DQ.safe($('#summary')).innerHTML =
       tile(nBad0 ? 'warn' : 'ok', '資料正確比例', nRec0 ? `${okPct(nRec0, nBad0)}%` : '—', `已檢查 ${nRec0.toLocaleString()} 筆資料`) +
       tile(n('error') ? 'err' : 'ok', '待修正問題', `${pending} 項`, `必須修改 ${n('error')}・建議確認 ${n('warning')}${n('suspect') ? `・請人工判斷 ${n('suspect')}` : ''}`) +
       tile('fix', '可以一鍵修改', `${fixable} 項`, '工具知道正確的值');
@@ -428,36 +428,36 @@
     // 一筆資料都沒讀到時不能顯示「100% 沒有問題」(安全測試 T07)
     if (!nRec) $('#run-status').className = 'run-status bad';
     const cut = Object.values(s.byFile).some(b => b.truncated);
-    if (cut) { $('#run-status').className = 'run-status bad'; $('#run-status').innerHTML = `<i></i><span>問題超過 ${DQ.MAX_ISSUES.toLocaleString()} 項，只列出前 ${DQ.MAX_ISSUES.toLocaleString()} 項；檔案可能整個格式不對，請先改最常見的問題再檢查</span>`; }
-    else $('#run-status').innerHTML = nRec ? `<i></i><span>已檢查 ${nRec.toLocaleString()} 筆資料・${okPct(nRec, nBad)}% 沒有必須修改的問題</span>` : '<i></i><span>沒有讀到任何資料，請確認檔案內容</span>';
+    if (cut) { $('#run-status').className = 'run-status bad'; DQ.safe($('#run-status')).innerHTML = `<i></i><span>問題超過 ${DQ.MAX_ISSUES.toLocaleString()} 項，只列出前 ${DQ.MAX_ISSUES.toLocaleString()} 項；檔案可能整個格式不對，請先改最常見的問題再檢查</span>`; }
+    else DQ.safe($('#run-status')).innerHTML = nRec ? `<i></i><span>已檢查 ${nRec.toLocaleString()} 筆資料・${okPct(nRec, nBad)}% 沒有必須修改的問題</span>` : '<i></i><span>沒有讀到任何資料，請確認檔案內容</span>';
     $('#summary-note').textContent = `已檢查 ${recs}，共 ${Object.values(state.files).filter(Boolean).length} 份資料，花了 ${(state.elapsed / 1000).toFixed(2)} 秒。${found}`;
     const hn = hiddenNote(); $('#hidden-note').hidden = !hn; $('#hidden-note').textContent = hn;
     // 結果不完整 (停用、無法判定、格式不對、沒檢查完) 時：卡片不顯示成正常、頂端狀態註明；沒放入的資料列在下面一行
     const sc = state.scope, warns = sc.warn.filter(w => w.kind !== 'disabled');
     $('#scope-note').hidden = sc.complete || (!warns.length && !sc.notRun.length);
-    $('#scope-note').innerHTML = warns.map(w => `<p class="scope-warn">${esc(w.text)}</p>`).join('') +
+    DQ.safe($('#scope-note')).innerHTML = warns.map(w => `<p class="scope-warn">${esc(w.text)}</p>`).join('') +
       (sc.notRun.length ? `<p class="scope-off" title="${esc(sc.notRun.map(x => `${x.what}（${x.why}）`).join('\n'))}"><b>沒有檢查：</b>${sc.notRun.map(x => esc(x.short || x.what)).join('、')}（沒有放入這些資料）</p>` : '');
     if (!sc.safe) {
       // 結果不完整時不顯示「100%」：有隱藏、無法判定或沒檢查完的資料，不能說全部正確
       const t1 = $('#summary .tile'), v = t1.querySelector('.v');
       t1.classList.remove('ok'); t1.classList.add('warn', 'partial');
       if (/^100%$/.test(v.textContent.trim())) v.textContent = '無法確認';
-      v.insertAdjacentHTML('beforeend', '<small class="v-note">結果不完整，見下方說明</small>');
+      DQ.safe(v).insertAdjacentHTML('beforeend', '<small class="v-note">結果不完整，見下方說明</small>');
       t1.title = DQ.coverage.summary(sc);
       $('#run-status').className = 'run-status bad';
-      if (nRec && !cut) $('#run-status').innerHTML = `<i></i><span>已檢查 ${nRec.toLocaleString()} 筆資料・${nBad ? `${okPct(nRec, nBad)}% 沒有必須修改的問題` : '沒有發現必須修改的問題'}・<b class="scope-flag">結果不完整</b></span>`;
-    } else if (!sc.complete && nRec && !cut) $('#run-status').insertAdjacentHTML('beforeend', `<span class="scope-flag">・有 ${sc.notRun.length} 類檢查沒有執行</span>`);
+      if (nRec && !cut) DQ.safe($('#run-status')).innerHTML = `<i></i><span>已檢查 ${nRec.toLocaleString()} 筆資料・${nBad ? `${okPct(nRec, nBad)}% 沒有必須修改的問題` : '沒有發現必須修改的問題'}・<b class="scope-flag">結果不完整</b></span>`;
+    } else if (!sc.complete && nRec && !cut) DQ.safe($('#run-status')).insertAdjacentHTML('beforeend', `<span class="scope-flag">・有 ${sc.notRun.length} 類檢查沒有執行</span>`);
   }
   function renderCats() {
     // 「資料」篩選：只列出有問題的工作表
     const cur = $('#f-file').value, sheets = [...new Set(state.all.map(i => i.sheet).filter(Boolean))];
-    $('#f-file').innerHTML = '<option value="">全部資料</option>' + sheets.map(n => `<option${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
+    DQ.safe($('#f-file')).innerHTML = '<option value="">全部資料</option>' + sheets.map(n => `<option${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('');
     const byCat = {};
     for (const i of state.all) byCat[i.category] = (byCat[i.category] || 0) + 1;
     const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
-    if ($('#cats')) $('#cats').innerHTML = cats.map(([c, n]) => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${state.cat === c}">${esc(LB.cat(c))}<b>${n}</b></button>`).join('');
+    if ($('#cats')) DQ.safe($('#cats')).innerHTML = cats.map(([c, n]) => `<button class="chip" data-cat="${esc(c)}" aria-pressed="${state.cat === c}">${esc(LB.cat(c))}<b>${n}</b></button>`).join('');
     if ($('#cats')) $('#cats').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; state.cat = state.cat === b.dataset.cat ? '' : b.dataset.cat; $('#f-cat').value = state.cat; renderCats(); renderTable(); };
-    $('#f-cat').innerHTML = '<option value="">全部問題類型</option>' + cats.map(([c]) => `<option value="${esc(c)}"${c === state.cat ? ' selected' : ''}>${esc(LB.cat(c))}</option>`).join('');
+    DQ.safe($('#f-cat')).innerHTML = '<option value="">全部問題類型</option>' + cats.map(([c]) => `<option value="${esc(c)}"${c === state.cat ? ' selected' : ''}>${esc(LB.cat(c))}</option>`).join('');
   }
   function filtered() {
     const sev = $('#f-sev').value, sheet = $('#f-file').value, cat = $('#f-cat').value, q = $('#f-q').value.trim().toLowerCase();
@@ -515,7 +515,7 @@
     if ($('#issue-list').contains($('#detail'))) $('.bench-side').appendChild($('#detail'));
     const fb = $('#focus-bar');
     fb.hidden = !state.focus;
-    if (state.focus) fb.innerHTML = `只看 AI 原因「${esc(state.focus.label)}」驗證到的資料 <button class="linkish" type="button" id="btn-focus-off">顯示全部</button>`;
+    if (state.focus) DQ.safe(fb).innerHTML = `只看 AI 原因「${esc(state.focus.label)}」驗證到的資料 <button class="linkish" type="button" id="btn-focus-off">顯示全部</button>`;
     const list = filtered(), open = state.all.filter(i => i.severity !== 'suspect').length;
     $('#issue-count').textContent = state.all.length ? (list.length === state.all.length ? `${open} 項待處理` : `顯示 ${list.length} / ${state.all.length} 項`) : '沒有問題';
     $('#issue-count').className = 'count-pill' + (state.all.some(i => i.severity === 'error') ? ' err' : '');
@@ -539,7 +539,7 @@
         </div>
       </div>`;
     };
-    $('#issue-list').innerHTML = groups.length ? groups.map(([k, label, items]) => {
+    DQ.safe($('#issue-list')).innerHTML = groups.length ? groups.map(([k, label, items]) => {
       const on = state.openGroups.has(k);
       return `<div class="grp${on ? ' open' : ''}" data-grp="${k}">
         <button class="grp-h" type="button" aria-expanded="${on}"><span class="grp-k">${label}</span><span class="grp-n">${items.length}</span></button>
@@ -599,7 +599,7 @@
     const el = $('#detail');
     const i = state.res && state.all.find(x => x.id === state.sel);
     if (!i) {
-      el.innerHTML = `<div class="detail-head"><div class="d-title"><div><h3>詳細說明</h3><p class="hint">點左邊的問題</p></div></div></div>`;
+      DQ.safe(el).innerHTML = `<div class="detail-head"><div class="d-title"><div><h3>詳細說明</h3><p class="hint">點左邊的問題</p></div></div></div>`;
       return;
     }
     const lay = rs.layouts[i.file] || { title: i.sheet, recordLength: -1, fields: [], field: () => null, keyOf: () => '' };
@@ -613,7 +613,7 @@
     const range = spans.length ? `（第 ${spans.join('、')} 字）` : '';
     const siblings = okLen && i.file === 'L' ? state.res.data.L.filter(r => r !== rec && r._raw.length === lay.recordLength && lay.keyOf(r) === lay.keyOf(rec)) : [];
     const fixable = i.fix && state.res.issues.includes(i);
-    el.innerHTML = `
+    DQ.safe(el).innerHTML = `
       <div class="detail-head">
         <div class="d-title"><div><h3>詳細說明</h3><p class="hint">${esc(i.sheet || lay.title)} ${rowLabel(i) || ''}${i.policy ? `・保單 <span class="mono">${esc(i.policy.trim())}</span>` : ''}${i.code ? `・科目 <span class="mono">${esc(i.code)}</span>` : ''}</p></div></div>
         <span class="sev-pill ${i.severity}">${SEV[i.severity]}</span>
@@ -775,15 +775,15 @@
   const STATUS_CLS = { 一致: 'ok', 時間差: 'info', 定義差: 'info', 待查: 'bad', 格式錯誤: 'bad' };
   function renderRecon(resetOpen) {
     // 控制總數
-    if (!state.ctl) { $('#ctl-chips').innerHTML = '<span class="hint">還沒有放入「系統總數」資料。</span>'; $('#ctl-table tbody').innerHTML = ''; }
+    if (!state.ctl) { DQ.safe($('#ctl-chips')).innerHTML = '<span class="hint">還沒有放入「系統總數」資料。</span>'; DQ.safe($('#ctl-table tbody')).innerHTML = ''; }
     else {
       const s = state.ctl.summary;
-      $('#ctl-chips').innerHTML = [['一致', s.ok], ['時間差', s.timing], ['定義差', s.definition], ['待查', s.open]].map(([k, n]) => `<span class="st ${STATUS_CLS[k]}">${LB.status(k)} <b>${n}</b></span>`).join('');
+      DQ.safe($('#ctl-chips')).innerHTML = [['一致', s.ok], ['時間差', s.timing], ['定義差', s.definition], ['待查', s.open]].map(([k, n]) => `<span class="st ${STATUS_CLS[k]}">${LB.status(k)} <b>${n}</b></span>`).join('');
       const only = $('#ctl-diff-only').checked;
       // 需要追查的排最前面
       const ORDER_ST = { 待查: 0, 格式錯誤: 1, 時間差: 2, 定義差: 3, 一致: 4 };
       const rows = state.ctl.rows.filter(r => !only || r.status !== '一致').slice().sort((a, b) => (ORDER_ST[a.status] ?? 5) - (ORDER_ST[b.status] ?? 5));
-      $('#ctl-table tbody').innerHTML = rows.length ? rows.map(r => r.up ? `<tr>
+      DQ.safe($('#ctl-table tbody')).innerHTML = rows.length ? rows.map(r => r.up ? `<tr>
         <td>${esc(r.source)}</td><td>${esc(r.name)}</td><td class="mono">${esc(r.period)}</td>
         <td class="num">${r.up.cnt} 筆<br>${yuan(r.up.amt)} 元</td><td class="num">${r.fil.cnt} 筆<br>${yuan(r.fil.amt)} 元</td>
         <td class="num ${r.diff.cnt || r.diff.amt ? 'neg' : ''}">${r.diff.cnt} 筆<br>${yuan(r.diff.amt)}</td>
@@ -802,12 +802,12 @@
     // 客戶與商品資料
     const mstAll = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
     if (state.cust || state.prod) need.push(['mst', pill('mst', mstAll.length ? `問題 ${mstAll.length}` : '都對得上', mstAll.length > 0)]); else pill('mst', '沒有放入', false);
-    if (!state.cust && !state.prod) { $('#mst-chips').innerHTML = '<span class="hint">還沒有放入客戶資料或商品資料。</span>'; $('#mst-table tbody').innerHTML = ''; }
+    if (!state.cust && !state.prod) { DQ.safe($('#mst-chips')).innerHTML = '<span class="hint">還沒有放入客戶資料或商品資料。</span>'; DQ.safe($('#mst-table tbody')).innerHTML = ''; }
     else {
-      $('#mst-chips').innerHTML = (state.cust ? `<span class="st ${state.cust.issues.length ? 'bad' : 'ok'}">客戶資料 ${state.cust.summary.rows} 列（${state.cust.summary.people} 人），問題 <b>${state.cust.issues.length}</b></span>` : '') +
+      DQ.safe($('#mst-chips')).innerHTML = (state.cust ? `<span class="st ${state.cust.issues.length ? 'bad' : 'ok'}">客戶資料 ${state.cust.summary.rows} 列（${state.cust.summary.people} 人），問題 <b>${state.cust.issues.length}</b></span>` : '') +
         (state.prod ? ` <span class="st ${state.prod.issues.length ? 'bad' : 'ok'}">商品 ${state.prod.summary.products} 項（已停售 ${state.prod.summary.stopped}），問題 <b>${state.prod.issues.length}</b></span>` : '') +
         (mstAll.some(i => i.fix) ? ` <span class="st ok">可用客戶資料自動修改 <b>${mstAll.filter(i => i.fix).length}</b></span>` : '');
-      $('#mst-table tbody').innerHTML = mstAll.length ? mstAll.map(i => `<tr><td><span class="badge ${i.severity}">${SEV[i.severity]}</span></td>
+      DQ.safe($('#mst-table tbody')).innerHTML = mstAll.length ? mstAll.map(i => `<tr><td><span class="badge ${i.severity}">${SEV[i.severity]}</span></td>
         <td class="num">${i.file === 'L' && i.id ? `<button class="chip jump" data-id="${i.id}">${SHEET.L} ${rowLabel(i)}</button>` : `${SHEET[i.file]} 第 ${i.line} 列`}</td>
         <td class="mono">${esc((i.policy || '').trim())}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}${i.fix ? ` <span class="pill">→ ${esc(i.fix.value)}</span>` : ''}</td></tr>`).join('')
         : '<tr><td colspan="5" class="empty">客戶資料、商品資料和保單資料都對得上。</td></tr>';
@@ -816,7 +816,7 @@
     if (state.roll) {
       const m = state.roll.movement, row = (k, c, a, cls) => `<tr class="${cls || ''}"><td>${k}</td><td class="num">${c == null ? '' : c.toLocaleString()}</td><td class="num">${a == null ? '' : yuan(a)}</td></tr>`;
       const priorDiff = state.roll.hasPrior ? [m.open[0] - m.priorClose[0], m.open[1] - m.priorClose[1]] : null;
-      $('#roll-table tbody').innerHTML =
+      DQ.safe($('#roll-table tbody')).innerHTML =
         (state.roll.hasPrior ? row('去年底仍有效（去年申報）', m.priorClose[0], m.priorClose[1], 'muted') : '') +
         row('今年初有效', m.open[0], m.open[1], 'strong') +
         (priorDiff && (priorDiff[0] || priorDiff[1]) ? row('　和去年底的差異', priorDiff[0], priorDiff[1], 'bad') : '') +
@@ -826,7 +826,7 @@
         row('＝ 今年底應有效（推算）', m.close[0], m.close[1], 'strong') + row('今年底有效（申報資料）', m.closeActual[0], m.closeActual[1], m.close[1] === m.closeActual[1] ? 'muted' : 'bad');
       const iss = state.roll.issues;
       need.push(['roll', pill('roll', iss.length ? `必須修改 ${iss.filter(i => i.severity === 'error').length || iss.length}` : '接得上', iss.length > 0)]);
-      $('#roll-issues tbody').innerHTML = iss.length ? iss.map(i => `<tr><td><span class="badge ${i.severity}">${SEV[i.severity]}</span></td><td class="mono">${esc(i.policy)}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('')
+      DQ.safe($('#roll-issues tbody')).innerHTML = iss.length ? iss.map(i => `<tr><td><span class="badge ${i.severity}">${SEV[i.severity]}</span></td><td class="mono">${esc(i.policy)}</td><td>${esc(i.message)}</td><td>${esc(i.suggestion)}</td></tr>`).join('')
         : `<tr><td colspan="4" class="empty">${state.roll.hasPrior ? '去年底和今年初的保單一張不少、保額相同；今年保額的變動也都有對應的異動。' : '放入去年保單資料後，可以逐張核對去年底和今年初是否接得上。'}</td></tr>`;
     }
     // 財報
@@ -834,16 +834,16 @@
     if (state.stmt) need.push(['stmt', pill('stmt', state.stmt.issues.length ? `必須修改 ${state.stmt.summary.errors}` : '報表是平的', state.stmt.summary.errors > 0)]); else pill('stmt', '沒有放入', false);
     const firstBad = need.find(x => x[1]);
     if (resetOpen === true) for (const k of ['ctl', 'roll', 'mst', 'stmt']) $('#rc-' + k).open = !!firstBad && firstBad[0] === k;
-    if (!state.stmt) { $('#stmt-banner').innerHTML = '<p class="hint">還沒有放入資產負債表。</p>'; $('#stmt-chains').innerHTML = ''; $('#stmt-table tbody').innerHTML = ''; return; }
+    if (!state.stmt) { DQ.safe($('#stmt-banner')).innerHTML = '<p class="hint">還沒有放入資產負債表。</p>'; DQ.safe($('#stmt-chains')).innerHTML = ''; DQ.safe($('#stmt-table tbody')).innerHTML = ''; return; }
     const st = state.stmt;
-    $('#stmt-banner').innerHTML = `<div class="banner ${st.summary.balanced ? 'ok' : 'bad'}"><b>${st.summary.balanced ? '資產 = 負債 + 權益，報表是平的' : '資產不等於負債加權益，報表不平'}</b>　${SEV.error} ${st.summary.errors} 項、${SEV.warning} ${st.summary.warnings} 項</div>`;
-    $('#stmt-chains').innerHTML = st.chains.map(ch => `<div class="chain"><div class="label">源頭只有一個：改好它，另外 ${ch.effects.length} 個問題會一起消失</div>
+    DQ.safe($('#stmt-banner')).innerHTML = `<div class="banner ${st.summary.balanced ? 'ok' : 'bad'}"><b>${st.summary.balanced ? '資產 = 負債 + 權益，報表是平的' : '資產不等於負債加權益，報表不平'}</b>　${SEV.error} ${st.summary.errors} 項、${SEV.warning} ${st.summary.warnings} 項</div>`;
+    DQ.safe($('#stmt-chains')).innerHTML = st.chains.map(ch => `<div class="chain"><div class="label">源頭只有一個：改好它，另外 ${ch.effects.length} 個問題會一起消失</div>
       <div class="chain-root"><span class="badge error">源頭</span> <span class="mono">${esc(ch.root.code)}</span> ${esc(ch.root.message)}<div class="hint">${esc(ch.root.suggestion)}</div></div>
       <div class="chain-fx">${ch.effects.map(e => `<div>↳ <span class="mono">${e.ruleId} ${esc(e.code)}</span> ${esc(e.message)}</div>`).join('')}</div></div>`).join('') +
       st.issues.filter(i => !i.chain).map(i => `<div class="chain single"><span class="badge ${i.severity}">${SEV[i.severity]}</span> <span class="mono">${esc(i.code)}</span> ${esc(i.message)}<div class="hint">${esc(i.explain || '')} ${esc(i.suggestion)}</div></div>`).join('');
     const byRow = new Map();
     for (const i of st.issues) { if (!byRow.has(i.line)) byRow.set(i.line, []); byRow.get(i.line).push(i); }
-    $('#stmt-table tbody').innerHTML = st.rows.map(r => {
+    DQ.safe($('#stmt-table tbody')).innerHTML = st.rows.map(r => {
       const iss = byRow.get(r.line) || [];
       const depth = r.code.length <= 1 ? 0 : r.code.length <= 2 ? 1 : 2;
       return `<tr class="${iss.some(i => i.severity === 'error') ? 'row-bad' : iss.length ? 'row-warn' : ''} d${depth}"><td class="mono">${esc(r.code)}</td><td class="ind">${esc(r.name)}</td>
@@ -870,7 +870,7 @@
     state.decoded = R.decode(text, { res: state.res, extra: state.extra, catalogs: [rs.catalog, fin.catalog] });
     const d = state.decoded;
     $('#dec-ai').textContent = '';
-    $('#dec-out').innerHTML = d.findings.length ? `<p class="hint">找到 ${d.located} 個對應的問題。</p>` + d.findings.map(f => `
+    DQ.safe($('#dec-out')).innerHTML = d.findings.length ? `<p class="hint">找到 ${d.located} 個對應的問題。</p>` + d.findings.map(f => `
       <div class="finding">
         <div class="f-head"><span class="badge info">${esc(KIND[f.kind] || f.kind)}</span> <b class="mono">${esc(f.clue)}</b></div>
         <p>${esc(f.explain)}</p>
@@ -903,7 +903,13 @@
   // ---------- AI ----------
   const reconCtx = () => ({ ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod });
   // AI 回覆一律加上「AI 產出」標示
-  function showAI(out, text, insights, checks) { out.innerHTML = `<div class="ai-tag">${esc(DQ.ai.LABEL)}</div><div class="ai-text">${esc(text)}</div>${insights ? insightsHTML(insights) : ''}${checks || ''}<p class="ai-redact">${esc(DQ.ai.redactionNote())}</p>`; }
+  // AI 回答的內文是外部產生的文字：用 textContent 放入 (不組成 HTML)；工具驗證後的結果卡片經 DQ.safe 過濾
+  function showAI(out, text, insights, checks) {
+    DQ.safe(out).innerHTML = `<div class="ai-tag"></div><div class="ai-text"></div>${insights ? insightsHTML(insights) : ''}${checks || ''}<p class="ai-redact"></p>`;
+    out.querySelector('.ai-tag').textContent = DQ.ai.LABEL;
+    out.querySelector('.ai-text').textContent = text;
+    out.querySelector('.ai-redact').textContent = DQ.ai.redactionNote();
+  }
   // 驗證結果共用的一列
   const VS = { verified: '已驗證', mismatch: '部分成立', refuted: '不成立', invalid: '無法驗證（推測）' };
   const vItem = (st, title, body, extra) => `<li class="ins ${st}"><div class="ins-top"><span class="ins-st">${VS[st]}</span><b>${esc(title)}</b></div>${body.map(b => `<p>${b}</p>`).join('')}${extra || ''}</li>`;
@@ -973,7 +979,8 @@
   };
 
   // ---------- 報告 / 規則 ----------
-  function reportHTML() { return DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, aiInsights: state.aiInsights, aiChecks: state.aiChecks, hidden: hiddenNote(), scope: state.scope, totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } }); }
+  // 報告整份 HTML 也經過 DOMPurify 過濾 (畫面上的預覽與下載的檔案相同)
+  function reportHTML() { return DQ.safe.doc(DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, aiInsights: state.aiInsights, aiChecks: state.aiChecks, hidden: hiddenNote(), scope: state.scope, totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } })); }
   function renderReport() { $('#report-frame').srcdoc = reportHTML(); }
   // 手冊頁碼 (rules/rules.js)：PDF 頁碼與頁面上印的頁碼
   const SRCDOC = { rules: '檢核規則手冊', manual: '填報手冊' };
@@ -998,9 +1005,9 @@
     const list = cat.filter(r => !q || [r.id, r.name, r.level, r.ref].join(' ').toLowerCase().includes(q));
     const packN = cat.filter(c => c.pack).length, imported = cat.length - st.total - st.extTotal - packN;
     $('#rules-meta').textContent = `個人壽險共 ${st.total} 條檢查規則：${st.cats.map(c => `${c.name} ${c.n}`).join('、')}${st.ext.map(e => `；${e.name} ${e.n} 條`).join('')}${packN ? `；法規更新 ${packN} 條` : ''}${imported > 0 ? `；另有自訂規則 ${imported} 條` : ''}`;
-    $('#rule-table tbody').innerHTML = list.map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(LB.level(r.level))}</td><td>${esc(r.name)}</td><td>${pageOf(r.id)}</td><td><span class="badge ${r.severity}">${SEV[r.severity]}</span></td><td class="num">${by[r.id] || ''}</td></tr>`).join('');
-    $('#layout-table tbody').innerHTML = rs.layouts.L.fields.map(f => `<tr><td class="num">${f.no}</td><td>${esc(f.name)}</td><td class="num">${f.start}</td><td class="num">${f.start + f.len - 1}</td><td>${f.type === '9' ? '數字' : '英數字'}，${f.len} 個字</td></tr>`).join('');
-    $('#chart-table tbody').innerHTML = fin.chart.map(a => `<tr><td class="mono">${a.code}</td><td class="ind d${a.code.length <= 1 ? 0 : a.code.length <= 2 ? 1 : 2}">${esc(a.name)}</td><td>${a.until ? `<span class="badge warning">${a.until} 起停用，改用 ${a.replacedBy}</span>` : ''}</td></tr>`).join('');
+    DQ.safe($('#rule-table tbody')).innerHTML = list.map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(LB.level(r.level))}</td><td>${esc(r.name)}</td><td>${pageOf(r.id)}</td><td><span class="badge ${r.severity}">${SEV[r.severity]}</span></td><td class="num">${by[r.id] || ''}</td></tr>`).join('');
+    DQ.safe($('#layout-table tbody')).innerHTML = rs.layouts.L.fields.map(f => `<tr><td class="num">${f.no}</td><td>${esc(f.name)}</td><td class="num">${f.start}</td><td class="num">${f.start + f.len - 1}</td><td>${f.type === '9' ? '數字' : '英數字'}，${f.len} 個字</td></tr>`).join('');
+    DQ.safe($('#chart-table tbody')).innerHTML = fin.chart.map(a => `<tr><td class="mono">${a.code}</td><td class="ind d${a.code.length <= 1 ? 0 : a.code.length <= 2 ? 1 : 2}">${esc(a.name)}</td><td>${a.until ? `<span class="badge warning">${a.until} 起停用，改用 ${a.replacedBy}</span>` : ''}</td></tr>`).join('');
   }
   $('#r-q').addEventListener('input', renderRules);
 
@@ -1027,14 +1034,14 @@
     if (view !== 'check') $('#view-' + view).scrollIntoView({ block: 'start' });
     else if (!document.body.classList.contains('no-data')) $('#view-check').scrollIntoView({ block: 'start' });
   }
-  document.querySelectorAll('.view:not(#view-check)').forEach(v => v.insertAdjacentHTML('afterbegin', '<button class="back" type="button">← 回到檢查結果</button>'));
+  document.querySelectorAll('.view:not(#view-check)').forEach(v => DQ.safe(v).insertAdjacentHTML('afterbegin', '<button class="back" type="button">← 回到檢查結果</button>'));
   document.addEventListener('click', e => { if (e.target.closest('.back')) showTab('check'); });
   $('#btn-ai-close').onclick = () => { $('#ai-box').hidden = true; };
   // 展開的區塊內容較長時，底部加「收起」，不用捲回最上面
   document.addEventListener('toggle', e => {
     const d = e.target;
     if (!(d instanceof HTMLDetailsElement) || !d.open || d.classList.contains('more-menu') || d.querySelector(':scope > .fold')) return;
-    if (d.offsetHeight > 240) d.insertAdjacentHTML('beforeend', '<button type="button" class="fold">收起 ▲</button>');
+    if (d.offsetHeight > 240) DQ.safe(d).insertAdjacentHTML('beforeend', '<button type="button" class="fold">收起 ▲</button>');
   }, true);
   document.addEventListener('click', e => {
     const b = e.target.closest('.fold');
@@ -1062,18 +1069,26 @@
     INTRO = !ok ? DQ.ai.OFFLINE : DQ.ai.providerName() === 'Dify' ? INTRO0 + '（使用「AI 服務設定」裡的 Dify。）' : INTRO0 + '（使用你自己的 Claude 帳號，第一次使用時會詢問是否允許。）';
     if (was && !$('#ai-box').hidden) $('#ai-out').textContent = INTRO;
     const d = DQ.ai.difyConfig();
-    $('#dify-note').textContent = d ? `目前使用 Dify：${d.url}${d.proxy ? '（經公司轉發伺服器）' : '（金鑰只留在這個分頁）'}` : DQ.ai.savedUrl() && DQ.ai.providerName() !== 'Claude' ? '請貼上 Dify 應用的 API 金鑰（只留在這個分頁，關掉就清除）。' : DQ.ai.providerName() === 'Claude' ? '目前使用 claude.ai 的 Claude；填入 Dify 後會改用 Dify。' : '尚未設定。';
+    $('#dify-note').textContent = d ? `目前使用 Dify：${d.url}${d.proxy ? '（經公司轉發伺服器，不需要金鑰）' : '（金鑰不存在瀏覽器：使用 AI 時在確認視窗貼上，完成後就清除）'}` : DQ.ai.providerName() === 'Claude' ? '目前使用 claude.ai 的 Claude；填入 Dify 後會改用 Dify。' : '尚未設定。';
   };
   DQ.ai.ready.then(aiReady);
   { const d = DQ.ai.difyConfig(); $('#dify-url').value = d ? d.url : DQ.ai.savedUrl(); if (d) $('#ai-settings').open = false; }
   $('#btn-dify-save').onclick = async () => {
-    try { await DQ.ai.setDify({ url: $('#dify-url').value, key: $('#dify-key').value }); $('#dify-key').value = ''; aiReady(true); audit('AI 服務設定', `改用 Dify：${DQ.ai.difyConfig().url}`); }
+    const key = $('#dify-key').value; $('#dify-key').value = '';   // 輸入框不留金鑰
+    try { await DQ.ai.setDify({ url: $('#dify-url').value, key }); aiReady(true); audit('AI 服務設定', `改用 Dify：${DQ.ai.difyConfig().url}`); }
     catch (e) { $('#dify-note').textContent = e.message; }
   };
   $('#btn-dify-clear').onclick = async () => { const ok = await DQ.ai.setDify(null); $('#dify-url').value = ''; $('#dify-key').value = ''; aiReady(ok); audit('AI 服務設定', '清除 Dify 設定'); };
+  // 測試連線、AI 安全測試不跳確認視窗：金鑰從「AI 服務設定」的輸入框拿 (拿了就清空，用完由 AI 模組清除)
+  function keyFromSettings(noteSel) {
+    if (!DQ.ai.needsKey()) return true;
+    const k = $('#dify-key').value; $('#dify-key').value = '';
+    try { DQ.ai.useKey(k); return true; } catch (e) { $(noteSel).textContent = k.trim() ? e.message : '請先在「API 金鑰」貼上 Dify 應用的金鑰（只用在這一次，完成後就清除）。'; return false; }
+  }
   // 測試連線：只送一句固定的話，不含任何資料
   $('#btn-dify-test').onclick = async () => {
     if (DQ.ai.providerName() !== 'Dify') { $('#dify-note').textContent = '請先按「儲存並使用」。'; return; }
+    if (!keyFromSettings('#dify-note')) return;
     $('#dify-note').textContent = '連線中…';
     try { const t = await DQ.ai.ping(); $('#dify-note').textContent = `連線成功，Dify 回覆：「${t.slice(0, 40)}」`; } catch (e) { $('#dify-note').textContent = e.message; }
   };
@@ -1150,7 +1165,14 @@
     const dest = DQ.ai.providerName() === 'Dify' ? `Dify（${DQ.ai.difyConfig().url}）` : DQ.ai.providerName() || 'AI';
     $('#ai-preview-note').textContent = `將送到 ${dest}，共 ${text.length.toLocaleString()} 字，下面就是完整的送出內容。${desc ? `送出前已遮蔽：${desc}。` : '沒有偵測到需要遮蔽的個資。'}遮蔽無法保證百分之百完整，請確認沒有不該送出的資料。`;
     $('#ai-preview-text').textContent = text;
+    // Dify 沒有金鑰時 (每次操作完就清除)，在這裡貼上；按送出後交給 AI 模組的閉包，輸入框立即清空
+    const kb = $('#ai-preview-key-box'), ki = $('#ai-preview-key');
+    kb.hidden = !DQ.ai.needsKey(); ki.value = '';
     const done = ok => {
+      if (ok && !kb.hidden) {
+        try { DQ.ai.useKey(ki.value); } catch (e) { ki.value = ''; $('#ai-preview-note').textContent = e.message; ki.focus(); return; }
+      }
+      ki.value = ''; kb.hidden = true;
       $('#ai-preview-yes').onclick = $('#ai-preview-no').onclick = d.oncancel = null;
       if (d.open) d.close();
       audit('送出給 AI', ok ? `${text.length.toLocaleString()} 字，使用者確認後送出到 ${dest}` : '使用者取消，沒有送出', null, ok ? { payload: text } : null);
@@ -1164,7 +1186,7 @@
   // AI 傳送紀錄：每一次送給 AI 的時間、目的地、字數、狀態與完整內容
   $('#btn-ai-log').onclick = () => {
     const list = DQ.ai.sent, p2 = n => String(n).padStart(2, '0');
-    $('#ai-log-list').innerHTML = list.length ? list.slice().reverse().map(e => `<details class="ai-log-item"><summary><b>${p2(e.at.getHours())}:${p2(e.at.getMinutes())}:${p2(e.at.getSeconds())}</b>　${esc(e.kind)}・${esc(e.dest)}・${e.chars.toLocaleString()} 字・<span class="${e.status === '已送出' ? '' : 'muted'}">${esc(e.status)}</span></summary><pre>${esc(e.payload)}</pre></details>`).join('')
+    DQ.safe($('#ai-log-list')).innerHTML = list.length ? list.slice().reverse().map(e => `<details class="ai-log-item"><summary><b>${p2(e.at.getHours())}:${p2(e.at.getMinutes())}:${p2(e.at.getSeconds())}</b>　${esc(e.kind)}・${esc(e.dest)}・${e.chars.toLocaleString()} 字・<span class="${e.status === '已送出' ? '' : 'muted'}">${esc(e.status)}</span></summary><pre>${esc(e.payload)}</pre></details>`).join('')
       : '<p class="hint">這次開啟後還沒有送任何內容給 AI。</p>';
     $('#ai-log').showModal();
   };
@@ -1174,13 +1196,14 @@
   $('#btn-ai-selftest').onclick = async () => {
     const out = $('#ai-selftest'), b = $('#btn-ai-selftest');
     if (!DQ.ai.available()) { out.textContent = DQ.ai.OFFLINE; return; }
+    if (!keyFromSettings('#ai-selftest')) return;
     b.disabled = true; out.textContent = 'AI 測試中（3 題，約 30 秒）…';
     try {
       const r = await DQ.ai.selfTest();
       state.selfTests.push(...r);
       for (const x of r) audit('AI 安全測試', `${x.name}：${x.pass === true ? '通過' : x.pass === false ? '沒通過（' + x.why + '）' : '沒有完成（' + x.why + '）'}`);
       const done = state.selfTests.filter(x => x.pass != null), fail = done.filter(x => !x.pass).length;
-      out.innerHTML = `<ul class="st-list">${r.map(x => `<li class="${x.pass === true ? 'ok' : x.pass === false ? 'bad' : ''}"><b>${x.pass === true ? '通過' : x.pass === false ? '沒通過' : '沒有完成'}</b>　${esc(x.name)}${x.why ? `：${esc(x.why)}` : ''}${x.pass && x.noticed ? '（AI 有提醒資料中有指令，已忽略）' : ''}<details><summary>看 AI 的回答</summary><p>${esc(x.reply)}</p></details></li>`).join('')}</ul>
+      DQ.safe(out).innerHTML = `<ul class="st-list">${r.map(x => `<li class="${x.pass === true ? 'ok' : x.pass === false ? 'bad' : ''}"><b>${x.pass === true ? '通過' : x.pass === false ? '沒通過' : '沒有完成'}</b>　${esc(x.name)}${x.why ? `：${esc(x.why)}` : ''}${x.pass && x.noticed ? '（AI 有提醒資料中有指令，已忽略）' : ''}<details><summary>看 AI 的回答</summary><p>${esc(x.reply)}</p></details></li>`).join('')}</ul>
         <p class="hint">這次開啟後累計測了 ${done.length} 題，${fail ? `<b>${fail} 題沒通過</b>，AI 的說明請更謹慎看待（檢查結果不受影響）` : '全部通過'}。</p>`;
     } catch (e) { out.textContent = e.message; }
     b.disabled = false;

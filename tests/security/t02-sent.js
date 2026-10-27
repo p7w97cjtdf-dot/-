@@ -32,7 +32,7 @@ const raw = ['陳美玲', 'F223456789', '0933222111', '23456789', 'chen.ml@', '�
     // 外觀像證號的保單號碼 (P2 開頭 + 8 碼) 依設計不遮罩：它們出現在申報資料的保單號碼欄位
     policyNumbersKept: [...new Set([...all.matchAll(/(?<![A-Za-z0-9])[A-Za-z][1289A-Da-d]\d{8}(?![A-Za-z0-9])/g)].map(m => m[0]))].slice(0, 8),
   };
-  console.log(JSON.stringify({ calls: sent.length, chars: sent.map(s => s.length), leak, note: (note || '').slice(0, 120), sampleDecode: (sent[sent.length - 1].match(/<資料>\n錯誤代碼[^\n]*/) || [''])[0].slice(0, 400) }, null, 2));
+  console.log(JSON.stringify({ calls: sent.length, chars: sent.map(s => s.length), leak, note: (note || '').slice(0, 120), sampleDecode: (sent[sent.length - 1].match(/<declaration_data>\n錯誤代碼[^\n]*/) || [''])[0].slice(0, 400) }, null, 2));
   await browser.close();
   // 送出前確認視窗：顯示的就是實際要送出的內容；按取消就不送
   {

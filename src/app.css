@@ -819,6 +819,9 @@ body:not(.no-data) main { padding-top: 20px; }
 #ai-preview { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: 12px; padding: 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18); }
 #ai-preview::backdrop { background: rgba(10, 10, 10, .45); }
 #ai-preview h2 { margin: 0 0 6px; font-size: 18px; }
+.ai-preview-key { display: grid; gap: 4px; margin: 10px 0 0; font-size: 13px; font-weight: 600; }
+.ai-preview-key[hidden] { display: none; }
+.ai-preview-key input { font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 #ai-preview pre { max-height: 50vh; overflow: auto; white-space: pre-wrap; word-break: break-word; background: #F7F7F7; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.6; }
 .ai-preview-skip { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--mut); }
 .ai-preview-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }

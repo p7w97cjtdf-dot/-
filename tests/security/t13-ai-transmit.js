@@ -1,4 +1,4 @@
-// AI 傳輸：每一次都要能看到實際送出的完整內容，並且不在前端長期保存高權限金鑰
+// AI 傳輸：每一次都要能看到實際送出的完整內容；金鑰只放在閉包、用完就清除，不寫進瀏覽器儲存空間或 window
 const fs = require('fs');
 const path = require('path');
 const { open, ROOT } = require('./_browser.js');
@@ -27,7 +27,7 @@ const XLSX = require(path.join(ROOT, 'vendor', 'xlsx.core.min.js'));
     ok.everyTimeConfirm = shown.length === 2 && shown.every(x => x.open);
     ok.previewIsExactlySent = sent.length === 2 && shown.every((x, i) => x.text === sent[i]);
     // 系統指示也在預覽裡 (不是只有資料那一段)
-    ok.previewIncludesSystem = shown.every(x => /安全規則|<資料>/.test(x.text) && x.text.length === sent[0].length);
+    ok.previewIncludesSystem = shown.every(x => /安全規則|<declaration_data>/.test(x.text) && x.text.length === sent[0].length);
     // AI 傳送紀錄：三筆 (兩筆已送出、一筆取消)，內容等於實際送出
     await page.click('#btn-ai-log'); await page.waitForTimeout(200);
     const logged = await page.evaluate(() => ({ open: document.querySelector('#ai-log').open, items: DQ.ai.sent.map(e => ({ status: e.status, payload: e.payload })), rows: document.querySelectorAll('#ai-log .ai-log-item').length }));
@@ -42,25 +42,63 @@ const XLSX = require(path.join(ROOT, 'vendor', 'xlsx.core.min.js'));
     ok.errors1 = log.errors.filter(e => !/serviceWorker/.test(e)).length === 0;
     await browser.close();
   }
-  // ---- 2. Dify 金鑰：只接受應用金鑰、只留在這個分頁；舊版存在 localStorage 的金鑰會刪掉；部署設定不能放金鑰 ----
+  // ---- 2. Dify 金鑰：只接受應用金鑰；只放在 AI 模組的閉包 (不寫進 localStorage / sessionStorage、不掛在 window)；
+  //         每完成一次 AI 操作就清除；舊版存的金鑰會刪掉；部署設定不能放金鑰；輸入框不讓瀏覽器自動填入 ----
   {
-    const DIFY = 'https://api.dify.ai/v1';
-    const serve = (u, r) => { if (!u.startsWith(DIFY)) return false; r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ answer: 'OK' }) }); return true; };
-    const t = await open({ serve });
+    const DIFY = 'https://api.dify.ai/v1', auths = [];
+    const serve = (u, r) => { if (!u.startsWith(DIFY)) return false; auths.push(r.request().headers().authorization || ''); r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ answer: 'OK' }) }); return true; };
+    const t = await open({ serve, aiPreview: true });
     const { page, ctx } = t;
+    // 在 window 底下 (含 DQ 的所有物件) 找有沒有金鑰字串
+    const keyInWindow = k => page.evaluate(k => {
+      const seen = new Set(), stack = [[window, 0]];
+      while (stack.length) {
+        const [o, d] = stack.pop();
+        if (!o || seen.has(o) || d > 6) continue; seen.add(o);
+        let keys; try { keys = Object.keys(o); } catch (e) { continue; }
+        for (const p of keys) {
+          let v; try { v = o[p]; } catch (e) { continue; }
+          if (typeof v === 'string' && v.includes(k)) return p;
+          if (v && typeof v === 'object' && !(v instanceof Node) && (o !== window || /^(DQ|DQ_AI_CONFIG|__)/.test(p))) stack.push([v, d + 1]);
+        }
+      }
+      return '';
+    }, k);
+    const stores = () => page.evaluate(() => JSON.stringify(Object.assign({}, localStorage)) + JSON.stringify(Object.assign({}, sessionStorage)) + document.cookie);
     await page.evaluate(() => { document.querySelector('#ai-settings').open = true; });
     await page.fill('#dify-url', DIFY); await page.fill('#dify-key', 'dataset-abcdefgh1234'); await page.click('#btn-dify-save'); await page.waitForTimeout(200);
     ok.rejectHighPrivilegeKey = /只接受 Dify「應用」的 API 金鑰/.test(await page.textContent('#dify-note')) && await page.evaluate(() => DQ.ai.providerName() !== 'Dify');
     await page.fill('#dify-key', 'app-goodkey12345'); await page.click('#btn-dify-save'); await page.waitForTimeout(200);
-    const st = await page.evaluate(() => ({ provider: DQ.ai.providerName(), local: JSON.stringify(Object.assign({}, localStorage)), session: JSON.stringify(Object.assign({}, sessionStorage)) }));
-    ok.keyOnlyInTab = st.provider === 'Dify' && !/app-goodkey/.test(st.local) && /app-goodkey/.test(st.session) && /api\.dify\.ai/.test(st.local);
-    // 新分頁 (同一台電腦)：網址還在、金鑰要重新貼
+    const st = await page.evaluate(() => ({ provider: DQ.ai.providerName(), cfg: JSON.stringify(DQ.ai.difyConfig()), box: document.querySelector('#dify-key').value, local: localStorage.getItem('dq-dify-url') }));
+    const s1 = await stores(), w1 = await keyInWindow('app-goodkey');
+    ok.keyNotStored = st.provider === 'Dify' && !/app-goodkey/.test(s1) && st.local === DIFY && !/app-goodkey|key/.test(st.cfg) && st.box === '' && w1 === '';
+    // 測試連線：帶著金鑰；完成後金鑰清除，再按一次要重新貼
+    await page.click('#btn-dify-test'); await page.waitForTimeout(400);
+    const afterPing = await page.evaluate(() => ({ note: document.querySelector('#dify-note').textContent, needs: DQ.ai.needsKey() }));
+    await page.click('#btn-dify-test'); await page.waitForTimeout(300);
+    const again = await page.textContent('#dify-note');
+    ok.keyClearedAfterCall = auths.length === 1 && auths[0] === 'Bearer app-goodkey12345' && /連線成功/.test(afterPing.note) && afterPing.needs && /請先在「API 金鑰」貼上/.test(again);
+    // 一般 AI 操作：確認視窗要求貼上金鑰；送出後輸入框清空、金鑰清除；整個過程沒有寫進儲存空間或 window
+    await page.setInputFiles('#file-book', SAMPLE); await page.waitForTimeout(2500);
+    await page.click('#btn-ai'); await page.waitForTimeout(400);
+    const dlg = await page.evaluate(() => ({ open: document.querySelector('#ai-preview').open, keyBox: !document.querySelector('#ai-preview-key-box').hidden }));
+    await page.click('#ai-preview-yes'); await page.waitForTimeout(200);   // 沒貼金鑰：視窗不關，說明原因
+    const noKey = await page.evaluate(() => ({ open: document.querySelector('#ai-preview').open, note: document.querySelector('#ai-preview-note').textContent }));
+    await page.fill('#ai-preview-key', 'app-goodkey12345');
+    const w2 = await keyInWindow('app-goodkey');   // 輸入框本身不算 (不是 window 的屬性)
+    await page.click('#ai-preview-yes'); await page.waitForTimeout(800);
+    const after = await page.evaluate(() => ({ needs: DQ.ai.needsKey(), box: document.querySelector('#ai-preview-key').value, open: document.querySelector('#ai-preview').open }));
+    const s2 = await stores(), w3 = await keyInWindow('app-goodkey');
+    ok.dialogAsksKeyThenClears = dlg.open && dlg.keyBox && noKey.open && /金鑰/.test(noKey.note) && auths.length === 2 && auths[1] === 'Bearer app-goodkey12345' && after.needs && after.box === '' && !after.open && !/app-goodkey/.test(s2) && w2 === '' && w3 === '';
+    // 輸入框都關掉瀏覽器的自動填入
+    ok.autocompleteOff = await page.evaluate(() => ['#dify-url', '#dify-key', '#ai-preview-key', '#ap-key', '#ap-name'].every(s => document.querySelector(s).getAttribute('autocomplete') === 'off'));
+    // 新分頁 (同一台電腦)：網址還在，金鑰沒有跟著過去
     const p2 = await ctx.newPage(); await p2.goto(page.url()); await p2.waitForTimeout(800);
-    ok.newTabNeedsKey = await p2.evaluate(() => DQ.ai.providerName() !== 'Dify' && document.querySelector('#dify-url').value === 'https://api.dify.ai/v1');
-    // 舊版：金鑰存在 localStorage → 開啟時刪掉金鑰、只留網址
-    await p2.evaluate(() => localStorage.setItem('dq-dify', JSON.stringify({ url: 'https://api.dify.ai/v1', key: 'app-oldkey123456' })));
+    ok.newTabNoKey = await p2.evaluate(() => DQ.ai.providerName() === 'Dify' && DQ.ai.needsKey() && document.querySelector('#dify-url').value === 'https://api.dify.ai/v1');
+    // 舊版：金鑰存在 localStorage 或 sessionStorage → 開啟時刪掉金鑰、只留網址
+    await p2.evaluate(() => { localStorage.setItem('dq-dify', JSON.stringify({ url: 'https://api.dify.ai/v1', key: 'app-oldkey123456' })); sessionStorage.setItem('dq-dify', JSON.stringify({ url: 'https://api.dify.ai/v1', key: 'app-oldkey654321' })); });
     await p2.reload(); await p2.waitForTimeout(800);
-    ok.oldKeyMigrated = await p2.evaluate(() => !/app-oldkey/.test(JSON.stringify(Object.assign({}, localStorage))) && !localStorage.getItem('dq-dify') && localStorage.getItem('dq-dify-url') === 'https://api.dify.ai/v1');
+    ok.oldKeyMigrated = await p2.evaluate(() => !/app-oldkey/.test(JSON.stringify(Object.assign({}, localStorage)) + JSON.stringify(Object.assign({}, sessionStorage))) && localStorage.getItem('dq-dify-url') === 'https://api.dify.ai/v1' && DQ.ai.needsKey());
     await t.browser.close();
     // 部署設定 window.DQ_AI_CONFIG 帶金鑰：不採用 (任何打開網頁的人都看得到)；只指定轉發網址 (proxy) 時不帶金鑰
     const t2 = await open({ serve });

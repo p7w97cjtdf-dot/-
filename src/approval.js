@@ -35,14 +35,22 @@
     if (!req || req.type !== 'dq-approval-request' || typeof req.packText !== 'string') throw new Error('這不是核可申請檔');
     if (await sha256(req.packText) !== req.sha256) throw new Error('核可申請檔的內容和申請時不同 (可能被改過)，不予核可');
     if (!String(approver || '').trim()) throw new Error('請填核可人姓名');
-    let priv, jwk;
-    try {
-      priv = await subtle.importKey('pkcs8', pemToDer(pem), { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']);
-      jwk = await subtle.exportKey('jwk', priv);
-    } catch (e) { throw new Error(e.message && /PEM/.test(e.message) ? e.message : '私鑰無法使用：請確認是核可用的 ECDSA P-256 私鑰'); }
+    // 私鑰只在這個函式裡使用，不存到任何地方；用完 (成功或失敗) 就把位元組歸零、拿掉 JWK 的私鑰欄位、變數設為 null
+    let priv = null, jwk = null, der = null, sig, publicKey;
     const approvedAt = new Date().toISOString(), who = String(approver).trim();
-    const sig = await subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, priv, enc(payload(req.packText, who, approvedAt)));
-    const publicKey = { kty: 'EC', crv: 'P-256', x: jwk.x, y: jwk.y };
+    try {
+      try {
+        der = pemToDer(pem);
+        priv = await subtle.importKey('pkcs8', der, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']);
+        jwk = await subtle.exportKey('jwk', priv);
+      } catch (e) { throw new Error(e.message && /PEM/.test(e.message) ? e.message : '私鑰無法使用：請確認是核可用的 ECDSA P-256 私鑰'); }
+      publicKey = { kty: 'EC', crv: 'P-256', x: jwk.x, y: jwk.y };
+      sig = await subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, priv, enc(payload(req.packText, who, approvedAt)));
+    } finally {
+      if (der) der.fill(0);
+      if (jwk) { jwk.d = null; delete jwk.d; }
+      der = null; jwk = null; priv = null; pem = null;
+    }
     return { type: 'dq-approved-pack', packText: req.packText, approval: { approver: who, approvedAt, keyId: await keyIdOf(publicKey), requestedBy: req.requestedBy || '', impact: req.impact || null }, publicKey, sig: b64(sig) };
   }
   // 驗證已核可檔：公鑰必須是這個版本固定的 (pins)，簽章必須正確。回傳 { ok, pack, approval } 或 { ok: false, why }

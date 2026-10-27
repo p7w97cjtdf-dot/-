@@ -45,10 +45,12 @@ async function open(opts) {
     return r.abort();
   });
   if (opts.aiPreview) await page.addInitScript(() => { window.__keepPreview = true; });
+  // Dify 金鑰每次操作完就清除：確認視窗要求金鑰時，自動貼上測試用的金鑰 (opts.difyKey)
+  if (opts.difyKey) await page.addInitScript(k => { window.__testDifyKey = k; }, opts.difyKey);
   // 測試時自動按「送出前確認」視窗的「送出」，和使用者操作一樣 (opts.aiPreview 為 true 時不自動按，用來測試這個視窗)
   await page.addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
     const d = document.querySelector('#ai-preview'); if (!d || window.__keepPreview) return;
-    new MutationObserver(() => { if (d.open) setTimeout(() => { const b = document.querySelector('#ai-preview-yes'); if (d.open && b) b.click(); }, 0); }).observe(d, { attributes: true, attributeFilter: ['open'] });
+    new MutationObserver(() => { if (d.open) setTimeout(() => { const kb = document.querySelector('#ai-preview-key-box'); if (kb && !kb.hidden) document.querySelector('#ai-preview-key').value = window.__testDifyKey || ''; const b = document.querySelector('#ai-preview-yes'); if (d.open && b) b.click(); }, 0); }).observe(d, { attributes: true, attributeFilter: ['open'] });
   }));
   if (opts.ai) await page.addInitScript(() => {
     window.__sent = [];

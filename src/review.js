@@ -44,7 +44,7 @@
     const where = [i.sheet, app.rowLabel(i), (i.policy || i.code || '').trim()].filter(Boolean).join('・');
     const big = value.length && value.length <= 14 ? value : (field || LB.cat(i.category));
     const rec = i.line && (app.state.res.data[i.file] || []).find(r => r._line === i.line);
-    el.innerHTML = `
+    DQ.safe(el).innerHTML = `
       <div class="rv-top">
         <button type="button" class="rv-quit">← 結束</button>
         <div class="rv-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${list.length}" aria-valuenow="${pos}" aria-label="已確認 ${pos} / ${list.length}">${progress()}</div>
@@ -69,7 +69,7 @@
   function renderDone() {
     const fix = [...decisions].filter(([, a]) => a === 'fix').map(([i]) => i);
     const later = [...decisions].filter(([, a]) => a === 'later').length;
-    el.innerHTML = `
+    DQ.safe(el).innerHTML = `
       <div class="rv-top"><button type="button" class="rv-quit">← 結束</button><div class="rv-bar">${progress()}</div><span class="rv-count">${list.length}/${list.length}</span></div>
       <div class="rv-card rv-done" tabindex="-1">
         <div class="rv-big">完成</div>
@@ -93,7 +93,7 @@
       const ids = [...decisions].filter(([, a]) => a === 'fix').map(([i]) => i.id);
       const r = app.applyFix(ids);
       el.querySelector('#rv-note').textContent = `已修改 ${r.total} 個地方，問題從 ${r.before} 個減為 ${r.after} 個。`;
-      b.outerHTML = '<button type="button" class="rv-choice primary" data-act="fixed">下載改好的保單資料</button>';
+      DQ.safe(b).outerHTML = '<button type="button" class="rv-choice primary" data-act="fixed">下載改好的保單資料</button>';
       decisions = new Map();
       return;
     }

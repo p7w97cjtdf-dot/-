@@ -55,8 +55,28 @@ const aiRules = JSON.stringify({ rules: [{ id: 'U001', name: X('ai-name'), file:
   // 報告另存成 HTML 後直接用瀏覽器打開 (沒有 iframe 保護) 也不能執行
   const rp = await page.context().newPage(); await rp.setContent(res.srcdoc); await rp.waitForTimeout(500);
   res.reportExecuted = await rp.evaluate(() => window.__x || []); delete res.srcdoc;
-  res.visited = visit; res.pageErrors = log.errors;
+  // 第二道防線：就算哪一處漏了 esc() 跳脫，DQ.safe (DOMPurify) 也會拿掉會執行的內容 (一般區塊、表格、插入、整份報告)
+  res.sanitizer = await page.evaluate(() => {
+    const bad = '<img src=x id=inj-s1 onerror="window.__x=(window.__x||[]).concat(\'s1\')"><script>window.__x=["s2"]</script><a id=inj-s3 href="javascript:window.__x=[\'s3\']">x</a><svg><script>window.__x=["s4"]</script></svg><iframe srcdoc="<script>parent.__x=[\'s5\']</script>"></iframe><b onclick="x()" id=inj-keep>文字</b>';
+    const div = document.createElement('div'); document.body.append(div); DQ.safe(div).innerHTML = bad;
+    const tb = document.createElement('tbody'); const tbl = document.createElement('table'); tbl.append(tb); document.body.append(tbl);
+    DQ.safe(tb).innerHTML = `<tr><td>${bad}</td></tr>`;
+    DQ.safe(div).insertAdjacentHTML('beforeend', bad);
+    const doc = DQ.safe.doc(`<!doctype html><html><head><meta charset="utf-8"><style>b{color:red}</style><script>window.__x=['s6']</script></head><body>${bad}</body></html>`);
+    const scan = el => ({ scripts: el.querySelectorAll('script, iframe').length, handlers: [...el.querySelectorAll('*')].filter(e => [...e.attributes].some(a => /^on/i.test(a.name))).length, jsLinks: [...el.querySelectorAll('[href]')].filter(e => /^\s*javascript:/i.test(e.getAttribute('href'))).length });
+    const d = new DOMParser().parseFromString(doc, 'text/html');
+    // DOMPurify 沒有載入時：不寫入 HTML，只顯示文字
+    const P = window.DOMPurify; window.DOMPurify = undefined; const fb = document.createElement('div'); DQ.safe(fb).innerHTML = bad; window.DOMPurify = P;
+    return { div: scan(div), table: Object.assign(scan(tb), { rows: tb.rows.length }), doc: Object.assign(scan(d), { keepsCharset: !!d.querySelector('meta[charset]'), keepsStyle: !!d.querySelector('style') }), keptText: div.textContent.includes('文字'), fallbackElements: fb.children.length };
+  });
+  await page.waitForTimeout(300);
+  res.executedAfterSanitizer = await page.evaluate(() => window.__x || []);
+  res.visited = visit; res.pageErrors = log.errors.filter(e => !/serviceWorker/.test(e));
   console.log(JSON.stringify(res, null, 2));
+  const z = o => !o.scripts && !o.handlers && !o.jsLinks, sz = res.sanitizer;
+  process.exitCode = !res.executed.length && !res.reportExecuted.length && !res.executedAfterSanitizer.length && !res.injectedInPage.length && !res.injectedInReport.length
+    && z(sz.div) && z(sz.table) && sz.table.rows === 1 && z(sz.doc) && sz.doc.keepsCharset && sz.doc.keepsStyle && sz.keptText && sz.fallbackElements === 0
+    && !res.csvFormula.some(l => /(^|,)=1\+2/.test(l)) && res.visited.every(v => !/失敗/.test(v)) && !res.pageErrors.length ? 0 : 1;
   if (process.argv[2]) fs.writeFileSync(process.argv[2], JSON.stringify(res, null, 2));
   await browser.close();
 })();
