@@ -2,7 +2,7 @@
  "insurance-act": {
   "name": "保險法（全國法規資料庫）",
   "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0390002",
-  "checkedAt": "2026-10-26T01:07:20.861Z",
+  "checkedAt": "2026-10-27T01:00:03.926Z",
   "changedAt": "2026-10-15T05:39:28.188Z",
   "failures": 0,
   "followed": {},
@@ -527,7 +527,7 @@
  "ib-news": {
   "name": "金融監督管理委員會保險局 首頁公告",
   "url": "https://www.ib.gov.tw/",
-  "checkedAt": "2026-10-26T01:07:20.861Z",
+  "checkedAt": "2026-10-27T01:00:03.926Z",
   "changedAt": "2026-10-23T01:00:05.734Z",
   "failures": 0,
   "followed": {
@@ -992,7 +992,7 @@
  "tii-home": {
   "name": "財團法人保險事業發展中心 首頁公告",
   "url": "https://www.tii.org.tw/",
-  "checkedAt": "2026-10-26T01:07:20.861Z",
+  "checkedAt": "2026-10-27T01:00:03.926Z",
   "changedAt": "2026-10-23T01:00:05.734Z",
   "failures": 0,
   "followed": {
