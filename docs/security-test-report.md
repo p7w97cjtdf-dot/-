@@ -248,6 +248,32 @@ claude.ai 線上版是單一檔案，改為把這些元件直接打包進檔案 
 - 首頁在程式檔沒載入時顯示的提示 (`index.html` 最後一段內嵌程式) 只寫入固定的文字，不含任何資料，CSP 以 sha256 個別允許。
 - JavaScript 的字串無法真正「抹除」：工具能做到的是不保存、不外露、用完就移除參照；記憶體中的殘留會在瀏覽器回收時清掉。需要更高保證時，請改用公司轉發伺服器（前端完全沒有金鑰）。
 
+## 資安修補與回歸測試 (2026-10-27 第二輪)
+
+| 嚴重度 | 問題 | 修正位置 | 狀態 | 測試依據 |
+|---|---|---|---|---|
+| P1 | SheetJS 0.18.5 有已知的特製檔案解析風險 | `vendor/xlsx.core.min.js` | **尚未修補**：官方 0.20.3 只在 cdn.sheetjs.com 發布，開發環境連線被擋，無法取得與驗證，**沒有替換**。已加：執行時版本檢查 (`workbook.libStatus`，畫面與稽核軌跡顯示實際載入的版本)、解析前後比對 `Object.prototype` (原型污染防護)、XLSX.read 關閉公式與 HTML 解析 | `security.test.js` 版本檢查；「已更新到 0.20.3」標為 **todo (未通過)** |
+| P1 | `zipProblem()` 沒有依壓縮比拒絕；目錄沒有驗證 | `src/workbook.js` `zipStats()`／`zipProblem()`／`ZIP_LIMITS`；`src/app.js` `readWorkbook()`；`src/app-import.js` (.docx) | 已修正：XLSX.read 之前檢查壓縮檔大小 (50 MB)、解開後總大小 (100 MB)、單一項目 (50 MB)、項目數 (2000)、壓縮比 (100 倍)，驗證目錄位置與長度、檔案標頭、資料範圍、重疊、重複名稱、加密、壓縮方式；ZIP64、分割壓縮檔一律拒絕；結構讀取例外一律當成拒絕。上限依實測：1 萬張保單的 Excel 7.3 MB、解開後 98 MB (最大工作表 48 MB)、壓縮比 13 倍、記憶體高峰約 380 MB | `zip-guard.test.js` (48 KB → 50 MB、壓縮比 1,026 倍在 XLSX.read 前拒絕；特製目錄；400 次隨機截斷與亂改不丟例外)；`t16-files.js` (瀏覽器內 XLSX.read 呼叫次數為 0) |
+| P1 | 單檔上限 200 MB 沒有實測依據、和「建議 50 MB」不一致 | `src/app.js` `MAX_FILE` | 已修正：文字檔、CSV 上限改為 60 MB (實測 56 MB 約 600 MB 記憶體)；Excel 50 MB；說明頁同步 | `t16-files.js` 61 MB 檔案被拒 |
+| P2 | 新檔案被拒時舊資料與舊結果還留著 | `src/app.js` `rejectFile()`、`readFile()`、`readMany()`、`readOne()`、`readWorkbook()`、上傳欄位事件 | 已修正：太大、不是文字檔、CSV 標題不符、Excel 損毀或預檢不通過、讀取例外，一律移除這個檔案要放的資料格 (Excel 是全部) 並重新計算，訊息說明「沒有讀取」與哪些舊資料已移除；多檔依序讀取；例外都有攔截 | `t16-files.js` (有效→無效、同格替換、多檔、損毀、假 Excel、超過上限) |
+| P2 | `cspAllows()` 找不到 CSP 就放行 | `src/ai.js` `cspAllows()`／`checkUrl()`／`difyConfig()` | 已修正：沒有 CSP 時必須在部署者允許清單 (`DQ_AI_CONFIG.allowedOrigins`) 才放行；只用 https；正式部署模式 (`mode: 'production'`) 只能用核准網域；使用者「只允許這些網址」；畫面分開標示「你自行設定的網址」與「網域是否經部署者核准」；第一次送到新網址要勾選確認「資料會送到 ○○ 網站」；每次送出前再檢查一次 | `security.test.js` 網址政策；`t17-ai-policy.js` |
+| P2 | 沒有「完全離線」 | `src/ai.js` `setOffline()`；`src/app.js` `loadOfficial()`、`lockNetwork()` | 已新增：打開後關閉 AI、不讀取線上法規更新，並加上 `connect-src 'none'` 由瀏覽器擋下所有連線；重新開啟仍是離線 | `t17-ai-policy.js` (對外請求 0、fetch 被擋、檢查照常) |
+| P2 | 提示注入測試只有 3 題；沒有服務時可能顯示「全部通過」 | `src/ai.js` `SELF_TESTS`、`selfTest()`；`src/prompt-guard.js`；`src/app.js` 自我測試畫面 | 已修正：8 題 (洩漏系統提示、外傳資料、忽略檢核結果、停用規則、刪除資料、竄改 JSON、捏造法規依據、改變輸出)；沒有服務、離線或送出失敗顯示「無可用服務／尚未測試」，不算通過；畫面註明只檢查常見寫法、通過不代表完全防護 | `security.test.js` (每題照做→沒通過、拒絕→通過、沒有服務→尚未測試)；`t05-prompt.js` |
+| P2 | 法規版本沒有核實狀態 | `rules/versions.js`；`src/app.js` `renderVersion()`、稽核軌跡；`src/report.js` | 已修正：列出依據文件、版本、函文、適用起點、文件記錄日期、官方來源、最後核實日期；**三個險種都還沒有向官方核實**，顯示「尚未核實最新版本」；不再寫「最新法規更新」 | `security.test.js` 法規版本、更新包竄改／錯誤簽章／非核准金鑰／偷加停用規則 |
+| P2 | 個資遮罩可繞過 (第二輪) | `src/pii.js` `canon()`、`redact()`、`scan()`、`twIdValid()`、`luhn()` | 已修正：看不見的字元、特殊破折號、全形 ＠．、[at] (dot) 先整理；沒寫「生日」的生日 (「…生」「出生於…」)；角色後面沒有冒號的姓名；13–19 碼通過 Luhn 的卡號只留末 4 碼；護照、統一編號；保單號碼欄位裡檢查碼正確的身分證號仍遮罩；第二道檢查先整理再掃描、說明是哪一類 | `pii.test.js` 9 筆範例與不誤遮 |
+| P3 | CSV 公式注入：負號開頭、前置空白／控制字元、全形符號沒有擋 | `src/report.js` `csvCell()` (問題清單與稽核軌跡共用) | 已修正：純數字 (含負數) 照舊，其餘以 = + - @ (含全形) 開頭或前面有空白、控制字元的都加 ' | `security.test.js` CSV 公式注入 |
+
+回歸測試 (2026-10-27)：
+- `npm test`：120 項，119 通過、0 失敗、1 項 todo (SheetJS 0.20.3 未替換，**未通過**)。
+- 瀏覽器測試 t01–t03、t05、t06、t08–t17 與 `tests/run.html`：見 Pull Request 說明的實際結果。
+- 建置的單一 HTML (`dist/index.html`)：42 段內嵌程式語法檢查全部通過；桌面 (1360×900) 與手機 (390×844) 開啟、放入試用資料都沒有錯誤，沒有橫向捲動；報告預覽 iframe `sandbox=""`。
+
+尚未驗證 (不宣稱安全)：
+- **SheetJS**：仍是 0.18.5，見上表。要修補請在環境的網路設定允許 `cdn.sheetjs.com`，下載官方 `xlsx-0.20.3.tgz`、核對官方公布的雜湊值後替換 `vendor/xlsx.core.min.js`，再把版本測試的 todo 拿掉。
+- **真實 AI 連線**：Dify 與 Claude 都是用模擬回覆測試；真實模型的行為要在部署環境按「測試 AI 會不會被資料裡的指令影響」。
+- **正式部署的 CSP**：只測了 `index.html` 內的 CSP meta；伺服器回應標頭的 CSP 要在正式網站上確認。
+- **官方法規版本**：保發中心網站從開發環境連不到，沒有核實。
+
 
 ## 尚未處理的建議事項
 

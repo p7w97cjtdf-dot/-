@@ -39,6 +39,9 @@
         note('#pg-note', `共 ${out.pages} 頁；規則最集中的是第 ${best + 1}–${Math.min(out.pages, best + 18)} 頁，建議先轉換這些頁（一次 20 頁內較快）`);
         fillPages();
       } else if (/\.docx$/i.test(f.name)) {
+        // Word 檔也是 ZIP 壓縮檔：交給 Word 元件之前先預檢 (壓縮炸彈、特製目錄)
+        const zp = DQ.workbook.zipStats(buf);
+        if (!zp || zp.bad) return note('#conv-note', `「${f.name}」${zp ? zp.bad : '不是有效的 Word 檔 (.docx)'}，沒有讀取。`);
         $('#rule-text').value = await RI.docxText(buf);
       } else {
         $('#rule-text').value = new TextDecoder('utf-8').decode(buf);

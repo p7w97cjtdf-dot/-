@@ -228,34 +228,94 @@
     return out;
   }
 
-  // .xlsx 是壓縮檔：讀取前先看壓縮檔目錄，算出解開後的總大小與檔案數 (不實際解壓)。
-  // 小檔案解開後膨脹成幾 GB 的「壓縮炸彈」會讓瀏覽器卡死，超過上限就不讀取。不是 ZIP 格式 (例如舊版 .xls) 回傳 null
-  const ZIP_MAX_BYTES = 800 * 1048576, ZIP_MAX_ENTRIES = 5000;
-  function zipStats(buf) {
-    const u8 = new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-    if (u8.length < 22 || dv.getUint32(0, true) !== 0x04034b50) return null;
+  // .xlsx / .ods / .docx 是 ZIP 壓縮檔：交給 Excel 元件解析 (XLSX.read) 之前，先只讀壓縮檔的目錄做預檢 (不實際解壓)。
+  // 小檔案解開後膨脹成幾 GB 的「壓縮炸彈」、或特製的目錄 (長度、位置對不上、互相重疊) 會讓瀏覽器卡死或判讀錯誤：
+  // 任何一項不通過就不解析。上限依實測：1 萬張保單的 Excel 檔 7.3 MB、解開後 98 MB (最大的工作表 48 MB)、
+  // 壓縮比約 13 倍，讀取時記憶體高峰約 380 MB；試用資料的壓縮比 9–12 倍。
+  const ZIP_LIMITS = Object.freeze({
+    maxArchive: 50 * 1048576,    // 壓縮檔本身
+    maxTotal: 100 * 1048576,     // 解開後的總大小
+    maxEntry: 50 * 1048576,      // 單一項目解開後的大小
+    maxEntries: 2000,            // 項目數 (一般 Excel 檔約 20–40 個)
+    maxRatio: 100,               // 壓縮比 (整個檔案，以及解開後超過 1 MB 的單一項目)
+    ratioFloor: 1048576,         // 單一項目小於這個大小時不看壓縮比 (很小的 XML 壓縮比本來就高)
+  });
+  const SIG = { local: 0x04034b50, central: 0x02014b50, eocd: 0x06054b50, zip64eocd: 0x06064b50, zip64loc: 0x07064b50 };
+  const MB = n => `${Math.round(n / 1048576 * 10) / 10} MB`;
+  // 回傳 null (不是 ZIP，例如舊版 .xls)、{ bad: 原因 }，或 { entries, total, compressed, ratio, maxEntry, maxRatio }
+  function zipStats(buf, limits) {
+    // 讀到檔案範圍外 (特製或截斷的檔案) 時 DataView 會丟出例外：一律當成結構不正確、拒絕
+    try { return zipStats0(buf, limits); } catch (e) { return { bad: '壓縮檔的結構不正確 (檔案可能不完整或被改過)' }; }
+  }
+  function zipStats0(buf, limits) {
+    const L = Object.assign({}, ZIP_LIMITS, limits);
+    const u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength), len = u8.length;
+    if (len < 4 || dv.getUint32(0, true) !== SIG.local) return null;
+    if (len > L.maxArchive) return { bad: `壓縮檔本身有 ${MB(len)}，超過 ${MB(L.maxArchive)}` };
+    if (len < 22) return { bad: '壓縮檔不完整 (太短)' };
+    // 目錄結尾 (EOCD)：從檔尾往前找，後面只能接它自己的註解
     let eocd = -1;
-    for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-    if (eocd < 0) return { bad: '找不到壓縮檔目錄' };
-    const entries = dv.getUint16(eocd + 10, true), cdOff = dv.getUint32(eocd + 16, true);
-    if (entries === 0xffff || cdOff === 0xffffffff) return { bad: '超大型壓縮格式 (ZIP64)' };
-    let p = cdOff, total = 0, n = 0;
-    while (n < entries && p + 46 <= u8.length && dv.getUint32(p, true) === 0x02014b50) {
-      const size = dv.getUint32(p + 24, true);
-      if (size === 0xffffffff) return { bad: '超大型壓縮格式 (ZIP64)' };
-      total += size; n++;
-      p += 46 + dv.getUint16(p + 28, true) + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+    for (let i = len - 22; i >= Math.max(0, len - 22 - 65535); i--) if (dv.getUint32(i, true) === SIG.eocd && i + 22 + dv.getUint16(i + 20, true) === len) { eocd = i; break; }
+    if (eocd < 0) return { bad: '找不到壓縮檔目錄，或目錄後面有多餘的資料 (檔案可能不完整或被改過)' };
+    if (eocd >= 20 && dv.getUint32(eocd - 20, true) === SIG.zip64loc) return { bad: '使用超大型壓縮格式 (ZIP64)，工具不支援' };
+    const disk = dv.getUint16(eocd + 4, true), cdDisk = dv.getUint16(eocd + 6, true), here = dv.getUint16(eocd + 8, true), entries = dv.getUint16(eocd + 10, true);
+    const cdSize = dv.getUint32(eocd + 12, true), cdOff = dv.getUint32(eocd + 16, true);
+    if (entries === 0xffff || here === 0xffff || cdSize === 0xffffffff || cdOff === 0xffffffff) return { bad: '使用超大型壓縮格式 (ZIP64)，工具不支援' };
+    if (disk !== 0 || cdDisk !== 0 || here !== entries) return { bad: '分割成多個檔案的壓縮檔，工具不支援' };
+    if (!entries) return { bad: '壓縮檔是空的' };
+    if (entries > L.maxEntries) return { bad: `內含 ${entries} 個項目，超過 ${L.maxEntries} 個` };
+    if (cdOff + cdSize !== eocd) return { bad: '壓縮檔目錄的位置或長度對不上 (檔案可能不完整或被改過)' };
+    let p = cdOff, total = 0, compressed = 0, maxEntry = 0, maxRatio = 0;
+    const spans = [], names = new Set();
+    for (let n = 0; n < entries; n++) {
+      if (p + 46 > eocd || dv.getUint32(p, true) !== SIG.central) return { bad: '壓縮檔目錄不完整' };
+      const flags = dv.getUint16(p + 8, true), method = dv.getUint16(p + 10, true);
+      const csize = dv.getUint32(p + 20, true), usize = dv.getUint32(p + 24, true);
+      const nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true), loc = dv.getUint32(p + 42, true);
+      const end = p + 46 + nlen + xlen + clen;
+      if (end > eocd) return { bad: '壓縮檔目錄的項目長度超出範圍' };
+      if (csize === 0xffffffff || usize === 0xffffffff || loc === 0xffffffff) return { bad: '使用超大型壓縮格式 (ZIP64)，工具不支援' };
+      for (let x = p + 46 + nlen; x + 4 <= p + 46 + nlen + xlen; x += 4 + dv.getUint16(x + 2, true)) if (dv.getUint16(x, true) === 0x0001) return { bad: '使用超大型壓縮格式 (ZIP64)，工具不支援' };
+      if (flags & 1) return { bad: '壓縮檔有密碼保護' };
+      if (method !== 0 && method !== 8) return { bad: `使用不支援的壓縮方式 (${method})` };
+      if (method === 0 && csize !== usize) return { bad: '未壓縮項目的大小對不上' };
+      const name = new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nlen));
+      if (names.has(name)) return { bad: `壓縮檔裡有重複的項目「${name.slice(0, 40)}」` };
+      names.add(name);
+      // 對應的檔案標頭 (local header) 要在目錄之前、位置正確，資料不能超出範圍
+      if (loc + 30 > cdOff || dv.getUint32(loc, true) !== SIG.local) return { bad: '壓縮檔項目的位置對不上 (檔案可能不完整或被改過)' };
+      const data = loc + 30 + dv.getUint16(loc + 26, true) + dv.getUint16(loc + 28, true);
+      if (data + csize > cdOff) return { bad: '壓縮檔項目的長度超出範圍 (檔案可能不完整或被改過)' };
+      spans.push([loc, data + csize]);
+      if (usize > L.maxEntry) return { bad: `其中「${name.slice(0, 40)}」解開後有 ${MB(usize)}，超過單一項目 ${MB(L.maxEntry)}` };
+      const r = usize / Math.max(1, csize);
+      if (usize >= L.ratioFloor && r > L.maxRatio) return { bad: `其中「${name.slice(0, 40)}」的壓縮比約 ${Math.round(r).toLocaleString()} 倍，超過 ${L.maxRatio} 倍 (可能是壓縮炸彈)` };
+      total += usize; compressed += csize; maxEntry = Math.max(maxEntry, usize); if (usize >= L.ratioFloor) maxRatio = Math.max(maxRatio, r);
+      if (total > L.maxTotal) return { bad: `解開後超過 ${MB(L.maxTotal)}` };
+      p = end;
     }
-    if (n !== entries) return { bad: '壓縮檔目錄不完整' };
-    return { entries: n, total, ratio: total / Math.max(1, u8.length) };
+    if (p !== eocd) return { bad: '壓縮檔目錄的長度對不上 (檔案可能不完整或被改過)' };
+    // 項目的資料不能互相重疊 (重疊是讓少量資料解開很多次的壓縮炸彈手法)
+    spans.sort((x, y) => x[0] - y[0]);
+    for (let i = 1; i < spans.length; i++) if (spans[i][0] < spans[i - 1][1]) return { bad: '壓縮檔的項目互相重疊 (可能是壓縮炸彈)' };
+    const ratio = total / Math.max(1, len);
+    if (total >= L.ratioFloor && ratio > L.maxRatio) return { bad: `解開後有 ${MB(total)}，壓縮比約 ${Math.round(ratio).toLocaleString()} 倍，超過 ${L.maxRatio} 倍 (可能是壓縮炸彈)` };
+    return { entries, total, compressed, ratio, maxEntry, maxRatio };
   }
-  function zipProblem(buf) {
-    const z = zipStats(buf);
-    if (!z) return '';
-    if (z.bad) return z.bad;
-    if (z.entries > ZIP_MAX_ENTRIES) return `內含 ${z.entries} 個檔案，超過 ${ZIP_MAX_ENTRIES} 個`;
-    if (z.total > ZIP_MAX_BYTES) return `解開後有 ${Math.round(z.total / 1048576)} MB，超過 ${ZIP_MAX_BYTES / 1048576} MB`;
-    return '';
+  // Excel 讀取元件 (SheetJS) 的版本檢查：0.18.5 有已知的特製檔案解析風險 (原型污染 CVE-2023-30533 於 0.19.3 修補、
+  // 正規表示式阻斷 CVE-2024-22363 於 0.20.2 修補)，官方修補版本至少要 0.20.3。回傳 { version, ok }
+  const XLSX_MIN = '0.20.3';
+  const verNum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0);
+  function libStatus(X) {
+    const v = X && X.version ? String(X.version) : '', a = verNum(v), b = verNum(XLSX_MIN);
+    let ok = !!v;
+    for (let i = 0; ok && i < 3; i++) { if (a[i] > b[i]) break; if (a[i] < b[i]) ok = false; }
+    return { version: v || '（沒有載入）', ok, min: XLSX_MIN };
   }
-  return { SHEET_SLOT, NAMES, sheets, extSheets, slots, files, headProblem, normalize, normalizeCsv, guessByHead, toYmd, zipStats, zipProblem };
+  // 預檢結果：'' 表示通過 (或不是 ZIP)，其他是拒絕的原因
+  function zipProblem(buf, limits) {
+    const z = zipStats(buf, limits);
+    return z && z.bad ? z.bad : '';
+  }
+  return { SHEET_SLOT, NAMES, sheets, extSheets, slots, files, headProblem, normalize, normalizeCsv, guessByHead, toYmd, zipStats, zipProblem, ZIP_LIMITS, libStatus, XLSX_MIN };
 });

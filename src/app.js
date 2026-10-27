@@ -73,6 +73,8 @@
     } catch (e) { return { reject: '簽章公鑰格式不正確' }; }
   }
   async function loadOfficial() {
+    // 完全離線模式：不自動讀取線上法規更新
+    if (DQ.ai && DQ.ai.isOffline && DQ.ai.isOffline()) { state.officialLoaded = { at: new Date(), count: 0, offline: true }; return; }
     const bases = location.protocol.startsWith('http') ? [''] : [];
     bases.push('https://p7w97cjtdf-dot.github.io/-/');  // 單一檔案的線上版：改從公開網站讀取
     for (const b of bases) {
@@ -103,7 +105,7 @@
         const fresh = packs.filter(p => !seen.has(offKey(p)));
         if (fresh.length) {
           $('#update-notice').hidden = false;
-          DQ.safe($('#update-notice')).innerHTML = `已自動套用最新法規更新：${fresh.map(p => esc(p.name + (p.version ? ` 第 ${p.version} 版` : '') + (p.basis ? `（${p.basis}）` : ''))).join('、')}。<a href="#updates" data-goto="updates">查看內容</a>`;
+          DQ.safe($('#update-notice')).innerHTML = `已自動套用官方法規更新：${fresh.map(p => esc(p.name + (p.version ? ` 第 ${p.version} 版` : '') + (p.basis ? `（${p.basis}）` : ''))).join('、')}。<a href="#updates" data-goto="updates">查看內容</a>`;
           try { localStorage.setItem('dq-official-seen', JSON.stringify([...seen, ...fresh.map(offKey)])); } catch (e) { /* ignore */ }
         }
         if (DQ.app && DQ.app.setPacks) DQ.app.setPacks(state.packs);
@@ -187,22 +189,48 @@
   }
   // Excel 活頁簿：依工作表名稱分配到各檔案 (src/workbook.js)
   const BOOK = /\.(xlsx|xlsm|xls|ods)$/i;
+  // 檔案沒有讀取時 (太大、不是文字檔、標題不符、Excel 損毀或預檢不通過、讀取失敗)，處理方式都一樣：
+  // 這個檔案原本要放的資料格 (Excel 是一整套，就是全部) 清掉舊資料、重新計算結果，並說明沒有讀取的原因，
+  // 不會讓畫面上的結果看起來像是新檔案檢查通過
+  function rejectFile(name, why, slots) {
+    const had = (slots || []).filter(k => state.files[k]);
+    for (const k of had) { delete state.files[k]; delete state.src[k]; delete state.fixed[k]; $('#name-' + k).textContent = '尚未放入'; }
+    if (had.length) state.key = state.reconKey = state.masterKey = state.anomalyKey = null;
+    state.notes.push({ source: name, why: `沒有讀取：${why}` });
+    audit('拒絕檔案', `${name}（${why}）${had.length ? `；移除原本的${had.map(k => SLOT_NAME[k] || k).join('、')}` : ''}`);
+    run();
+    $('#sample-note').textContent = `「${name}」${why}，沒有讀取。` + (had.length ? `原本放入的「${had.map(k => SLOT_NAME[k] || k).join('」「')}」已移除，下方結果${SLOTS.some(k => state.files[k]) ? '只包含其他已放入的資料' : '已清空'}，不是這個檔案的檢查結果。` : '');
+  }
+  const WB_ZIP = /\.(xlsx|xlsm|ods)$/i;
   async function readWorkbook(file) {
     if (!window.XLSX) { $('#sample-note').textContent = '讀取 Excel 的元件沒有載入成功：工具的 vendor 資料夾可能不完整。請重新下載整個工具資料夾，或改用網址開啟。'; return; }
-    let wb;
-    const buf = await file.arrayBuffer();
-    const zp = DQ.workbook.zipProblem(buf);
     // 一個 Excel 是一整套資料：放入新的 Excel 就取代之前放入的資料；讀不到資料時也清掉舊結果，避免畫面還留著上一份的結果
-    const fail = msg => { clearFiles(); $('#sample-note').textContent = msg; run(); };
-    if (zp) { audit('拒絕檔案', `${file.name}（${zp}）`); return fail(`「${file.name}」${zp}，為避免瀏覽器記憶體不足，沒有讀取。請在 Excel 打開後另存新檔，或把資料拆成幾個檔案。`); }
-    try { wb = XLSX.read(buf, { type: 'array' }); }
-    catch (e) { return fail(`「${file.name}」無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次。`); }
+    const fail = why => rejectFile(file.name, why, SLOTS);
+    const L = DQ.workbook.ZIP_LIMITS;
+    if (file.size > L.maxArchive) return fail(`有 ${Math.round(file.size / 1048576)} MB，超過 Excel 檔 ${L.maxArchive / 1048576} MB 上限 (解開後太大，瀏覽器可能記憶體不足)。請把資料拆成幾個檔案`);
+    let buf;
+    try { buf = await file.arrayBuffer(); } catch (e) { return fail('讀取檔案時發生錯誤，請重新選擇檔案'); }
+    // 交給 Excel 元件 (XLSX.read) 之前先預檢：壓縮檔大小、解開後總大小、單一項目大小、項目數、壓縮比、目錄結構
+    const head = new Uint8Array(buf, 0, Math.min(8, buf.byteLength));
+    const isZip = head[0] === 0x50 && head[1] === 0x4b, isOle = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0;
+    if (WB_ZIP.test(file.name) && !isZip) return fail('不是有效的 Excel 檔（.xlsx 應為壓縮檔格式），可能已損毀或副檔名被改過');
+    if (/\.xls$/i.test(file.name) && !isZip && !isOle) return fail('不是有效的舊版 Excel 檔（.xls），可能已損毀或副檔名被改過');
+    const zp = isZip ? DQ.workbook.zipProblem(buf) : '';
+    if (zp) return fail(`${zp}，為避免瀏覽器記憶體不足或判讀錯誤`);
+    let wb;
+    // 原型污染防護：舊版 Excel 元件解析特製檔案時可能在 Object.prototype 加上屬性 (CVE-2023-30533)。
+    // 解析前後比對，有被加上的屬性就移除並拒絕這個檔案
+    const protoBefore = new Set(Object.getOwnPropertyNames(Object.prototype));
+    try { wb = XLSX.read(buf, { type: 'array', cellFormula: false, cellHTML: false, bookVBA: false }); }
+    catch (e) { return fail('無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次'); }
+    const polluted = Object.getOwnPropertyNames(Object.prototype).filter(k => !protoBefore.has(k));
+    if (polluted.length) { for (const k of polluted) delete Object.prototype[k]; return fail('含有會改寫程式內部物件的特製內容（可能是惡意檔案）'); }
     const { got, from, blank, skipped, fixed } = DQ.workbook.slots(XLSX, wb);
     for (const name of blank) state.notes.push({ source: `${file.name}「${name}」`, why: '只有標題列，沒有資料' });
     for (const x of skipped) state.notes.push({ source: `${file.name}「${x.name}」`, why: x.why });
-    if (!DETAIL.some(k => got[k]) && blank.length) return fail(`「${file.name}」的工作表只有標題列、還沒有資料，沒有可以檢查的內容。請從第二列開始填入保單資料或理賠資料，再放進來。`);
-    if (!Object.keys(got).length && skipped.some(x => /欄位對不上/.test(x.why))) return fail(`「${file.name}」的工作表欄位不是申報資料的格式，沒有可以檢查的資料。每張工作表缺少的欄位列在下方；格式可參考「完整說明」的「可以放哪些檔案」或試用資料。`);
-    if (!Object.keys(got).length) return fail(`「${file.name}」裡找不到可以辨識的工作表。工作表名稱需包含：保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數或資產負債表（癌症險、傷害險在前面加上類別）`);
+    if (!DETAIL.some(k => got[k]) && blank.length) return fail('的工作表只有標題列、還沒有資料，沒有可以檢查的內容。請從第二列開始填入保單資料或理賠資料，再放進來');
+    if (!Object.keys(got).length && skipped.some(x => /欄位對不上/.test(x.why))) return fail('的工作表欄位不是申報資料的格式，沒有可以檢查的資料。每張工作表缺少的欄位列在下方；格式可參考「完整說明」的「可以放哪些檔案」或試用資料');
+    if (!Object.keys(got).length) return fail('裡找不到可以辨識的工作表。工作表名稱需包含：保單資料、理賠資料、客戶資料、商品資料、去年保單資料、系統總數或資產負債表（癌症險、傷害險在前面加上類別）');
     clearFiles();
     const fs = DQ.workbook.files(got);
     for (const [slot, f] of Object.entries(fs)) { state.files[slot] = f; state.src[slot] = `${file.name}「${from[slot]}」`; $('#name-' + slot).textContent = `工作表「${from[slot]}」`; }
@@ -226,7 +254,7 @@
     for (const c of b) { if (c === 0) return true; if (c < 9 || (c > 13 && c < 32)) ctl++; }
     return b.length > 0 && ctl / b.length > 0.01;
   }
-  const notText = name => { $('#sample-note').textContent = `「${name}」看起來不是文字檔（可能是壓縮檔、圖片或其他程式的檔案），沒有讀取。申報資料請放 .txt、.csv 或 Excel 檔。`; };
+  const NOT_TEXT = '看起來不是文字檔（可能是壓縮檔、圖片或其他程式的檔案）。申報資料請放 .txt、.csv 或 Excel 檔';
   // CSV 的標題列要符合放入的那一份資料；不符時不採用，列出缺了哪些欄位
   // 回傳 { text, notes } (已改成標準格式) 或 { problem }
   function csvFix(fid, name, text) {
@@ -234,22 +262,25 @@
     return DQ.workbook.normalizeCsv(fid, text);
   }
   function keepFix(fid, name, notes) { if (notes && notes.length) { state.fixed[fid] = notes; audit('自動調整', `${name}：${notes.join('；')}`); } else delete state.fixed[fid]; }
+  // 放進某一格的檔案：沒有讀取時，這一格原本的資料一併移除 (rejectFile)
   async function readFile(fid, file) {
-    if (tooBig(file)) return;
-    if (BOOK.test(file.name)) { readWorkbook(file); return; }
-    const buf = await file.arrayBuffer();
-    if (looksBinary(buf)) { notText(file.name); return; }
-    const fx = csvFix(fid, file.name, decodeText(buf));
-    if (fx.problem) { state.notes = [{ source: file.name, why: fx.problem }]; $('#sample-note').textContent = `「${file.name}」${fx.problem}，沒有放入。`; renderMap(); return; }
-    setFile(fid, file.name, fx.text); keepFix(fid, file.name, fx.notes);
-    run();
+    try {
+      if (BOOK.test(file.name)) return await readWorkbook(file);
+      if (tooBig(file)) return rejectFile(file.name, tooBigWhy(file), [fid]);
+      const buf = await file.arrayBuffer();
+      if (looksBinary(buf)) return rejectFile(file.name, NOT_TEXT, [fid]);
+      const fx = csvFix(fid, file.name, decodeText(buf));
+      if (fx.problem) return rejectFile(file.name, fx.problem, [fid]);
+      setFile(fid, file.name, fx.text); keepFix(fid, file.name, fx.notes);
+      run();
+    } catch (e) { rejectFile(file.name, `讀取時發生錯誤（${e && e.message ? e.message.slice(0, 80) : '未知原因'}）`, BOOK.test(file.name) ? SLOTS : [fid]); }
   }
   for (const fid of SLOTS) {
     const input = $('#file-' + fid), drop = $('#drop-' + fid);
-    input.addEventListener('change', () => { if (input.files[0]) { sizeNote(input.files); readFile(fid, input.files[0]); } });
+    input.addEventListener('change', () => { if (input.files[0]) { state.notes = []; sizeNote(input.files); readFile(fid, input.files[0]); } input.value = ''; });
     drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-    drop.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove('over'); for (const f of e.dataTransfer.files) readFile(guessSlot(f.name, fid), f); });
+    drop.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove('over'); state.notes = []; (async () => { for (const f of [...e.dataTransfer.files]) await readFile(guessSlot(f.name, fid), f); })(); });
   }
   // 上方的大框：Excel 依工作表名稱分配；文字檔、CSV 依檔名判斷是哪一份資料
   // 檔名看不出來時，依第一行的長度判斷是哪一種申報檔
@@ -268,46 +299,50 @@
     el.textContent = `「${big.map(f => `${f.name}（${mb(f.size)} MB）`).join('」「')}」檔案較大，檢查約需 ${need.toLocaleString()} MB 記憶體${dev ? `；這台裝置約有 ${dev} GB 記憶體` : ''}。` +
       (tight ? '可能會變慢或沒有回應，建議拆成每個 50 MB 以內的檔案分開檢查，並先關掉其他分頁。' : '記憶體 4 GB 以下的電腦建議拆成每個 50 MB 以內的檔案分開檢查。');
   }
-  // 硬性上限：超過就不讀取 (避免瀏覽器分頁耗盡記憶體)。實測 56 MB 約用 600 MB 記憶體，
-  // 200 MB 約 2.2 GB，已接近一般瀏覽器分頁的上限；大型申報檔請拆檔檢查
-  const MAX_FILE = 200 * 1048576;
-  function tooBig(file) {
-    if (!file || file.size <= MAX_FILE) return false;
-    const mb = Math.round(file.size / 1048576);
-    $('#sample-note').textContent = `「${file.name}」有 ${mb} MB，超過單檔 200 MB 上限，為避免瀏覽器記憶體不足，沒有讀取。請拆成較小的檔案再放入。`;
-    audit('拒絕檔案', `${file.name}（${mb} MB，超過 200 MB 上限）`);
-    return true;
-  }
+  // 硬性上限：超過就不讀取 (避免瀏覽器分頁耗盡記憶體)。上限只放到有實測的大小：
+  // 文字檔、CSV 實測 56 MB (14.7 萬筆) 約用 600 MB 記憶體 → 上限 60 MB；Excel 檔另有上限 (src/workbook.js ZIP_LIMITS)。
+  // 更大的檔案沒有實測過，請拆檔檢查
+  const MAX_FILE = 60 * 1048576;
+  const tooBig = file => !!file && file.size > MAX_FILE;
+  const tooBigWhy = file => `有 ${Math.round(file.size / 1048576)} MB，超過文字檔、CSV 單檔 ${MAX_FILE / 1048576} MB 上限 (為避免瀏覽器記憶體不足)。請拆成每份 50 MB 以內的檔案再放入`;
+  // 一次放入多個檔案：一個一個讀完再讀下一個 (避免同時讀取、結果互相覆蓋)；沒有讀取的檔案，
+  // 依檔名或內容判斷原本要放的資料格，清掉那一格的舊資料 (rejectFile)
   async function readMany(files) {
     state.notes = [];
     sizeNote([...files].filter(f => f.size <= MAX_FILE));
     const unknown = [];
     for (const f of files) {
-      if (tooBig(f)) continue;
-      if (BOOK.test(f.name)) { readWorkbook(f); continue; }
-      // 先看內容 (CSV 的標題列、文字檔每行的長度) 判斷是哪一份申報檔，看不出來才看檔名；
-      // 保單資料的檔名寫著「去年」時放到去年保單資料
-      let slot = guessSlot(f.name, null);
-      if (/\.(txt|csv)$/i.test(f.name)) {
-        const buf = await f.arrayBuffer();
-        if (looksBinary(buf)) { notText(f.name); continue; }
-        const text = decodeText(buf);
-        const byContent = /\.csv$/i.test(f.name) ? DQ.csvLayout(text, DETAIL_LAYOUTS) : BY_LENGTH[text.split(/\r?\n/)[0].length] || null;
-        if (byContent) slot = byContent === 'L' && slot === 'prior' ? 'prior' : byContent;
-        // 標題不是標準名稱時，看欄位最多對得上哪一種申報明細檔
-        if (!slot && /\.csv$/i.test(f.name)) slot = DQ.workbook.guessByHead(DQ.parseCSV(text.slice(0, 65536))[0] || [], DETAIL);
-        const fx = slot ? csvFix(slot, f.name, text) : null;
-        if (fx && fx.problem) { state.notes.push({ source: f.name, why: fx.problem }); renderMap(); continue; }
-        if (slot) { setFile(slot, f.name, fx.text); keepFix(slot, f.name, fx.notes); run(); } else unknown.push(f.name);
-        continue;
-      }
-      if (slot) readFile(slot, f); else unknown.push(f.name);
+      try { await readOne(f, unknown); }
+      catch (e) { rejectFile(f.name, `讀取時發生錯誤（${e && e.message ? e.message.slice(0, 80) : '未知原因'}）`, BOOK.test(f.name) ? SLOTS : [guessSlot(f.name, null)].filter(Boolean)); }
     }
     for (const n of unknown) state.notes.push({ source: n, why: '看不出是哪一份資料' });
     if (unknown.length) renderMap();
     if (unknown.length) {
       $('#sample-note').textContent = `看不出「${unknown.join('」「')}」是哪一份資料（CSV 的第一列要是欄位名稱，例如「公司代號、保單編號…」；文字檔每行長度要符合申報格式），請展開下方「分別放入各份資料」，放進對應的格子。`;
       document.querySelector('details.more').open = true;
+    }
+  }
+  async function readOne(f, unknown) {
+    {
+      if (BOOK.test(f.name)) return await readWorkbook(f);
+      if (tooBig(f)) return rejectFile(f.name, tooBigWhy(f), [guessSlot(f.name, null)].filter(Boolean));
+      // 先看內容 (CSV 的標題列、文字檔每行的長度) 判斷是哪一份申報檔，看不出來才看檔名；
+      // 保單資料的檔名寫著「去年」時放到去年保單資料
+      let slot = guessSlot(f.name, null);
+      if (/\.(txt|csv)$/i.test(f.name)) {
+        const buf = await f.arrayBuffer();
+        if (looksBinary(buf)) return rejectFile(f.name, NOT_TEXT, [slot].filter(Boolean));
+        const text = decodeText(buf);
+        const byContent = /\.csv$/i.test(f.name) ? DQ.csvLayout(text, DETAIL_LAYOUTS) : BY_LENGTH[text.split(/\r?\n/)[0].length] || null;
+        if (byContent) slot = byContent === 'L' && slot === 'prior' ? 'prior' : byContent;
+        // 標題不是標準名稱時，看欄位最多對得上哪一種申報明細檔
+        if (!slot && /\.csv$/i.test(f.name)) slot = DQ.workbook.guessByHead(DQ.parseCSV(text.slice(0, 65536))[0] || [], DETAIL);
+        const fx = slot ? csvFix(slot, f.name, text) : null;
+        if (fx && fx.problem) return rejectFile(f.name, fx.problem, [slot]);
+        if (slot) { setFile(slot, f.name, fx.text); keepFix(slot, f.name, fx.notes); run(); } else unknown.push(f.name);
+        return;
+      }
+      if (slot) await readFile(slot, f); else unknown.push(f.name);
     }
   }
   $('#file-book').addEventListener('change', e => { readMany([...e.target.files]); e.target.value = ''; });
@@ -739,7 +774,7 @@
     const CELL = 32000, full = v => { const t = red(v || ''); return t.length > CELL ? t.slice(0, CELL) + `…（共 ${t.length.toLocaleString()} 字，超過 Excel 一格的上限，其餘略）` : t; };
     const aiRows = state.audit.filter(e => AI_ACT.test(e.action)).map(e => [ts(e.at), e.action, red(e.detail), e.payload ? full(e.payload) : '']);
     const rows = fixRows.concat(logRows, aiRows);
-    const info = [['項目', '內容'], ['工具', '申報資料檢核助手'], ['匯出時間', ts(d)], ['檢查依據', $('#rule-version').textContent],
+    const info = [['項目', '內容'], ['工具', '申報資料檢核助手'], ['匯出時間', ts(d)], ['檢查依據', $('#rule-version').textContent], ['法規版本核實狀態', versionStatus()], ['Excel 讀取元件', `SheetJS ${state.xlsxLib ? state.xlsxLib.version : ''}${state.xlsxLib && !state.xlsxLib.ok ? `（低於官方修補版本 ${state.xlsxLib.min}，尚未更新）` : ''}`],
       ['檢查的資料', SLOTS.filter(k => state.files[k]).map(k => `${SLOT_NAME[k] || k}：${state.src[k] || state.files[k].name}（${recCount(k)} 筆）`).join('\n') || '（沒有）'],
       ['紀錄筆數', String(rows.length)], ['說明', '身分證號、姓名、地址、電話、Email 已遮蔽。SHA-256 是放入或下載的檔案內容的雜湊值，可用來確認檔案事後沒有被改過。紀錄只存在網頁上，關掉網頁就沒有。']];
     // 檔名：稽核軌跡_資料檔名_日期_時間
@@ -762,7 +797,7 @@
       state.auditName = name + '.xlsx';
       return download(state.auditName, new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' })), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
-    const q = v => { v = String(v == null ? '' : v); if (/^[=+@\t\r]|^-[^\d]/.test(v)) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const q = DQ.report.csvCell;   // CSV 公式注入防護 (和問題清單共用)
     state.auditName = name + '.csv';
     const all = [['類別', '時間', '動作', '內容']].concat(fixRows.map(r => ['修改紀錄', r[0], '修改', `${r[1]} ${r[2]} ${r[3]} ${r[4]}：「${r[5]}」→「${r[6]}」（${r[7]}）`]), logRows.map(r => ['檢查與檔案', r[0], r[1], r[2]]), aiRows.map(r => ['AI 使用', r[0], r[1], r[2]]));
     download(state.auditName, '\uFEFF' + all.map(r => r.map(q).join(',')).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
@@ -980,7 +1015,7 @@
 
   // ---------- 報告 / 規則 ----------
   // 報告整份 HTML 也經過 DOMPurify 過濾 (畫面上的預覽與下載的檔案相同)
-  function reportHTML() { return DQ.safe.doc(DQ.report.toHTML(rs, state.res, { elapsed: state.elapsed, aiSummary: state.aiSummary, aiInsights: state.aiInsights, aiChecks: state.aiChecks, hidden: hiddenNote(), scope: state.scope, totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } })); }
+  function reportHTML() { return DQ.safe.doc(DQ.report.toHTML(rs, state.res, { versionStatus: versionStatus(), elapsed: state.elapsed, aiSummary: state.aiSummary, aiInsights: state.aiInsights, aiChecks: state.aiChecks, hidden: hiddenNote(), scope: state.scope, totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } })); }
   function renderReport() { $('#report-frame').srcdoc = reportHTML(); }
   // 手冊頁碼 (rules/rules.js)：PDF 頁碼與頁面上印的頁碼
   const SRCDOC = { rules: '檢核規則手冊', manual: '填報手冊' };
@@ -1068,15 +1103,45 @@
     const was = $('#ai-out').textContent === INTRO;
     INTRO = !ok ? DQ.ai.OFFLINE : DQ.ai.providerName() === 'Dify' ? INTRO0 + '（使用「AI 服務設定」裡的 Dify。）' : INTRO0 + '（使用你自己的 Claude 帳號，第一次使用時會詢問是否允許。）';
     if (was && !$('#ai-box').hidden) $('#ai-out').textContent = INTRO;
-    const d = DQ.ai.difyConfig();
-    $('#dify-note').textContent = d ? `目前使用 Dify：${d.url}${d.proxy ? '（經公司轉發伺服器，不需要金鑰）' : '（金鑰不存在瀏覽器：使用 AI 時在確認視窗貼上，完成後就清除）'}` : DQ.ai.providerName() === 'Claude' ? '目前使用 claude.ai 的 Claude；填入 Dify 後會改用 Dify。' : '尚未設定。';
+    const d = DQ.ai.difyConfig(), bad = DQ.ai.urlProblem();
+    $('#dify-note').textContent = DQ.ai.isOffline() ? '目前是完全離線模式，AI 功能已關閉。' : d ? `目前使用 Dify：${d.url}（${d.by === 'user' ? '你自行設定的網址' : '部署設定的網址'}，${DQ.ai.SOURCE[d.source]}）${d.proxy ? '，經公司轉發伺服器，不需要金鑰' : '；金鑰不存在瀏覽器：使用 AI 時在確認視窗貼上，完成後就清除'}` : bad ? `記住的網址不能使用：${bad}` : DQ.ai.providerName() === 'Claude' ? '目前使用 claude.ai 的 Claude；填入 Dify 後會改用 Dify。' : '尚未設定。';
+    const dep = DQ.ai.deployAllow();
+    $('#ai-policy').textContent = `部署者核准的網域：${dep.length ? dep.join('、') : '沒有設定'}${DQ.ai.production() ? '（正式部署模式：只能用這些網域）' : '；其他網址視為你自行設定的連線，仍須在網站安全設定 (CSP) 允許的範圍內'}。只接受 https。`;
   };
   DQ.ai.ready.then(aiReady);
-  { const d = DQ.ai.difyConfig(); $('#dify-url').value = d ? d.url : DQ.ai.savedUrl(); if (d) $('#ai-settings').open = false; }
+  { const d = DQ.ai.difyConfig(); $('#dify-url').value = d ? d.url : DQ.ai.savedUrl(); if (d) $('#ai-settings').open = false; $('#ai-allow').value = DQ.ai.userAllow().join('\n'); }
   $('#btn-dify-save').onclick = async () => {
     const key = $('#dify-key').value; $('#dify-key').value = '';   // 輸入框不留金鑰
-    try { await DQ.ai.setDify({ url: $('#dify-url').value, key }); aiReady(true); audit('AI 服務設定', `改用 Dify：${DQ.ai.difyConfig().url}`); }
+    try { await DQ.ai.setDify({ url: $('#dify-url').value, key, allow: $('#ai-allow').value }); $('#ai-allow').value = DQ.ai.userAllow().join('\n'); aiReady(true); const d = DQ.ai.difyConfig(); audit('AI 服務設定', `改用 Dify：${d.url}（你自行設定的網址，${DQ.ai.SOURCE[d.source]}）${DQ.ai.userAllow().length ? `；只允許 ${DQ.ai.userAllow().join('、')}` : ''}`); }
     catch (e) { $('#dify-note').textContent = e.message; }
+  };
+  $('#btn-consent-clear').onclick = () => { DQ.ai.clearConsent(); $('#dify-note').textContent = '已清除。下次送資料到任何 AI 網址前都會再確認一次。'; audit('AI 服務設定', '清除已確認的 AI 網址'); };
+  // 第一次把資料送到某個 AI 網址：明確顯示目的地，勾選確認後才送
+  DQ.ai.confirmOrigin = (origin, source) => new Promise(resolve => {
+    const d = $('#ai-origin'), ck = $('#ai-origin-check'), yes = $('#ai-origin-yes');
+    $('#ai-origin-host').textContent = origin; $('#ai-origin-src').textContent = `這是${source}。確認後這台電腦會記住，之後送到同一個網址不再詢問這一步（每次送出前仍會顯示完整內容）。`;
+    ck.checked = false; yes.disabled = true; ck.onchange = () => { yes.disabled = !ck.checked; };
+    const done = ok => { yes.onclick = $('#ai-origin-no').onclick = d.oncancel = null; if (d.open) d.close(); audit('AI 網址確認', ok ? `同意把資料送到 ${origin}（${source}）` : `沒有同意送到 ${origin}`); resolve(ok); };
+    yes.onclick = () => done(ck.checked);
+    $('#ai-origin-no').onclick = () => done(false);
+    d.oncancel = e => { e.preventDefault(); done(false); };
+    if (d.showModal) d.showModal(); else resolve(false);
+  });
+  // 完全離線：不連任何外部網站。打開時另外加一條 CSP (connect-src 'none')，由瀏覽器擋下所有連線；關閉後重新整理頁面才會恢復
+  const lockNetwork = () => {
+    if (document.querySelector('meta[data-offline]')) return;
+    const m = document.createElement('meta'); m.httpEquiv = 'Content-Security-Policy'; m.content = "connect-src 'none'"; m.dataset.offline = '1'; document.head.append(m);
+  };
+  const offlineNote = () => { $('#offline-note').textContent = DQ.ai.isOffline() ? '完全離線中：AI 已關閉，不讀取線上法規更新，瀏覽器也會擋下所有對外連線。關閉後請重新整理頁面才會恢復連線。' : ''; };
+  $('#offline-mode').checked = DQ.ai.isOffline();
+  if (DQ.ai.isOffline()) lockNetwork();
+  offlineNote();
+  $('#offline-mode').onchange = async e => {
+    const on = e.target.checked, ok = await DQ.ai.setOffline(on);
+    if (on) lockNetwork();
+    audit('完全離線', on ? '開啟：不連任何外部網站' : '關閉');
+    aiReady(!!ok); offlineNote();
+    if (!on && document.querySelector('meta[data-offline]')) $('#offline-note').textContent = '已關閉完全離線。請重新整理頁面，才會恢復 AI 與線上法規更新。';
   };
   $('#btn-dify-clear').onclick = async () => { const ok = await DQ.ai.setDify(null); $('#dify-url').value = ''; $('#dify-key').value = ''; aiReady(ok); audit('AI 服務設定', '清除 Dify 設定'); };
   // 測試連線、AI 安全測試不跳確認視窗：金鑰從「AI 服務設定」的輸入框拿 (拿了就清空，用完由 AI 模組清除)
@@ -1149,14 +1214,24 @@
   document.querySelector('.more-menu').addEventListener('click', e => { if (e.target.closest('.menu-item')) e.currentTarget.open = false; });
   $('#btn-list').onclick = () => { const on = document.body.classList.toggle('show-list'); $('#btn-list').setAttribute('aria-expanded', on); $('#btn-list').textContent = on ? '收起清單' : '看全部清單'; };
   // 頁尾：各險種規則的版本與條數
+  // 法規版本的核實狀態 (rules/versions.js)：沒有向官方來源核實過最新版本的，一律標示「尚未核實最新版本」
+  const V = DQ.ruleVersions;
+  const versionStatus = () => V.list.map(v => `${v.name}：${V.label(v)}`).join('；');
   function renderVersion() {
     const st = DQ.ruleStats.count(), MANUAL = { cancer: '個人癌症保險填報手冊', accident: '新式傷害保險填報手冊' };
     const on = state.packs.filter(x => x.on);
     $('#rule-version').textContent = `人壽保險業個人壽險填報手冊與檢核規則（2025 填報年度，${st.total} 條）` +
       st.ext.map(e => `、${MANUAL[e.key] || e.name}（${e.version} 年版，${e.n} 條）`).join('') + '。' +
       (on.length ? `另套用法規更新：${on.map(x => x.pack.name + (x.pack.version ? ` 第 ${x.pack.version} 版` : '')).join('、')}。` : '');
+    const el = $('#rule-status');
+    el.className = 'rule-status' + (V.allVerified() ? ' ok' : ' warn');
+    el.textContent = V.allVerified() ? `各險種規則都已向官方來源核實為最新版本。` : `尚未核實最新版本：${V.list.filter(v => V.status(v) !== 'verified').map(v => v.name).join('、')}。工具依下列文件實作，不代表符合最新法規；申報前請向保發中心確認手冊版本。`;
+    DQ.safe($('#rule-sources')).innerHTML = V.list.map(v => `<li><b>${esc(v.name)}</b>：<span class="${V.status(v) === 'verified' ? 'ok' : 'warn'}">${esc(V.label(v))}</span><br>依據文件：${esc(v.document)}<br>版本：${esc(v.edition)}；函文：${esc(v.basis)}<br>適用：${esc(v.effective)}<br>最後核實日期：${esc(v.lastVerified || '尚未核實')}；文件資訊記錄於 ${esc(v.documentRecordedAt)}<br>官方來源：<a href="${esc(v.officialSource.url)}" target="_blank" rel="noopener">${esc(v.officialSource.name)}</a>${v.note ? `<br><span class="hint">${esc(v.note)}</span>` : ''}</li>`).join('');
   }
   activeRules(); renderVersion();
+  // Excel 讀取元件的實際版本 (執行時檢查，不看說明文字)：未達官方修補版本時照實顯示
+  state.xlsxLib = DQ.workbook.libStatus(window.XLSX);
+  if (!state.xlsxLib.ok) { $('#lib-note').hidden = false; $('#lib-note').textContent = `Excel 讀取元件目前是 SheetJS ${state.xlsxLib.version}，低於官方修補版本 ${state.xlsxLib.min}，有已知的特製檔案解析風險。工具會在解析前做壓縮檔預檢與原型污染檢查，但不能完全取代更新元件；請只放入來源可信的 Excel 檔，或改用 CSV／文字檔。`; }
   // 開啟時重新驗證「已核可」的更新包，通過的才套用
   verifyApproved().then(() => { if (state.packs.some(x => x.approvedFile)) DQ.app.setPacks(state.packs.slice()); });
   // 送給 AI 之前：顯示實際送出的完整內容 (系統指示＋遮蔽後的資料)，使用者按「送出」才送。每次都要確認，不提供「不再詢問」
@@ -1195,16 +1270,19 @@
   state.selfTests = [];
   $('#btn-ai-selftest').onclick = async () => {
     const out = $('#ai-selftest'), b = $('#btn-ai-selftest');
-    if (!DQ.ai.available()) { out.textContent = DQ.ai.OFFLINE; return; }
+    if (DQ.ai.isOffline()) { out.textContent = '尚未測試：目前是完全離線模式，不會連到 AI。'; return; }
+    if (!DQ.ai.available()) { out.textContent = `無可用服務，尚未測試。${DQ.ai.OFFLINE}`; return; }
     if (!keyFromSettings('#ai-selftest')) return;
-    b.disabled = true; out.textContent = 'AI 測試中（3 題，約 30 秒）…';
+    b.disabled = true; out.textContent = `AI 測試中（${DQ.ai.SELF_TESTS.length} 題，約 1 分鐘）…`;
     try {
       const r = await DQ.ai.selfTest();
       state.selfTests.push(...r);
-      for (const x of r) audit('AI 安全測試', `${x.name}：${x.pass === true ? '通過' : x.pass === false ? '沒通過（' + x.why + '）' : '沒有完成（' + x.why + '）'}`);
-      const done = state.selfTests.filter(x => x.pass != null), fail = done.filter(x => !x.pass).length;
-      DQ.safe(out).innerHTML = `<ul class="st-list">${r.map(x => `<li class="${x.pass === true ? 'ok' : x.pass === false ? 'bad' : ''}"><b>${x.pass === true ? '通過' : x.pass === false ? '沒通過' : '沒有完成'}</b>　${esc(x.name)}${x.why ? `：${esc(x.why)}` : ''}${x.pass && x.noticed ? '（AI 有提醒資料中有指令，已忽略）' : ''}<details><summary>看 AI 的回答</summary><p>${esc(x.reply)}</p></details></li>`).join('')}</ul>
-        <p class="hint">這次開啟後累計測了 ${done.length} 題，${fail ? `<b>${fail} 題沒通過</b>，AI 的說明請更謹慎看待（檢查結果不受影響）` : '全部通過'}。</p>`;
+      for (const x of r) audit('AI 安全測試', `${x.name}：${x.pass === true ? '通過' : x.pass === false ? '沒通過（' + x.why + '）' : (x.status || '尚未測試') + '（' + x.why + '）'}`);
+      // 只有真的有 AI 回覆、判斷完成的題目才算「通過」或「沒通過」；沒有服務或送出失敗是「尚未測試」，不算通過
+      const done = state.selfTests.filter(x => x.pass != null), fail = done.filter(x => !x.pass).length, pending = r.filter(x => x.pass == null).length;
+      const sum = !done.length ? '<b>尚未測試</b>：沒有任何一題取得 AI 的回覆，無法判斷' : fail ? `<b>${fail} 題沒通過</b>，AI 的說明請更謹慎看待（檢查結果不受影響）` : `已測的 ${done.length} 題都通過`;
+      DQ.safe(out).innerHTML = `<ul class="st-list">${r.map(x => `<li class="${x.pass === true ? 'ok' : x.pass === false ? 'bad' : ''}"><b>${x.pass === true ? '通過' : x.pass === false ? '沒通過' : esc(x.status || '尚未測試')}</b>　${esc(x.name)}${x.why ? `：${esc(x.why)}` : ''}${x.pass && x.noticed ? '（AI 有提醒資料中有指令，已忽略）' : ''}${x.reply ? `<details><summary>看 AI 的回答</summary><p>${esc(x.reply)}</p></details>` : ''}</li>`).join('')}</ul>
+        <p class="hint">這次開啟後累計完成 ${done.length} 題，${sum}${pending ? `；這次有 ${pending} 題尚未測試` : ''}。這些題目只檢查幾種常見的寫法，通過不代表 AI 對所有藏在資料裡的指令都有防護。</p>`;
     } catch (e) { out.textContent = e.message; }
     b.disabled = false;
   };

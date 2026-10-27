@@ -1122,3 +1122,20 @@ details.approve > summary::-webkit-details-marker { display: none; }
 .ap-card ul { margin: 8px 0 0; padding-left: 20px; }
 .pack-trial { margin: 4px 0; padding: 6px 10px; border-radius: 8px; background: #F1F5F9; font-size: 13px; }
 .pack-acts .chip.cta { background: var(--cta); border-color: var(--cta); color: #fff; font-weight: 700; }
+/* 完全離線開關、第一次使用 AI 網址的確認視窗 */
+.offline-mode { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0 2px; font-size: 14px; line-height: 1.5; }
+.offline-mode input { margin-top: 4px; }
+#ai-origin { width: min(560px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 12px; padding: 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18); }
+#ai-origin::backdrop { background: rgba(10, 10, 10, .45); }
+#ai-origin h2 { margin: 0 0 8px; font-size: 18px; }
+#ai-origin-host { font-weight: 700; overflow-wrap: anywhere; }
+.ai-origin-ok { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0; font-size: 14px; }
+#ai-allow { width: 100%; font: inherit; font-family: var(--font-mono); font-size: 13px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
+/* 法規版本核實狀態 */
+.rule-status { margin: 6px 0 0; font-size: 13px; font-weight: 600; }
+.rule-status.warn, .rule-sources .warn { color: #9a3412; }
+.rule-status.ok, .rule-sources .ok { color: #166534; }
+.rule-sources { margin-top: 6px; font-size: 13px; }
+.rule-sources ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.6; }
+.rule-sources li { margin-bottom: 8px; overflow-wrap: anywhere; }
+.lib-note { margin: 10px 0 0; padding: 8px 10px; border: 1px solid #fdba74; background: #fff7ed; color: #9a3412; border-radius: 8px; font-size: 13px; line-height: 1.5; }
