@@ -1147,3 +1147,5 @@ details.approve > summary::-webkit-details-marker { display: none; }
 .answer-check.bad { border-color: #fdba74; background: #fff7ed; }
 .answer-check summary { cursor: pointer; }
 .answer-check ul { margin: 6px 0 0; padding-left: 18px; }
+.ap-sign { margin: 10px 0; font-size: 13px; }
+.ap-sign pre { max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-all; background: #F7F7F7; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 12px; }

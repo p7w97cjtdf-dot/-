@@ -293,6 +293,7 @@
         <label>核可人姓名<input id="ap-name" placeholder="例如：法遵部 陳經理" autocomplete="off"></label>
       </div>
       <div id="ap-preview"></div>
+      <details class="ap-sign" id="ap-sign-box" hidden><summary>主管將簽署的內容（第 2 版簽署格式，依鍵名排序）</summary><p class="hint">按下核可後，簽章涵蓋下面全部內容：更新包原文與雜湊、申請人、申請時間、影響摘要、核可人與核可時間。任何一項被改，套用時都會驗證失敗。</p><pre id="ap-sign"></pre></details>
       <div class="actions"><button class="btn cta" type="button" id="btn-approve">核可並產生已核可檔</button><span class="hint" id="ap-note" role="status"></span></div>
     </details>
 

@@ -267,7 +267,7 @@ test('主管核可：簽章綁定更新包內容、核可人與時間；只接�
   assert.match((await A.verify(ok, [other.id])).why, /不是這個版本核准的主管金鑰/);
   for (const mut of [f => { f.packText = f.packText.replace('L6101', 'L6102'); }, f => { f.approval.approver = '別人'; }, f => { f.approval.approvedAt = '2030-01-01T00:00:00.000Z'; }]) {
     const t = JSON.parse(JSON.stringify(ok)); mut(t);
-    assert.match((await A.verify(t, [boss.id])).why, /主管簽章不正確/);
+    assert.match((await A.verify(t, [boss.id])).why, /主管簽章不正確|雜湊不同/);
   }
   const bad = JSON.parse(JSON.stringify(req)); bad.packText = bad.packText.replace('L6101', 'X');
   await assert.rejects(A.approve(bad, boss.pem, '陳經理'), /被改過/);
@@ -470,7 +470,7 @@ test('法規更新包：內容被竄改、簽章錯誤、不是核准的金鑰�
   const clone = () => JSON.parse(JSON.stringify(ok));
   // 1. 內容被竄改：在已核可的包裡偷加「停用檢核規則」
   const t1 = clone(); const p = JSON.parse(t1.packText); p.disable = ['30212_L1305']; t1.packText = JSON.stringify(p);
-  assert.match((await A.verify(t1, [boss.id])).why, /簽章不正確/);
+  assert.match((await A.verify(t1, [boss.id])).why, /簽章不正確|雜湊不同/);
   // 2. 簽章錯誤
   const t2 = clone(); t2.sig = Buffer.alloc(64, 1).toString('base64');
   assert.ok(!(await A.verify(t2, [boss.id])).ok);
@@ -548,4 +548,68 @@ test('頁面寫清楚資料只在瀏覽器處理；claude.ai 展示版標示是�
   assert.doesNotMatch(html, /<script[^>]+src=/);
   assert.doesNotMatch(html, /google-analytics\.com|googletagmanager|gtag\(|sentry\.io|Sentry\.init|navigator\.sendBeacon/);
   fs.rmSync(out, { force: true });
+});
+
+test('核可簽章第 2 版：每一個受保護欄位被改都驗證失敗；舊格式標示未簽署的欄位', async () => {
+  const crypto = require('crypto'), A = require('../src/approval.js');
+  const mk = () => { const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }); const j = publicKey.export({ format: 'jwk' }); return { pem: privateKey.export({ type: 'pkcs8', format: 'pem' }), priv: privateKey, pub: j, id: crypto.createHash('sha256').update(JSON.stringify([j.x, j.y])).digest('hex').slice(0, 16) }; };
+  const boss = mk(), evil = mk();
+  const req = await A.request({ id: 'p', name: '新增檢查', rules: [], disable: ['10400_L0201'] }, { found: 3, hidden: 1 }, '小王');
+  const ok = await A.approve(req, boss.pem, '陳經理');
+  const v = await A.verify(ok, [boss.id]);
+  assert.ok(v.ok && v.format === 2 && !v.legacy && v.unsigned.length === 0);
+  assert.deepStrictEqual([v.approval.requestedBy, v.approval.impact.found, v.approval.impact.hidden], ['小王', 3, 1]);
+  // 主管核可前顯示的內容 = 實際簽署的內容 (除了核可時間)
+  const pv = await A.preview(req, '陳經理');
+  assert.strictEqual(pv.replace('（按下核可的時間）', ok.approval.approvedAt), A.envelope({ packText: ok.packText, sha256: ok.sha256, requestedBy: '小王', requestedAt: req.requestedAt, impact: req.impact, approver: '陳經理', approvedAt: ok.approval.approvedAt }));
+  assert.ok(crypto.verify('sha256', Buffer.from(pv.replace('（按下核可的時間）', ok.approval.approvedAt)), { key: crypto.createPublicKey({ key: Object.assign({ kty: 'EC', crv: 'P-256' }, { x: ok.publicKey.x, y: ok.publicKey.y }), format: 'jwk' }), dsaEncoding: 'ieee-p1363' }, Buffer.from(ok.sig, 'base64')));
+  // 逐一竄改受保護的欄位
+  const mutations = {
+    packText: f => { f.packText = f.packText.replace('10400_L0201', '10400_L0501'); },
+    sha256: f => { f.sha256 = '0'.repeat(64); },
+    packTextAndSha: f => { f.packText = f.packText.replace('10400_L0201', '10400_L0501'); f.sha256 = crypto.createHash('sha256').update(f.packText).digest('hex'); },
+    requestedBy: f => { f.approval.requestedBy = '別人'; },
+    requestedAt: f => { f.approval.requestedAt = '2030-01-01T00:00:00.000Z'; },
+    impactFound: f => { f.approval.impact.found = 0; },
+    impactHidden: f => { f.approval.impact.hidden = 99; },
+    impactAdded: f => { f.approval.impact.note = '加一句'; },
+    impactRemoved: f => { f.approval.impact = null; },
+    impactPack: f => { f.approval.impact.packSha256 = 'f'.repeat(64); },
+    approver: f => { f.approval.approver = '別人'; },
+    approvedAt: f => { f.approval.approvedAt = '2030-01-01T00:00:00.000Z'; },
+    format: f => { f.format = 3; },
+    downgrade: f => { delete f.format; },
+  };
+  for (const [name, mut] of Object.entries(mutations)) {
+    const t = JSON.parse(JSON.stringify(ok)); mut(t);
+    const r = await A.verify(t, [boss.id]);
+    assert.strictEqual(r.ok, false, `竄改 ${name} 應驗證失敗`);
+  }
+  // 攻擊者自帶公鑰：自己簽的、或把正確的簽章換上自己的公鑰，都不通過
+  const self = await A.approve(req, evil.pem, '冒充的主管');
+  assert.match((await A.verify(self, [boss.id])).why, /不是這個版本核准的主管金鑰/);
+  const swap = JSON.parse(JSON.stringify(ok)); swap.publicKey = { kty: 'EC', crv: 'P-256', x: evil.pub.x, y: evil.pub.y };
+  assert.ok(!(await A.verify(swap, [boss.id])).ok);
+  assert.ok(!(await A.verify(swap, [boss.id, evil.id])).ok, '換公鑰後簽章對不上');
+  // 影響摘要必須是同一版更新包的試跑結果
+  const req2 = JSON.parse(JSON.stringify(req)); req2.impact.packSha256 = 'a'.repeat(64);
+  await assert.rejects(A.approve(req2, boss.pem, '陳經理'), /不是這一版更新包的試跑結果/);
+  // 舊格式 (第 1 版)：只簽更新包、核可人、核可時間 → 可以驗證，但申請人與影響摘要標示為未簽署、不回傳
+  const old = { type: 'dq-approved-pack', packText: req.packText, approval: { approver: '陳經理', approvedAt: '2026-10-01T00:00:00.000Z', requestedBy: '小王', impact: { found: 3 } }, publicKey: ok.publicKey };
+  old.sig = crypto.sign('sha256', Buffer.from(JSON.stringify({ pack: old.packText, approver: '陳經理', approvedAt: old.approval.approvedAt })), { key: boss.priv, dsaEncoding: 'ieee-p1363' }).toString('base64');
+  const ov = await A.verify(old, [boss.id]);
+  assert.ok(ov.ok && ov.legacy && ov.format === 1);
+  assert.deepStrictEqual(ov.unsigned, ['requestedBy', 'requestedAt', 'impact']);
+  assert.strictEqual(ov.approval.requestedBy, null); assert.strictEqual(ov.approval.impact, null);
+  // 舊格式改未簽署的欄位不影響驗證，但也不會被當成已驗證的值
+  const o2 = JSON.parse(JSON.stringify(old)); o2.approval.requestedBy = '偷改'; o2.approval.impact = { found: 999 };
+  const ov2 = await A.verify(o2, [boss.id]);
+  assert.ok(ov2.ok && ov2.approval.requestedBy === null && ov2.approval.impact === null);
+  const o3 = JSON.parse(JSON.stringify(old)); o3.approval.approver = '別人';
+  assert.ok(!(await A.verify(o3, [boss.id])).ok);
+  // samples/updates 的已核可範例是舊格式：仍驗證通過，標示 legacy
+  const fs = require('fs'), path = require('path');
+  const s6 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'samples', 'updates', '6_已核可_新增檢查.json'), 'utf8'));
+  const sv = await A.verify(s6, ['7fb780c45230b133']);
+  assert.ok(sv.ok && sv.legacy);
 });
