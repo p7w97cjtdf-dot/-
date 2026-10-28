@@ -290,6 +290,40 @@ claude.ai 線上版是單一檔案，改為把這些元件直接打包進檔案 
 - **系統整合**：目前沒有 API 或核心資料庫串接；命令列版本可以接在轉檔排程之後。
 - **個資遮蔽的極限**：前端的規則比對無法保證找出所有變形的姓名或地址。現有的防護是多層的：只送摘要與相關欄位 (不送整筆資料)、遮罩、遮罩後再掃描 (仍有疑似個資就停止送出)、每次送出前顯示完整內容讓使用者確認、第一次送到新網址要確認、可以開「完全離線」。需要更高保證時請不要使用 AI 功能。
 
+## 缺陷修補：DSL、規則驗證、核可簽章、AI 送出、個資上下文、Dify 回應 (2026-10-28)
+
+| 優先 | 已重現的問題 | 修正位置 | 測試 |
+|---|---|---|---|
+| P0 | `evalCond({field:'x',op:'notBlank'},{rec:{}})` 回傳 true | `src/rules-dsl.js` `getField`、`evalCond`、`extend` | `tests/dsl.test.js` |
+| P0 | 長整數 `9007199254740992`＝`9007199254740993`；`'001'`＝`'1'` | `src/rules-dsl.js` `toDec`、`compare`、`order`、`kindOf` | `tests/dsl.test.js` |
+| P1 | `validateRule(null,{})` 丟出 TypeError；all 與葉節點混合仍被接受 | `src/rules-dsl.js` `validateRule`、`validateAll`；`src/rule-packs.js` `normalize`、`validate`、`apply` | `tests/dsl.test.js`、`t03`、`t15` |
+| P1 | 改已簽署的 `approval.impact`、`approval.requestedBy` 仍驗證通過 | `src/approval.js` `envelope`、`request`、`checkRequest`、`approve`、`verify`、`preview`；`src/app-packs.js` 核可畫面 | `security.test.js` (14 種竄改)、`t15` |
+| P1 | `confirmSend` 不存在時一般資料仍會送出；`noPreview` 可跳過確認 | `src/ai.js` `ask`、`askFixed`、`send`、`originOk` | `security.test.js` (預設拒絕 9 種情境)、`t13`、`t17` |
+| P1 | `pii.guard('王小明希望了解檢核結果。')` 原樣放行 | `src/pii.js` `mergeCtx`、`setOptions`；`src/ai-payload.js` `context`；`src/app.js` `contextProvider` | `pii.test.js` |
+| P2 | Dify 逾時只涵蓋連線；沒有大小與結構檢查；紀錄把「已送出」當成功 | `src/ai.js` `difyPlatform`、`readCapped`、`send` | `security.test.js` (12 種回應)、`t10` |
+
+**DSL 缺值與比較的規則** (`src/rules-dsl.js`)：
+
+| 值 | isBlank | notBlank | isZero／notZero | 比較 (eq、gt…) |
+|---|---|---|---|---|
+| 欄位不存在 (含繼承來的屬性) | 無法判定 | 無法判定 | 無法判定 | 無法判定 |
+| undefined、null | true | false | 無法判定 | 無法判定 |
+| 空字串、空白 | true | false | 無法判定 | 文字比較照常；數字比較無法判定 |
+| 0、'0'、'000' | false | true | 依值 | 依欄位型態 |
+
+比較方式依欄位定義決定：英數字 (X) 與有代碼表的欄位用文字比較，保留前導零；數字欄位 (9)、日期、函式結果、金額用精確十進位 (BigInt，金額保留 2 位小數)。沒有欄位定義時，兩邊都是文字就用文字比較，規則的值是數字才用數字比較。不是有限數字、超過 40 位數或 JavaScript 的指數寫法 (1e21) 一律無法判定。無法判定計入「檢查範圍」，不算通過。輸出不含 BigInt (問題的值都是文字)。
+
+**舊規則的差異**：用全部範例規則 (24 條，含 samples/updates) 在 8 份模擬資料上比對修改前後，找到的問題 (42 個) 與無法判定的筆數完全相同。修補過程中曾因「保險期間年數上限 200 年」讓 4 個問題變成無法判定，已改為「算出的日期仍是合法 8 位數日期」即可，差異歸零。
+
+**相容性差異**：
+- 更新包有任何一項格式不對，整包 (規則、新欄位、停用清單) 都不套用；之前會略過錯的那一條、其他照常套用。
+- 規則多了屬性白名單：`id name file scope severity when assert message suggestion source ref effective category level pack src` 以外的屬性會被拒絕。
+- 舊格式 (第 1 版) 的已核可檔仍可套用，但畫面標示「申請人與影響摘要未經簽章」。`samples/updates` 的 6、7 是用正式主管金鑰簽的舊格式檔，沒有重新簽章 (沒有使用正式私鑰)。
+- 傳送紀錄的狀態由「已送出」改為「成功／失敗／逾時」等。
+- 對帳與結轉的金額超過約 90 兆元時加上 R000 提醒 (一般數字無法精確計算)；傷害險規則裡的金額比較仍用一般數字 (單筆 18 碼金額超過約 9 千億元時可能失真)，沒有改寫。
+
+**沒有驗證的項目**：真實 Claude／Dify 模型 (只用模擬回覆)、正式部署的 CSP 與轉發伺服器、正式主管私鑰的簽章 (只用測試金鑰)。
+
 
 ## 尚未處理的建議事項
 

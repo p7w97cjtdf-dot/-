@@ -111,6 +111,35 @@ ${GUARD}`;
     try { return await fn(); } finally { if (--opDepth === 0) difyKey = null; }
   }
   const savedUrl = () => { try { return localStorage.getItem('dq-dify-url') || ''; } catch (e) { return ''; } };
+  // Dify 回應的處理 (不信任回應內容)：
+  //  - 逾時涵蓋連線與讀取回應本文 (預設 120 秒，DQ_AI_CONFIG.timeoutMs 可調 1–300 秒)，逾時就中止請求
+  //  - 不跟隨重新導向 (redirect: 'error')；回應的網址必須是同一個網站
+  //  - 回應最多 1 MB (邊讀邊算，超過就中止)；必須是 JSON 物件、answer 是文字 (最多 20 萬字)
+  //  - 公司轉發伺服器：除了網址要在允許清單，若設定 DQ_AI_CONFIG.proxyUpstreams，轉發伺服器要用回應標頭
+  //    X-DQ-Upstream 回報實際轉送到的上游，且必須在清單裡 (上游的驗證仍要由轉發伺服器自己做)
+  //  - 錯誤訊息不夾帶回應原文
+  const MAX_RESP = 1048576, MAX_ANSWER = 200000;
+  const timeoutMs = () => { const t = Number(cfg().timeoutMs); return Number.isFinite(t) && t >= 1000 && t <= 300000 ? t : 120000; };
+  const err = (msg, code) => Object.assign(new Error(msg), { code });
+  async function readCapped(r, ctl) {
+    const len = Number(r.headers && r.headers.get && r.headers.get('content-length'));
+    if (Number.isFinite(len) && len > MAX_RESP) { ctl.abort(); throw err(`Dify 的回應太大（超過 ${MAX_RESP / 1048576} MB），沒有讀取。`, 'too_large'); }
+    if (r.body && typeof r.body.getReader === 'function') {
+      const reader = r.body.getReader(), parts = []; let n = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        n += value.byteLength;
+        if (n > MAX_RESP) { try { await reader.cancel(); } catch (e) { /* ignore */ } ctl.abort(); throw err(`Dify 的回應太大（超過 ${MAX_RESP / 1048576} MB），沒有讀取。`, 'too_large'); }
+        parts.push(value);
+      }
+      const all = new Uint8Array(n); let o = 0; for (const p of parts) { all.set(p, o); o += p.byteLength; }
+      return new TextDecoder().decode(all);
+    }
+    const t = await r.text();
+    if (t.length > MAX_RESP) throw err(`Dify 的回應太大（超過 ${MAX_RESP / 1048576} MB），沒有讀取。`, 'too_large');
+    return t;
+  }
   function difyPlatform(c) {
     return async text => {
       // 送出前再檢查一次網址政策 (設定可能已經改過)
@@ -118,18 +147,37 @@ ${GUARD}`;
       if (offline) throw new Error('目前是完全離線模式，不會連到任何外部網站。');
       if (!now || now.url !== c.url) throw new Error(urlProblem() || 'AI 服務的網址已經改過或不再允許，沒有送出。');
       if (!c.proxy && !difyKey) throw new Error('沒有 Dify 金鑰：金鑰每次操作完就會清除，請在送出前貼上 Dify 應用的 API 金鑰。');
-      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 120000);
-      let r;
+      const ctl = new AbortController(), ms = timeoutMs();
+      let timedOut = false;
+      const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, ms);
+      const late = () => err(`Dify 超過 ${Math.round(ms / 1000)} 秒沒有完成回應，已中止。請稍後再試。`, 'timeout');
       try {
-        r = await fetch(`${c.url}/chat-messages`, { method: 'POST', signal: ctl.signal, headers: Object.assign({ 'Content-Type': 'application/json' }, c.proxy ? {} : { Authorization: `Bearer ${difyKey}` }),
-          body: JSON.stringify({ inputs: {}, query: text, response_mode: 'blocking', user: 'filing-checker' }) });
-      } catch (e) { throw new Error(e.name === 'AbortError' ? 'Dify 超過 2 分鐘沒有回應，請稍後再試。' : `連不到 Dify（${c.url}）：請確認網址正確、網路可以連線，Dify 允許這個網站呼叫 (CORS)，以及網址已列在網站安全設定 (CSP) 的 connect-src。`); }
-      finally { clearTimeout(timer); }
-      if (r.status === 401) throw new Error('Dify 的 API 金鑰不正確或已失效，請確認貼上的金鑰。');
-      if (r.status === 429) { const e = new Error('Dify 使用太頻繁，請稍等一下再試。'); throw e; }
-      if (!r.ok) throw new Error(`Dify 回應錯誤（${r.status}）：${(await r.text()).slice(0, 200)}`);
-      const j = await r.json();
-      return { text: String(j.answer || '') };
+        let r;
+        try {
+          r = await fetch(`${c.url}/chat-messages`, { method: 'POST', signal: ctl.signal, redirect: 'error', credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, c.proxy ? {} : { Authorization: `Bearer ${difyKey}` }),
+            body: JSON.stringify({ inputs: {}, query: text, response_mode: 'blocking', user: 'filing-checker' }) });
+        } catch (e) { if (timedOut) throw late(); throw err(`連不到 Dify（${c.url}）：請確認網址正確、網路可以連線，Dify 允許這個網站呼叫 (CORS)，以及網址已列在網站安全設定 (CSP) 的 connect-src。重新導向到其他網址的回應也不會接受。`, 'network'); }
+        if (r.redirected || (r.url && originOf(r.url) && originOf(r.url) !== originOf(c.url))) throw err('Dify 的回應來自其他網址 (重新導向)，沒有採用。', 'redirect');
+        if (c.proxy && cfg().proxyUpstreams) {
+          const up = originOf((r.headers && r.headers.get && r.headers.get('x-dq-upstream')) || '');
+          if (!up || !listOf(cfg().proxyUpstreams).includes(up)) throw err('公司轉發伺服器沒有回報允許的上游網址 (X-DQ-Upstream)，沒有採用回應。', 'upstream');
+        }
+        if (r.status === 401) throw err('Dify 的 API 金鑰不正確或已失效，請確認貼上的金鑰。', 'http');
+        if (r.status === 429) throw err('Dify 使用太頻繁，請稍等一下再試。', 'http');
+        let body;
+        try { body = await readCapped(r, ctl); } catch (e) { if (timedOut) throw late(); throw e; }
+        if (!r.ok) {
+          let code = ''; try { const j = JSON.parse(body); code = typeof j.code === 'string' ? j.code.replace(/[^\w.-]/g, '').slice(0, 40) : ''; } catch (e) { /* ignore */ }
+          throw err(`Dify 回應錯誤（HTTP ${r.status}${code ? `，${code}` : ''}）。`, 'http');
+        }
+        let j;
+        try { j = JSON.parse(body); } catch (e) { throw err('Dify 的回應不是 JSON 格式，沒有採用。', 'bad_response'); }
+        if (!j || typeof j !== 'object' || Array.isArray(j)) throw err('Dify 的回應格式不正確，沒有採用。', 'bad_response');
+        if (typeof j.answer !== 'string') throw err('Dify 的回應缺少 answer 文字，沒有採用。', 'bad_response');
+        if (j.answer.length > MAX_ANSWER) throw err(`Dify 的回答超過 ${MAX_ANSWER.toLocaleString()} 字，沒有採用。`, 'too_large');
+        return { text: j.answer };
+      } finally { clearTimeout(timer); }
     };
   }
   // claude.ai 線上版：使用開啟者自己的 Claude 帳號 (第一次使用時會詢問是否允許)

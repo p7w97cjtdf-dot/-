@@ -286,7 +286,7 @@ test('金鑰記憶體管理：Dify 金鑰只在 AI 模組的閉包，不寫進 l
   ls.setItem('dq-dify', JSON.stringify({ url: 'https://api.dify.ai/v1', key: 'app-oldkey123456' }));   // 舊版存的金鑰
   ss.setItem('dq-dify', JSON.stringify({ url: 'https://api.dify.ai/v1', key: 'app-oldkey654321' }));
   const saved = { self: global.self, localStorage: global.localStorage, sessionStorage: global.sessionStorage, fetch: global.fetch };
-  Object.assign(global, { localStorage: ls, sessionStorage: ss, fetch: async (u, o) => { auths.push((o.headers || {}).Authorization || ''); return { ok: true, status: 200, json: async () => ({ answer: 'OK' }) }; } });
+  Object.assign(global, { localStorage: ls, sessionStorage: ss, fetch: async (u, o) => { auths.push((o.headers || {}).Authorization || ''); return new Response(JSON.stringify({ answer: 'OK' }), { status: 200, headers: { 'content-type': 'application/json' } }); } });
   global.self = global; self.DQ = { pii, promptGuard: require('../src/prompt-guard.js'), aiPayload: { takeCounts: () => ({}) } };
   // Node 沒有 CSP 可以讀：要有部署者核准的網域才放行 (沒有明確限制就不放行)
   self.DQ_AI_CONFIG = { allowedOrigins: ['https://api.dify.ai'] };
@@ -362,7 +362,7 @@ test('AI 網址政策：只用 https、沒有明確允許清單就不放行、�
   const mem = () => { const m = new Map(); return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) }; };
   const saved = { self: global.self, localStorage: global.localStorage, sessionStorage: global.sessionStorage, fetch: global.fetch };
   const calls = [];
-  Object.assign(global, { localStorage: mem(), sessionStorage: mem(), fetch: async u => { calls.push(u); return { ok: true, status: 200, json: async () => ({ answer: 'OK' }) }; } });
+  Object.assign(global, { localStorage: mem(), sessionStorage: mem(), fetch: async u => { calls.push(u); return new Response(JSON.stringify({ answer: 'OK' }), { status: 200, headers: { 'content-type': 'application/json' } }); } });
   const fresh = conf => { global.self = global; self.DQ = { pii, promptGuard: require('../src/prompt-guard.js'), aiPayload: { takeCounts: () => ({}) } }; global.DQ_AI_CONFIG = conf; delete require.cache[require.resolve('../src/ai.js')]; require('../src/ai.js'); return self.DQ.ai; };
   try {
     // 沒有 CSP、也沒有部署者允許清單：不放行 (之前找不到 CSP 就放行)
@@ -658,4 +658,58 @@ test('AI 送出預設拒絕：確認函式不存在、取消、出錯、不是�
     // 9. 紀錄不含 API 金鑰
     assert.ok(!JSON.stringify(ai.sent).includes('app-'));
   } finally { Object.assign(global, saved); }
+});
+
+test('Dify 回應：慢速、非 JSON、缺 answer、超大回應、HTTP 錯誤、重新導向都會中止並記錄正確狀態', async () => {
+  const mem = () => { const m = new Map(); return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) }; };
+  const saved = { self: global.self, localStorage: global.localStorage, sessionStorage: global.sessionStorage, fetch: global.fetch };
+  let mode = 'ok', aborted = 0;
+  const json = (o, init) => new Response(JSON.stringify(o), Object.assign({ status: 200, headers: { 'content-type': 'application/json' } }, init));
+  const never = signal => new Promise((_, rej) => signal.addEventListener('abort', () => { aborted++; rej(new DOMException('aborted', 'AbortError')); }));
+  global.fetch = async (u, o) => {
+    switch (mode) {
+      case 'slowConnect': return never(o.signal);
+      case 'slowBody': return new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{"answer":"部分')); o.signal.addEventListener('abort', () => { aborted++; c.error(new DOMException('aborted', 'AbortError')); }); } }), { status: 200 });
+      case 'notJson': return new Response('<html>不是 JSON</html>', { status: 200 });
+      case 'noAnswer': return json({ result: 'x' });
+      case 'answerNotText': return json({ answer: { a: 1 } });
+      case 'array': return json([1, 2]);
+      case 'hugeLength': return new Response('{}', { status: 200, headers: { 'content-length': String(5 * 1048576) } });
+      case 'hugeStream': return new Response(new ReadableStream({ pull(c) { c.enqueue(new Uint8Array(256 * 1024).fill(32)); } }), { status: 200 });
+      case 'hugeAnswer': return json({ answer: 'x'.repeat(200001) });
+      case 'http500': return json({ code: 'internal_error', message: '王小明 A123456789 的資料' }, { status: 500 });
+      case 'redirect': { const r = json({ answer: 'OK' }); Object.defineProperty(r, 'redirected', { value: true }); Object.defineProperty(r, 'url', { value: 'https://evil.example/x' }); return r; }
+      default: return json({ answer: 'OK' });
+    }
+  };
+  Object.assign(global, { localStorage: mem(), sessionStorage: mem() });
+  global.self = global; self.DQ = { pii, promptGuard: require('../src/prompt-guard.js'), aiPayload: { takeCounts: () => ({}) } };
+  global.DQ_AI_CONFIG = { allowedOrigins: ['https://api.dify.ai'], timeoutMs: 1000 };
+  delete require.cache[require.resolve('../src/ai.js')]; require('../src/ai.js');
+  const ai = self.DQ.ai;
+  ai.confirmOrigin = async () => true; ai.confirmSend = async () => true;
+  try {
+    await ai.setDify({ url: 'https://api.dify.ai/v1' });
+    const run = async m => { mode = m; ai.useKey('app-secret123456'); const t0 = Date.now(); let e = null; try { await ai.ping(); } catch (x) { e = x; } return { e, ms: Date.now() - t0, status: ai.sent[ai.sent.length - 1].status }; };
+    const ok = await run('ok'); assert.ok(!ok.e && ok.status === '成功');
+    let r = await run('slowConnect'); assert.match(r.e.message, /超過 1 秒沒有完成回應，已中止/); assert.strictEqual(r.status, '逾時'); assert.ok(r.ms < 3000);
+    r = await run('slowBody'); assert.match(r.e.message, /已中止/); assert.strictEqual(r.status, '逾時', '讀取本文時逾時也算逾時');
+    assert.ok(aborted >= 2, '逾時會真的中止請求');
+    for (const [m, re] of [['notJson', /不是 JSON/], ['noAnswer', /缺少 answer/], ['answerNotText', /缺少 answer/], ['array', /格式不正確/], ['hugeLength', /太大/], ['hugeStream', /太大/], ['hugeAnswer', /超過 200,000 字/], ['http500', /HTTP 500，internal_error/], ['redirect', /重新導向/]]) {
+      r = await run(m);
+      assert.match(r.e.message, re, m);
+      assert.match(r.status, /^失敗/, `${m} 的狀態要是失敗，不是成功`);
+    }
+    // HTTP 錯誤的訊息不夾帶回應原文 (可能含個資)
+    r = await run('http500'); assert.doesNotMatch(r.e.message + r.status, /王小明|A123456789/);
+    // 轉發伺服器：設定上游清單時，要回報允許的上游
+    global.DQ_AI_CONFIG = { provider: 'dify', url: 'https://api.dify.ai/v1', proxy: true, allowedOrigins: ['https://api.dify.ai'], proxyUpstreams: ['https://dify.corp.example'], timeoutMs: 1000 };
+    await ai.setDify(null);
+    mode = 'ok'; let e = null; try { await ai.ping(); } catch (x) { e = x; }
+    assert.match(e.message, /X-DQ-Upstream/);
+    global.fetch = async () => new Response(JSON.stringify({ answer: 'OK' }), { status: 200, headers: { 'x-dq-upstream': 'https://dify.corp.example' } });
+    assert.strictEqual(await ai.ping(), 'OK');
+    // 紀錄裡沒有金鑰
+    assert.ok(!JSON.stringify(ai.sent).includes('app-secret'));
+  } finally { Object.assign(global, saved); delete global.DQ_AI_CONFIG; }
 });
