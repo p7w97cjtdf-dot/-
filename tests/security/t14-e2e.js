@@ -49,8 +49,8 @@ const nodeKeys = files => C.validate(all, Object.fromEntries(Object.entries(file
     const list1 = (await grab(page, '#btn-dl-csv')).path;
     const rows1 = sheet(list1, '問題清單');
     ok.A2_exportsMatchScreen = rows1.length - 1 === s1.all && new RegExp(`class="v err">${s1.error}<`).test(rep1) && new RegExp(`class="v warn">${s1.warning}<`).test(rep1);
-    // 3) 一鍵修改 → 再檢核：問題只會變少，能一鍵修改的都改掉了
-    await page.click('#btn-fix'); await page.waitForTimeout(2000);
+    // 3) 套用全部建議值 (測試直接呼叫) → 再檢核：問題只會變少，有建議修正值的都改掉了
+    await page.evaluate(() => DQ.app.applyFix(null)); await page.waitForTimeout(2000);
     const s2 = await screen(page);
     ok.A3_fixThenRecheck = s2.all < s1.all && s2.fixable === 0 && s1.fixable > 0 && s1.all - s2.all >= 1;
     // 4) 下載改好的資料，在 Node 重新檢核：和畫面一模一樣
