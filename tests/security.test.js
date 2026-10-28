@@ -267,7 +267,7 @@ test('主管核可：簽章綁定更新包內容、核可人與時間；只接�
   assert.match((await A.verify(ok, [other.id])).why, /不是這個版本核准的主管金鑰/);
   for (const mut of [f => { f.packText = f.packText.replace('L6101', 'L6102'); }, f => { f.approval.approver = '別人'; }, f => { f.approval.approvedAt = '2030-01-01T00:00:00.000Z'; }]) {
     const t = JSON.parse(JSON.stringify(ok)); mut(t);
-    assert.match((await A.verify(t, [boss.id])).why, /主管簽章不正確/);
+    assert.match((await A.verify(t, [boss.id])).why, /主管簽章不正確|雜湊不同/);
   }
   const bad = JSON.parse(JSON.stringify(req)); bad.packText = bad.packText.replace('L6101', 'X');
   await assert.rejects(A.approve(bad, boss.pem, '陳經理'), /被改過/);
@@ -286,7 +286,7 @@ test('金鑰記憶體管理：Dify 金鑰只在 AI 模組的閉包，不寫進 l
   ls.setItem('dq-dify', JSON.stringify({ url: 'https://api.dify.ai/v1', key: 'app-oldkey123456' }));   // 舊版存的金鑰
   ss.setItem('dq-dify', JSON.stringify({ url: 'https://api.dify.ai/v1', key: 'app-oldkey654321' }));
   const saved = { self: global.self, localStorage: global.localStorage, sessionStorage: global.sessionStorage, fetch: global.fetch };
-  Object.assign(global, { localStorage: ls, sessionStorage: ss, fetch: async (u, o) => { auths.push((o.headers || {}).Authorization || ''); return { ok: true, status: 200, json: async () => ({ answer: 'OK' }) }; } });
+  Object.assign(global, { localStorage: ls, sessionStorage: ss, fetch: async (u, o) => { auths.push((o.headers || {}).Authorization || ''); return new Response(JSON.stringify({ answer: 'OK' }), { status: 200, headers: { 'content-type': 'application/json' } }); } });
   global.self = global; self.DQ = { pii, promptGuard: require('../src/prompt-guard.js'), aiPayload: { takeCounts: () => ({}) } };
   // Node 沒有 CSP 可以讀：要有部署者核准的網域才放行 (沒有明確限制就不放行)
   self.DQ_AI_CONFIG = { allowedOrigins: ['https://api.dify.ai'] };
@@ -362,7 +362,7 @@ test('AI 網址政策：只用 https、沒有明確允許清單就不放行、�
   const mem = () => { const m = new Map(); return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) }; };
   const saved = { self: global.self, localStorage: global.localStorage, sessionStorage: global.sessionStorage, fetch: global.fetch };
   const calls = [];
-  Object.assign(global, { localStorage: mem(), sessionStorage: mem(), fetch: async u => { calls.push(u); return { ok: true, status: 200, json: async () => ({ answer: 'OK' }) }; } });
+  Object.assign(global, { localStorage: mem(), sessionStorage: mem(), fetch: async u => { calls.push(u); return new Response(JSON.stringify({ answer: 'OK' }), { status: 200, headers: { 'content-type': 'application/json' } }); } });
   const fresh = conf => { global.self = global; self.DQ = { pii, promptGuard: require('../src/prompt-guard.js'), aiPayload: { takeCounts: () => ({}) } }; global.DQ_AI_CONFIG = conf; delete require.cache[require.resolve('../src/ai.js')]; require('../src/ai.js'); return self.DQ.ai; };
   try {
     // 沒有 CSP、也沒有部署者允許清單：不放行 (之前找不到 CSP 就放行)
@@ -470,7 +470,7 @@ test('法規更新包：內容被竄改、簽章錯誤、不是核准的金鑰�
   const clone = () => JSON.parse(JSON.stringify(ok));
   // 1. 內容被竄改：在已核可的包裡偷加「停用檢核規則」
   const t1 = clone(); const p = JSON.parse(t1.packText); p.disable = ['30212_L1305']; t1.packText = JSON.stringify(p);
-  assert.match((await A.verify(t1, [boss.id])).why, /簽章不正確/);
+  assert.match((await A.verify(t1, [boss.id])).why, /簽章不正確|雜湊不同/);
   // 2. 簽章錯誤
   const t2 = clone(); t2.sig = Buffer.alloc(64, 1).toString('base64');
   assert.ok(!(await A.verify(t2, [boss.id])).ok);
@@ -548,4 +548,168 @@ test('頁面寫清楚資料只在瀏覽器處理；claude.ai 展示版標示是�
   assert.doesNotMatch(html, /<script[^>]+src=/);
   assert.doesNotMatch(html, /google-analytics\.com|googletagmanager|gtag\(|sentry\.io|Sentry\.init|navigator\.sendBeacon/);
   fs.rmSync(out, { force: true });
+});
+
+test('核可簽章第 2 版：每一個受保護欄位被改都驗證失敗；舊格式標示未簽署的欄位', async () => {
+  const crypto = require('crypto'), A = require('../src/approval.js');
+  const mk = () => { const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }); const j = publicKey.export({ format: 'jwk' }); return { pem: privateKey.export({ type: 'pkcs8', format: 'pem' }), priv: privateKey, pub: j, id: crypto.createHash('sha256').update(JSON.stringify([j.x, j.y])).digest('hex').slice(0, 16) }; };
+  const boss = mk(), evil = mk();
+  const req = await A.request({ id: 'p', name: '新增檢查', rules: [], disable: ['10400_L0201'] }, { found: 3, hidden: 1 }, '小王');
+  const ok = await A.approve(req, boss.pem, '陳經理');
+  const v = await A.verify(ok, [boss.id]);
+  assert.ok(v.ok && v.format === 2 && !v.legacy && v.unsigned.length === 0);
+  assert.deepStrictEqual([v.approval.requestedBy, v.approval.impact.found, v.approval.impact.hidden], ['小王', 3, 1]);
+  // 主管核可前顯示的內容 = 實際簽署的內容 (除了核可時間)
+  const pv = await A.preview(req, '陳經理');
+  assert.strictEqual(pv.replace('（按下核可的時間）', ok.approval.approvedAt), A.envelope({ packText: ok.packText, sha256: ok.sha256, requestedBy: '小王', requestedAt: req.requestedAt, impact: req.impact, approver: '陳經理', approvedAt: ok.approval.approvedAt }));
+  assert.ok(crypto.verify('sha256', Buffer.from(pv.replace('（按下核可的時間）', ok.approval.approvedAt)), { key: crypto.createPublicKey({ key: Object.assign({ kty: 'EC', crv: 'P-256' }, { x: ok.publicKey.x, y: ok.publicKey.y }), format: 'jwk' }), dsaEncoding: 'ieee-p1363' }, Buffer.from(ok.sig, 'base64')));
+  // 逐一竄改受保護的欄位
+  const mutations = {
+    packText: f => { f.packText = f.packText.replace('10400_L0201', '10400_L0501'); },
+    sha256: f => { f.sha256 = '0'.repeat(64); },
+    packTextAndSha: f => { f.packText = f.packText.replace('10400_L0201', '10400_L0501'); f.sha256 = crypto.createHash('sha256').update(f.packText).digest('hex'); },
+    requestedBy: f => { f.approval.requestedBy = '別人'; },
+    requestedAt: f => { f.approval.requestedAt = '2030-01-01T00:00:00.000Z'; },
+    impactFound: f => { f.approval.impact.found = 0; },
+    impactHidden: f => { f.approval.impact.hidden = 99; },
+    impactAdded: f => { f.approval.impact.note = '加一句'; },
+    impactRemoved: f => { f.approval.impact = null; },
+    impactPack: f => { f.approval.impact.packSha256 = 'f'.repeat(64); },
+    approver: f => { f.approval.approver = '別人'; },
+    approvedAt: f => { f.approval.approvedAt = '2030-01-01T00:00:00.000Z'; },
+    format: f => { f.format = 3; },
+    downgrade: f => { delete f.format; },
+  };
+  for (const [name, mut] of Object.entries(mutations)) {
+    const t = JSON.parse(JSON.stringify(ok)); mut(t);
+    const r = await A.verify(t, [boss.id]);
+    assert.strictEqual(r.ok, false, `竄改 ${name} 應驗證失敗`);
+  }
+  // 攻擊者自帶公鑰：自己簽的、或把正確的簽章換上自己的公鑰，都不通過
+  const self = await A.approve(req, evil.pem, '冒充的主管');
+  assert.match((await A.verify(self, [boss.id])).why, /不是這個版本核准的主管金鑰/);
+  const swap = JSON.parse(JSON.stringify(ok)); swap.publicKey = { kty: 'EC', crv: 'P-256', x: evil.pub.x, y: evil.pub.y };
+  assert.ok(!(await A.verify(swap, [boss.id])).ok);
+  assert.ok(!(await A.verify(swap, [boss.id, evil.id])).ok, '換公鑰後簽章對不上');
+  // 影響摘要必須是同一版更新包的試跑結果
+  const req2 = JSON.parse(JSON.stringify(req)); req2.impact.packSha256 = 'a'.repeat(64);
+  await assert.rejects(A.approve(req2, boss.pem, '陳經理'), /不是這一版更新包的試跑結果/);
+  // 舊格式 (第 1 版)：只簽更新包、核可人、核可時間 → 可以驗證，但申請人與影響摘要標示為未簽署、不回傳
+  const old = { type: 'dq-approved-pack', packText: req.packText, approval: { approver: '陳經理', approvedAt: '2026-10-01T00:00:00.000Z', requestedBy: '小王', impact: { found: 3 } }, publicKey: ok.publicKey };
+  old.sig = crypto.sign('sha256', Buffer.from(JSON.stringify({ pack: old.packText, approver: '陳經理', approvedAt: old.approval.approvedAt })), { key: boss.priv, dsaEncoding: 'ieee-p1363' }).toString('base64');
+  const ov = await A.verify(old, [boss.id]);
+  assert.ok(ov.ok && ov.legacy && ov.format === 1);
+  assert.deepStrictEqual(ov.unsigned, ['requestedBy', 'requestedAt', 'impact']);
+  assert.strictEqual(ov.approval.requestedBy, null); assert.strictEqual(ov.approval.impact, null);
+  // 舊格式改未簽署的欄位不影響驗證，但也不會被當成已驗證的值
+  const o2 = JSON.parse(JSON.stringify(old)); o2.approval.requestedBy = '偷改'; o2.approval.impact = { found: 999 };
+  const ov2 = await A.verify(o2, [boss.id]);
+  assert.ok(ov2.ok && ov2.approval.requestedBy === null && ov2.approval.impact === null);
+  const o3 = JSON.parse(JSON.stringify(old)); o3.approval.approver = '別人';
+  assert.ok(!(await A.verify(o3, [boss.id])).ok);
+  // samples/updates 的已核可範例是舊格式：仍驗證通過，標示 legacy
+  const fs = require('fs'), path = require('path');
+  const s6 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'samples', 'updates', '6_已核可_新增檢查.json'), 'utf8'));
+  const sv = await A.verify(s6, ['7fb780c45230b133']);
+  assert.ok(sv.ok && sv.legacy);
+});
+
+test('AI 送出預設拒絕：確認函式不存在、取消、出錯、不是明確同意、確認期間設定改變，模型呼叫都是 0 次', async () => {
+  const mem = () => { const m = new Map(); return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) }; };
+  const saved = { self: global.self, localStorage: global.localStorage, sessionStorage: global.sessionStorage, claude: global.claude };
+  let calls = 0;
+  Object.assign(global, { localStorage: mem(), sessionStorage: mem(), claude: { use: async k => k === 'sample' ? async () => { calls++; return { text: '好的' }; } : {} } });
+  global.self = global; self.DQ = { pii, promptGuard: require('../src/prompt-guard.js'), aiPayload: { takeCounts: () => ({}) } };
+  delete require.cache[require.resolve('../src/ai.js')]; require('../src/ai.js');
+  const ai = self.DQ.ai;
+  try {
+    assert.strictEqual(await ai.ready, true);
+    const data = '以下是檢核結果：出生日期不是合法日期';
+    // 1. 確認函式不存在
+    delete ai.confirmSend;
+    await assert.rejects(ai.ask(data), /沒有送出確認的畫面/);
+    // 2. 取消、3. 出錯、4. 回傳不是 true 的值 (例如 'yes'、1)
+    for (const fn of [async () => false, async () => { throw new Error('x'); }, async () => 'yes', async () => 1, async () => undefined]) {
+      ai.confirmSend = fn;
+      await assert.rejects(ai.ask(data));
+    }
+    assert.strictEqual(calls, 0, '沒有明確同意就不呼叫模型');
+    // 5. 等待確認期間 AI 服務設定改了 (完全離線)
+    ai.confirmSend = async () => { await ai.setOffline(true); return true; };
+    await assert.rejects(ai.ask(data), /設定已改變/);
+    assert.strictEqual(calls, 0);
+    await ai.setOffline(false); await ai.ready;
+    // 6. 明確同意：送出一次；確認時看到的就是實際送出的內容，紀錄狀態為成功
+    let shown = '';
+    ai.confirmSend = async (payload, counts, entry) => { shown = payload; assert.strictEqual(entry.status, '等待確認'); return true; };
+    assert.strictEqual(await ai.ask(data), '好的');
+    assert.strictEqual(calls, 1);
+    const last = ai.sent[ai.sent.length - 1];
+    assert.strictEqual(last.payload, shown); assert.strictEqual(last.status, '成功');
+    assert.ok(ai.sent.filter(e => e.status === '取消，沒有送出').length >= 5, '取消的也有紀錄');
+    // 7. 不能用 noPreview 等參數跳過確認
+    ai.confirmSend = async () => false;
+    await assert.rejects(ai.ask(data, { noPreview: true, fixed: true, raw: true }));
+    assert.strictEqual(calls, 1);
+    // 8. 連線測試只送固定的虛構內容 (不需確認)，自我測試也是固定內容
+    assert.strictEqual(await ai.ping(), '好的');
+    assert.strictEqual(calls, 2);
+    assert.match(ai.sent[ai.sent.length - 1].payload, /連線測試：請只回覆「OK」/);
+    // 9. 紀錄不含 API 金鑰
+    assert.ok(!JSON.stringify(ai.sent).includes('app-'));
+  } finally { Object.assign(global, saved); }
+});
+
+test('Dify 回應：慢速、非 JSON、缺 answer、超大回應、HTTP 錯誤、重新導向都會中止並記錄正確狀態', async () => {
+  const mem = () => { const m = new Map(); return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) }; };
+  const saved = { self: global.self, localStorage: global.localStorage, sessionStorage: global.sessionStorage, fetch: global.fetch };
+  let mode = 'ok', aborted = 0;
+  const json = (o, init) => new Response(JSON.stringify(o), Object.assign({ status: 200, headers: { 'content-type': 'application/json' } }, init));
+  const never = signal => new Promise((_, rej) => signal.addEventListener('abort', () => { aborted++; rej(new DOMException('aborted', 'AbortError')); }));
+  global.fetch = async (u, o) => {
+    switch (mode) {
+      case 'slowConnect': return never(o.signal);
+      case 'slowBody': return new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{"answer":"部分')); o.signal.addEventListener('abort', () => { aborted++; c.error(new DOMException('aborted', 'AbortError')); }); } }), { status: 200 });
+      case 'notJson': return new Response('<html>不是 JSON</html>', { status: 200 });
+      case 'noAnswer': return json({ result: 'x' });
+      case 'answerNotText': return json({ answer: { a: 1 } });
+      case 'array': return json([1, 2]);
+      case 'hugeLength': return new Response('{}', { status: 200, headers: { 'content-length': String(5 * 1048576) } });
+      case 'hugeStream': return new Response(new ReadableStream({ pull(c) { c.enqueue(new Uint8Array(256 * 1024).fill(32)); } }), { status: 200 });
+      case 'hugeAnswer': return json({ answer: 'x'.repeat(200001) });
+      case 'http500': return json({ code: 'internal_error', message: '王小明 A123456789 的資料' }, { status: 500 });
+      case 'redirect': { const r = json({ answer: 'OK' }); Object.defineProperty(r, 'redirected', { value: true }); Object.defineProperty(r, 'url', { value: 'https://evil.example/x' }); return r; }
+      default: return json({ answer: 'OK' });
+    }
+  };
+  Object.assign(global, { localStorage: mem(), sessionStorage: mem() });
+  global.self = global; self.DQ = { pii, promptGuard: require('../src/prompt-guard.js'), aiPayload: { takeCounts: () => ({}) } };
+  global.DQ_AI_CONFIG = { allowedOrigins: ['https://api.dify.ai'], timeoutMs: 1000 };
+  delete require.cache[require.resolve('../src/ai.js')]; require('../src/ai.js');
+  const ai = self.DQ.ai;
+  ai.confirmOrigin = async () => true; ai.confirmSend = async () => true;
+  try {
+    await ai.setDify({ url: 'https://api.dify.ai/v1' });
+    const run = async m => { mode = m; ai.useKey('app-secret123456'); const t0 = Date.now(); let e = null; try { await ai.ping(); } catch (x) { e = x; } return { e, ms: Date.now() - t0, status: ai.sent[ai.sent.length - 1].status }; };
+    const ok = await run('ok'); assert.ok(!ok.e && ok.status === '成功');
+    let r = await run('slowConnect'); assert.match(r.e.message, /超過 1 秒沒有完成回應，已中止/); assert.strictEqual(r.status, '逾時'); assert.ok(r.ms < 3000);
+    r = await run('slowBody'); assert.match(r.e.message, /已中止/); assert.strictEqual(r.status, '逾時', '讀取本文時逾時也算逾時');
+    assert.ok(aborted >= 2, '逾時會真的中止請求');
+    for (const [m, re] of [['notJson', /不是 JSON/], ['noAnswer', /缺少 answer/], ['answerNotText', /缺少 answer/], ['array', /格式不正確/], ['hugeLength', /太大/], ['hugeStream', /太大/], ['hugeAnswer', /超過 200,000 字/], ['http500', /HTTP 500，internal_error/], ['redirect', /重新導向/]]) {
+      r = await run(m);
+      assert.match(r.e.message, re, m);
+      assert.match(r.status, /^失敗/, `${m} 的狀態要是失敗，不是成功`);
+    }
+    // HTTP 錯誤的訊息不夾帶回應原文 (可能含個資)
+    r = await run('http500'); assert.doesNotMatch(r.e.message + r.status, /王小明|A123456789/);
+    // 轉發伺服器：設定上游清單時，要回報允許的上游
+    global.DQ_AI_CONFIG = { provider: 'dify', url: 'https://api.dify.ai/v1', proxy: true, allowedOrigins: ['https://api.dify.ai'], proxyUpstreams: ['https://dify.corp.example'], timeoutMs: 1000 };
+    await ai.setDify(null);
+    mode = 'ok'; let e = null; try { await ai.ping(); } catch (x) { e = x; }
+    assert.match(e.message, /X-DQ-Upstream/);
+    global.fetch = async () => new Response(JSON.stringify({ answer: 'OK' }), { status: 200, headers: { 'x-dq-upstream': 'https://dify.corp.example' } });
+    assert.strictEqual(await ai.ping(), 'OK');
+    // 紀錄裡沒有金鑰
+    assert.ok(!JSON.stringify(ai.sent).includes('app-secret'));
+  } finally { Object.assign(global, saved); delete global.DQ_AI_CONFIG; }
 });

@@ -90,3 +90,16 @@ test('金額解析', () => {
   assert.strictEqual(R.parseAmount('-10'), -1000);
   assert.ok(Number.isNaN(R.parseAmount('12a')));
 });
+
+test('金額超出可精確計算的範圍：不靜默給出失真的數字，加上 R000 提醒', () => {
+  const R = require('../src/recon.js');
+  assert.ok(!R.precision({ issues: [], movement: { a: [1, 123456789012] } }).issues.length, '一般金額不提醒');
+  const big = R.precision({ issues: [], movement: { a: [1, Number.MAX_SAFE_INTEGER + 2] } });
+  assert.deepStrictEqual(big.issues.map(i => [i.ruleId, i.severity]), [['R000', 'warning']]);
+  assert.ok(R.precision({ issues: [], rows: [{ amt: Infinity }] }).issues.length === 1, '不是有限數字也提醒');
+  // 實際資料：試用資料的對帳沒有 R000
+  const C = require('../src/core.js'), life = require('../src/rulesets/life.js'), fs = require('fs'), path = require('path');
+  const d = f => fs.readFileSync(path.join(__dirname, '..', 'samples', 'dirty', f), 'utf8');
+  const res = C.validate(life, { L: { name: 'LFL01_2025.txt', text: d('LFL01_2025.txt') }, D: { name: 'LFD01_2025.txt', text: d('LFD01_2025.txt') } });
+  assert.ok(!R.rollForward(res, d('LFL01_2024.txt')).issues.some(i => i.ruleId === 'R000'));
+});

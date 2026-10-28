@@ -20,7 +20,24 @@
   const AMT_CHANGE = ['INN', 'DNN', 'PAU', 'ROL', 'CTC'];
 
   // ---------- 共用 ----------
-  const cents = s => /^\d+$/.test(s || '') ? Number(s) : 0;               // 申報檔 18 位含 2 位小數
+  // 精確度：金額以「分」用一般數字計算，超過 Number.MAX_SAFE_INTEGER (約 90 兆元) 就可能失真。
+  // 單筆或加總超過時不靜默給出數字：結果加上 R000「金額超出可精確計算的範圍」，說明對帳金額可能有誤差
+  const SAFE = Number.MAX_SAFE_INTEGER;
+  function precision(out) {
+    let bad = false;
+    const seen = new Set();
+    const scan = v => {
+      if (bad || v == null) return;
+      if (typeof v === 'number') { if (!Number.isFinite(v) || Math.abs(v) > SAFE) bad = true; return; }
+      if (typeof v !== 'object' || seen.has(v)) return; seen.add(v);
+      if (Array.isArray(v)) v.forEach(scan); else for (const k of Object.keys(v)) if (k !== 'rec' && k !== 'issues') scan(v[k]);
+    };
+    scan(out);
+    if (bad && out.issues) out.issues.push({ ruleId: 'R000', severity: 'warning', category: '跨系統對帳', fields: [], value: '',
+      message: '金額或加總超出工具可精確計算的範圍（約 90 兆元），對帳與結轉的金額可能有誤差', suggestion: '請以會計或核心系統的精確數字為準，或把資料拆成較小的範圍分別檢查' });
+    return out;
+  }
+  const cents = s => /^\d+$/.test(s || '') ? Number(s) : 0;               // 申報檔 18 位含 2 位小數 (超過約 90 兆元見 precision)
   function parseAmount(v) {                                                // CSV「1,234.5」→ 分
     const t = String(v == null ? '' : v).replace(/[,\s元]/g, '');
     if (t === '' || t === '-') return 0;
@@ -189,7 +206,7 @@
       policy: '', fields: [], value: r.diff ? `${r.diff.cnt} 筆 / ${yuan(r.diff.amt)} 元` : '', message: `${r.source || ''} ${r.name || r.item} ${r.period}：${r.status}`, suggestion: r.suggestion || r.explain || '', explain: r.explain,
     }));
     const count = s => rows.filter(r => r.status === s).length;
-    return { rows, issues, summary: { total: rows.length, ok: count('一致'), timing: count('時間差'), definition: count('定義差'), open: count('待查') + count('格式錯誤') } };
+    return precision({ rows, issues, summary: { total: rows.length, ok: count('一致'), timing: count('時間差'), definition: count('定義差'), open: count('待查') + count('格式錯誤') } });
   }
 
   // ---------- 2. 期初/期末結轉 ----------
@@ -243,7 +260,7 @@
     }
     const termSum = Object.values(mv.term).reduce((a, b) => [a[0] + b[0], a[1] + b[1]], [0, 0]);
     mv.close = [mv.open[0] + mv.new[0] - termSum[0], mv.open[1] + mv.new[1] + mv.inc[1] + mv.dec[1] + mv.adj[1] + mv.unexplained[1] - termSum[1]];
-    return { hasPrior: !!prior, movement: mv, termSum, issues, summary: { issues: issues.length, priorDiff: prior ? [mv.open[0] - mv.priorClose[0], mv.open[1] - mv.priorClose[1]] : null } };
+    return precision({ hasPrior: !!prior, movement: mv, termSum, issues, summary: { issues: issues.length, priorDiff: prior ? [mv.open[0] - mv.priorClose[0], mv.open[1] - mv.priorClose[1]] : null } });
   }
 
   // ---------- 3. 財報勾稽 ----------
@@ -330,7 +347,7 @@
     }
     for (const ch of chains) ch.root.explain = (ch.root.explain ? ch.root.explain + ' ' : '') + `此錯誤同時造成 ${ch.effects.map(e => `${e.ruleId}(${e.code})`).join('、')} 的差額 ${yuan(ch.delta)}，修正這一處即可一併解決。`;
     const err = issues.filter(i => i.severity === 'error');
-    return { rows, issues, chains, summary: { rows: rows.length, errors: err.length, warnings: issues.length - err.length, balanced: !issues.some(i => i.ruleId === 'S005') } };
+    return precision({ rows, issues, chains, summary: { rows: rows.length, errors: err.length, warnings: issues.length - err.length, balanced: !issues.some(i => i.ruleId === 'S005') } });
   }
 
   // ---------- 4. 退件訊息解碼 ----------
@@ -408,5 +425,5 @@
     return { findings, located: used.size };
   }
 
-  return { parseAmount, yuan, csvObjects, aggregate, controlRecon, rollForward, statement, decode, ITEMS, subsetSum };
+  return { parseAmount, yuan, csvObjects, aggregate, controlRecon, rollForward, statement, decode, ITEMS, subsetSum, precision };
 });

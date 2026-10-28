@@ -1141,3 +1141,11 @@ details.approve > summary::-webkit-details-marker { display: none; }
 .lib-note { margin: 10px 0 0; padding: 8px 10px; border: 1px solid #fdba74; background: #fff7ed; color: #9a3412; border-radius: 8px; font-size: 13px; line-height: 1.5; }
 .privacy-line { margin: 10px 0 0; font-size: 13px; line-height: 1.6; color: var(--mut); }
 .privacy-line b { color: var(--fg); }
+/* 對照錯誤解答 */
+.answer-check { margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; line-height: 1.6; }
+.answer-check.ok { border-color: #86efac; background: #f0fdf4; }
+.answer-check.bad { border-color: #fdba74; background: #fff7ed; }
+.answer-check summary { cursor: pointer; }
+.answer-check ul { margin: 6px 0 0; padding-left: 18px; }
+.ap-sign { margin: 10px 0; font-size: 13px; }
+.ap-sign pre { max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-all; background: #F7F7F7; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 12px; }

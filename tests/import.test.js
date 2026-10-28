@@ -92,3 +92,17 @@ test('中文說明', () => {
   const p = dsl.describe(S.converted.company[5], life.layouts);
   assert.match(p.assert, /相差天數\(上一筆退保日期，加保日期\) ≤ 730/);
 });
+
+test('錯誤解答 CSV：認得格式、解析每一項，並和檢查結果對照', () => {
+  const W = require('../src/workbook.js');
+  const csv = '分類,資料檔,檢核編號,保單／案例,預期問題說明\n內建檢核錯誤,L,23900_L0802,P250000001/A01,出生日期不存在\n對帳／結轉,control,,,6/30 給付計入 7 月\n內建檢核錯誤,L,F003,,檔案中間有空白行\n';
+  const aoa = require('../src/core.js').parseCSV(csv);
+  assert.ok(W.isAnswerKey(aoa[0]));
+  assert.ok(!W.isAnswerKey(['公司代號', '保單編號', '保單編號序號']), '申報資料的標題不是錯誤解答');
+  const key = W.answerKey(aoa);
+  assert.deepStrictEqual(key.map(k => [k.ruleId, k.policy]), [['23900_L0802', 'P250000001/A01'], ['', ''], ['F003', '']]);
+  const r = W.checkAnswers(key, [{ ruleId: '23900_L0802', policy: 'P250000001/A01  ' }, { ruleId: 'F003' }]);
+  assert.deepStrictEqual([r.found, r.total, r.manual], [2, 2, 1]);
+  // 保單不同就不算找到
+  assert.strictEqual(W.checkAnswers(key, [{ ruleId: '23900_L0802', policy: 'P250000101/A01' }]).found, 0);
+});

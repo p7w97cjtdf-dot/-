@@ -4,6 +4,7 @@
 #   sh tools/build-zip.sh [輸出檔]   預設 dist/filing-validation-assistant.zip (以目前的 commit 為準)
 set -e
 cd "$(dirname "$0")/.."
+ROOT="$(pwd)"
 OUT="$(pwd)/${1:-dist/filing-validation-assistant.zip}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -11,5 +12,6 @@ git archive HEAD | tar -x -C "$TMP"
 cd "$TMP"
 rm -rf samples tests tools design-system .github .claude README.md package.json .gitignore .vercelignore rules/updates/watch-state.json src/mock-ext.js docs/*.md docs/index.html rules/source rules/updates/sources.json rules/updates/example-2026-format-change.json
 mkdir -p "$(dirname "$OUT")" && rm -f "$OUT"
-zip -qr9 "$OUT" .
+# 有安裝 zopfli (pip install zopfli) 時壓得更小；沒有就用 zip -9
+if python3 -c "import zopfli.zlib" 2>/dev/null; then python3 "$ROOT/tools/zip-zopfli.py" "$OUT" .; else zip -qr9 "$OUT" .; fi
 echo "已輸出 $OUT ($(($(wc -c < "$OUT") / 1024)) KB)"

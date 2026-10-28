@@ -44,6 +44,9 @@ const keyFile = (k, n) => { const p = path.join(TMP, n); fs.writeFileSync(p, k.p
   await page.setInputFiles('#ap-key', keyFile(BOSS, 'boss.pem')); await page.fill('#ap-name', '陳經理');
   const approved = await grab('#btn-approve');
   ok.keyCleared = await page.evaluate(() => document.querySelector('#ap-key').files.length === 0);
+  // 主管確認前看得到真正要簽署的內容 (第 2 版：含申請人、影響摘要、更新包雜湊)；核可後的檔案是第 2 版
+  ok.signPreviewShown = await page.evaluate(() => { const t = document.querySelector('#ap-sign').textContent; return !document.querySelector('#ap-sign-box').hidden && /"format":2/.test(t) && /"requestedBy"/.test(t) && /"impact"/.test(t) && /"packSha256"/.test(t) && /陳經理/.test(t); });
+  ok.approvedIsV2 = JSON.parse(fs.readFileSync(approved, 'utf8')).format === 2;
   // 6. 匯入已核可檔 → 套用 (隱藏 4 個問題，畫面註明結果不完整)
   await page.setInputFiles('#file-pack', approved); await page.waitForTimeout(1200);
   s = await st();
@@ -51,7 +54,7 @@ const keyFile = (k, n) => { const p = path.join(TMP, n); fs.writeFileSync(p, k.p
   // 7. 被竄改的已核可檔、用別把金鑰簽的已核可檔：不套用
   const t = JSON.parse(fs.readFileSync(approved, 'utf8')); t.packText = t.packText.replace('30205_P0502', '30202_L0302'); const tp = path.join(TMP, 'tampered.json'); fs.writeFileSync(tp, JSON.stringify(t));
   await page.setInputFiles('#file-pack', tp); await page.waitForTimeout(800);
-  ok.tamperedRejected = /主管簽章不正確/.test((await st()).note) && (await st()).n === base - 4;
+  ok.tamperedRejected = /主管簽章不正確|雜湊不同/.test((await st()).note) && (await st()).n === base - 4;
   const A = require(path.join(ROOT, 'src', 'approval.js'));
   const otherApproved = await A.approve(JSON.parse(fs.readFileSync(req, 'utf8')), OTHER.pem, '冒名');
   const op = path.join(TMP, 'other.json'); fs.writeFileSync(op, JSON.stringify(otherApproved));
@@ -74,7 +77,7 @@ const keyFile = (k, n) => { const p = path.join(TMP, n); fs.writeFileSync(p, k.p
   ok.localDraftNotApplied = s.n === base && s.packs.some(p => p.id === 'local' && !p.usable);
   // 10. 有錯的更新包：列出無法使用的項目
   await page.setInputFiles('#file-pack', U(4)); await page.waitForTimeout(800);
-  ok.brokenExplained = /無法使用，已略過/.test((await st()).note);
+  ok.brokenExplained = /格式不對，整包都不會套用/.test((await st()).note);
   ok.errors = log.errors.filter(e => !/serviceWorker|sandboxed and lacks/.test(e)).length === 0;
   await browser.close();
   // 11. 正式版本 (固定的是正式主管金鑰)：測試金鑰簽的已核可檔不會被接受

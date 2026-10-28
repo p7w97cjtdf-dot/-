@@ -83,6 +83,12 @@ const huge = path.join(TMP, 'LFL01_huge.txt'); fs.writeFileSync(huge, ''); fs.tr
   r = await put('#file-book', evilName);
   const fn = await page.evaluate(() => ({ x: window.__x || null, inj: !!document.querySelector('#inj-fn'), shown: document.body.innerText.includes('<img src=x id=inj-fn') }));
   ok.fileNameNotExecuted = !fn.x && !fn.inj && fn.shown;
+  // 9. 錯誤解答 CSV：不是申報資料，放入後不清掉已放入的資料，並對照檢查結果
+  const ans = f('answer_key.csv', fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'answer-key-sample.csv')));
+  await put('#file-book', good); const before9 = await look();
+  r = await put('#file-book', ans);
+  const ac = await page.evaluate(() => ({ shown: !document.querySelector('#answer-check').hidden, text: document.querySelector('#answer-check').textContent }));
+  ok.answerKeyKeepsData = r.files.length === before9.files.length && r.total === before9.total && ac.shown && /對照錯誤解答.*找到 \d+ \/ \d+ 項/.test(ac.text.replace(/\s+/g, ' '));
   ok.noPageErrors = !log.errors.filter(e => !/serviceWorker/.test(e)).length && !rej.length;
   console.log(JSON.stringify(ok, null, 2));
   if (!Object.values(ok).every(Boolean)) console.log(JSON.stringify({ last: r, errors: log.errors }, null, 2));

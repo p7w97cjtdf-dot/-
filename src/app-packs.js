@@ -127,8 +127,8 @@
       const entry = { pack, on: true, imported: true, approvedFile, approval, verified: !!approval };
       app.setPacks(app.state.packs.filter(x => x.pack.id !== pack.id).concat(entry));
       fillFields();
-      note('#pack-note', `已匯入「${pack.name}」：${P.summary(pack)}。` + (v.errors.length || bad.length ? `有 ${v.errors.length + bad.length} 項無法使用，已略過（見下方說明）。` : '') +
-        (approval ? `主管 ${approval.approver} 已核可（${approval.approvedAt.slice(0, 10)}），已套用到檢查結果。` : '還沒有主管核可，不會套用：可以先「試跑」看影響，再「申請主管核可」。'));
+      note('#pack-note', `已匯入「${pack.name}」：${P.summary(pack)}。` + (v.errors.length || bad.length ? `有 ${v.errors.length + bad.length} 項格式不對，整包都不會套用（見下方說明），請修正後重新匯入。` : '') +
+        (approval && (v.errors.length || bad.length) ? `雖然主管 ${approval.approver} 已核可，格式不對的更新包仍不會套用。` : approval ? `主管 ${approval.approver} 已核可（${approval.approvedAt.slice(0, 10)}），已套用到檢查結果。${approval.legacy ? '這是舊格式的已核可檔：只有更新包內容、核可人與核可時間經過簽章，申請人與影響摘要沒有經過簽章驗證。' : ''}` : '還沒有主管核可，不會套用：可以先「試跑」看影響，再「申請主管核可」。'));
     } catch (err) { note('#pack-note', `「${f.name}」不是規則更新包，或檔案內容有誤：${DQ.safeError(err)}`); }
   });
   const download = x => app.download(`rule-pack-${String(x.pack.id).replace(/[^\w.-]/g, '_')}.json`, JSON.stringify(x.pack, null, 2) + '\n', 'application/json');
@@ -139,7 +139,7 @@
     const st = app.state, files = Object.fromEntries(['L', 'D', 'CL', 'CD', 'AL', 'AD'].filter(k => st.files[k]).map(k => [k, st.files[k]]));
     if (!Object.keys(files).length) return '還沒有放入資料。先放入要檢查的資料，再試跑。';
     const live = st.packs.filter(y => y !== x && y.on && ready(y)).map(y => y.pack);
-    const out = P.apply(app.base, live.concat(x.pack));
+    const out = P.apply(app.base, live.concat(x.pack), { catalog: allCatalog().slice(app.base.catalog.length) });
     const ids = new Set(x.pack.rules.map(r => r.id).concat(x.pack.fields.map(f => `${x.pack.id}:${f.key}`)));
     const found = DQ.validate(out.ruleset, files).issues.filter(i => ids.has(i.ruleId)).length;
     const hid = (st.all || []).filter(i => x.pack.disable.includes(i.ruleId)).length;
@@ -163,13 +163,22 @@
 
   // ---------- 主管核可：讀申請檔與核可私鑰，簽章後產生「已核可」檔 (私鑰只在記憶體裡用，不保存、不上傳) ----------
   let apReq = null;
+  // 主管確認前顯示真正要簽署的內容 (和 approve 簽的是同一段，只有核可時間在按下時才決定)
+  async function showSign() {
+    const box = $('#ap-sign-box');
+    if (!apReq) { box.hidden = true; return; }
+    try { $('#ap-sign').textContent = await DQ.approval.preview(apReq, $('#ap-name').value); box.hidden = false; }
+    catch (err) { box.hidden = true; note('#ap-note', DQ.safeError(err)); }
+  }
+  $('#ap-name').addEventListener('input', showSign);
   $('#ap-req').addEventListener('change', async e => {
-    const f = e.target.files[0]; apReq = null; DQ.safe($('#ap-preview')).innerHTML = ''; if (!f) return;
+    const f = e.target.files[0]; apReq = null; DQ.safe($('#ap-preview')).innerHTML = ''; $('#ap-sign-box').hidden = true; if (!f) return;
     try {
       const r = JSON.parse(await f.text());
       if (r.type !== 'dq-approval-request') throw new Error('這不是核可申請檔');
       const p = P.normalize(JSON.parse(r.packText)), lay = layouts(), imp = r.impact;
-      apReq = r;
+      await DQ.approval.checkRequest(r);
+      apReq = r; showSign();
       DQ.safe($('#ap-preview')).innerHTML = `<div class="ap-card"><b>${esc(p.name)}</b>　<span class="hint">${esc(P.summary(p))}${r.requestedBy ? `・申請人 ${esc(r.requestedBy)}` : ''}・${esc(r.requestedAt.slice(0, 10))}</span>
         ${imp ? `<p>申請時試跑：新檢查會找到 ${imp.found} 個問題${p.disable.length ? `；停用會隱藏 ${imp.hidden} 個問題` : ''}</p>` : '<p class="hint">申請時沒有試跑。</p>'}
         <ul>${p.rules.map(rr => { const d = dsl.describe(P.withEffective(rr), lay); return `<li>新增檢查：${esc(LB.SHEET[rr.file] || rr.file)}${d.when ? `，當 ${esc(d.when)}` : ''}，必須 ${esc(d.assert)}（${esc(rr.message || rr.name)}）</li>`; }).join('')}
@@ -221,7 +230,7 @@
       return `<article class="pack${x.on ? '' : ' off'}">
         <div class="pack-head">
           <label class="switch"><input type="checkbox" data-on="${k}"${x.on && ready(x) ? ' checked' : ''}${ready(x) ? '' : ' disabled'}> ${ready(x) ? '使用中' : '未套用'}</label>
-          <div><b>${esc(p.name)}</b>${x.official ? '<span class="official">官方發布・自動套用</span>' : ready(x) ? `<span class="official">主管已核可・${esc(x.approval.approver)}・${esc(x.approval.approvedAt.slice(0, 10))}</span>` : `<span class="unofficial">${esc(status(x))}・不會套用</span>`}${p.version ? `<span class="hint">　第 ${esc(p.version)} 版</span>` : ''}
+          <div><b>${esc(p.name)}</b>${x.official ? '<span class="official">官方發布・自動套用</span>' : ready(x) ? `<span class="official">主管已核可・${esc(x.approval.approver)}・${esc(x.approval.approvedAt.slice(0, 10))}${x.approval.legacy ? '・舊格式（申請人與影響摘要未經簽章）' : x.approval.requestedBy ? `・申請人 ${esc(x.approval.requestedBy)}（已驗證）` : ''}</span>` : `<span class="unofficial">${esc(status(x))}・不會套用</span>`}${p.version ? `<span class="hint">　第 ${esc(p.version)} 版</span>` : ''}
             <div class="hint">${[p.issuedAt && `發布 ${p.issuedAt.replace(/^(\d{4})(\d\d)(\d\d)$/, '$1/$2/$3')}`, p.basis && `依據：${p.basis}`].filter(Boolean).map(esc).join('　')}</div></div>
           <div class="pack-acts">${!x.official && !ready(x) ? `<button class="chip" data-trial="${k}">試跑</button><button class="chip cta" data-req="${k}">申請主管核可</button>` : ''}<button class="chip" data-dl="${k}">下載</button>${x.official ? '' : `<button class="chip" data-rm="${k}">移除</button>`}</div>
         </div>

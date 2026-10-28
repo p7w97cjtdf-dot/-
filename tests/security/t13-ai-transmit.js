@@ -28,10 +28,10 @@ const XLSX = require(path.join(ROOT, 'vendor', 'xlsx.core.min.js'));
     ok.previewIsExactlySent = sent.length === 2 && shown.every((x, i) => x.text === sent[i]);
     // 系統指示也在預覽裡 (不是只有資料那一段)
     ok.previewIncludesSystem = shown.every(x => /安全規則|<declaration_data>/.test(x.text) && x.text.length === sent[0].length);
-    // AI 傳送紀錄：三筆 (兩筆已送出、一筆取消)，內容等於實際送出
+    // AI 傳送紀錄：三筆 (兩筆成功、一筆取消)，內容等於實際送出
     await page.click('#btn-ai-log'); await page.waitForTimeout(200);
     const logged = await page.evaluate(() => ({ open: document.querySelector('#ai-log').open, items: DQ.ai.sent.map(e => ({ status: e.status, payload: e.payload })), rows: document.querySelectorAll('#ai-log .ai-log-item').length }));
-    ok.transmitLog = logged.open && logged.rows === 3 && logged.items.filter(e => e.status === '已送出').map(e => e.payload).join('\u0000') === sent.join('\u0000') && logged.items.some(e => /取消/.test(e.status));
+    ok.transmitLog = logged.open && logged.rows === 3 && logged.items.filter(e => e.status === '成功').map(e => e.payload).join('\u0000') === sent.join('\u0000') && logged.items.some(e => /取消/.test(e.status));
     await page.click('#ai-log-close');
     // 稽核軌跡「AI 使用」有送出的完整內容
     // (模擬的 claude.ai 線上版：下載交給平台存檔，測試記下存檔內容)

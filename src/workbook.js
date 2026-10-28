@@ -178,6 +178,32 @@
   // 依工作表名稱分配，名稱不符時依標題列判斷：回傳 { slot: csv文字 } 與 { slot: 工作表名稱 }
   // 兩張工作表都像保單資料、又沒有名稱可判斷時，日期較早的那張當作去年保單資料
   // 只有標題列 (例如還沒填的空白範本) 的工作表視為沒有資料，列在 blank
+  // 錯誤解答 (試用資料附的「刻意放了哪些錯誤」)：不是申報資料，用來對照檢查結果。
+  // 第一列要有「檢核編號」，以及「保單」「案例」或「預期問題說明」其中之一 (試用資料的錯誤解答 CSV／工作表就是這個格式)
+  function isAnswerKey(head) {
+    const h = (head || []).map(v => String(v == null ? '' : v).replace(/\s+/g, ''));
+    return h.includes('檢核編號') && h.some(v => /保單|案例|預期問題/.test(v));
+  }
+  // 回傳 [{ category, file, ruleId, policy, desc }]；policy 只取保單號碼／序號 (例如 P250000001/A01)
+  function answerKey(aoa) {
+    const h = (aoa[0] || []).map(v => String(v == null ? '' : v).replace(/\s+/g, ''));
+    const at = re => h.findIndex(v => re.test(v));
+    const c = { cat: at(/^分類/), file: at(/資料檔|檔別/), rule: at(/^檢核編號/), pol: at(/保單|案例/), desc: at(/預期問題|問題說明|說明/) };
+    const get = (r, k) => c[k] >= 0 ? String(r[c[k]] == null ? '' : r[c[k]]).trim() : '';
+    return aoa.slice(1).filter(r => r && r.some(v => String(v == null ? '' : v).trim())).map(r => ({
+      category: get(r, 'cat'), file: get(r, 'file'), ruleId: get(r, 'rule'), policy: get(r, 'pol'), desc: get(r, 'desc'),
+    }));
+  }
+  // 對照：每一項錯誤解答在檢查結果裡有沒有找到 (檢核編號相同；有寫保單時保單也要相同)
+  function checkAnswers(key, issues) {
+    const pol = i => String(i.policy || i.code || '').trim();
+    const rows = key.map(k => {
+      if (!k.ruleId) return Object.assign({ status: 'manual' }, k);
+      const hit = issues.some(i => i.ruleId === k.ruleId && (!k.policy || pol(i) === k.policy));
+      return Object.assign({ status: hit ? 'found' : 'missing' }, k);
+    });
+    return { rows, total: rows.filter(r => r.status !== 'manual').length, found: rows.filter(r => r.status === 'found').length, manual: rows.filter(r => r.status === 'manual').length };
+  }
   function slots(XLSX, wb) {
     const got = {}, from = {}, unknown = [], blank = [], skipped = [], fixed = {};   // skipped：沒有用到的工作表 (名稱、原因)；fixed：自動調整了什麼
     const aoaOf = name => XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false, raw: true, defval: '' });
@@ -317,5 +343,5 @@
     const z = zipStats(buf, limits);
     return z && z.bad ? z.bad : '';
   }
-  return { SHEET_SLOT, NAMES, sheets, extSheets, slots, files, headProblem, normalize, normalizeCsv, guessByHead, toYmd, zipStats, zipProblem, ZIP_LIMITS, libStatus, XLSX_MIN };
+  return { SHEET_SLOT, NAMES, sheets, extSheets, slots, files, headProblem, normalize, normalizeCsv, guessByHead, toYmd, zipStats, zipProblem, ZIP_LIMITS, libStatus, XLSX_MIN, isAnswerKey, answerKey, checkAnswers };
 });
