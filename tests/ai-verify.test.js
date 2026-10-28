@@ -46,7 +46,7 @@ test('整體狀況：退件可能性由工具判定，和 AI 說的比對', () =
   assert.strictEqual(V.verifyRisk(null, res).status, 'invalid');
 });
 
-test('先改什麼：影響最多、可一鍵修改、會連帶其他錯誤用數字檢查', () => {
+test('先改什麼：影響最多、有建議修正值 (舊說法「可一鍵修改」也認得)、會連帶其他錯誤用數字檢查', () => {
   const out = V.verifyPriorities([{ ruleIds: ['10400_L0501'], reason: '可一鍵修改' }, { ruleIds: ['30202_L0302'], reason: '會連帶其他錯誤' }, { ruleIds: ['K0001'], reason: '很重要' }, { ruleIds: ['NOPE'], reason: '影響最多' }], res);
   assert.deepStrictEqual(out.map(x => x.status), ['verified', 'verified', 'invalid', 'invalid']);
 });

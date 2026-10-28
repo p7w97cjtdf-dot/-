@@ -498,16 +498,16 @@
     const tile = (cls, k, v, sub) => `<div class="tile ${cls}" title="${esc(sub)}"><div><span class="k">${k}</span><span class="v">${v}</span></div><span class="tile-i" hidden></span></div>`;
     const nRec0 = Object.values(s.byFile).reduce((t, b) => t + b.records, 0), nBad0 = Object.values(s.byFile).reduce((t, b) => t + b.badRecords, 0);
     const pending = n('error') + n('warning');
-    // 三張卡：資料正確的比例、待修正的問題、可以一鍵修改的問題
+    // 三張卡：資料正確的比例、待修正的問題、有建議修正值的問題 (要逐筆看過說明再套用，不提供整批修改)
     DQ.safe($('#summary')).innerHTML =
       tile(nBad0 ? 'warn' : 'ok', '資料正確比例', nRec0 ? `${okPct(nRec0, nBad0)}%` : '—', `已檢查 ${nRec0.toLocaleString()} 筆資料`) +
       tile(n('error') ? 'err' : 'ok', '待修正問題', `${pending} 項`, `必須修改 ${n('error')}・建議確認 ${n('warning')}${n('suspect') ? `・請人工判斷 ${n('suspect')}` : ''}`) +
-      tile('fix', '可以一鍵修改', `${fixable} 項`, '工具知道正確的值');
-    // 「一鍵修改」放在第三張卡片上；改完之後換成「下載改好的資料」
+      tile('fix', '有建議值', `${fixable} 項`, '工具能確定正確值；請點問題逐筆確認後套用');
+    // 有改過資料時，第三張卡片放「下載改好的資料」
     // (重畫卡片會清掉裡面的按鈕，所以記住按鈕本身，每次移進卡片或收回備用區)
-    tileBtns = tileBtns || { fix: $('#btn-fix'), got: $('#btn-get-fixed') };
+    tileBtns = tileBtns || { got: $('#btn-get-fixed') };
     const t3 = $('#summary .tile.fix'), changed = state.changed && state.changed.size;
-    const btn = fixable ? tileBtns.fix : changed ? tileBtns.got : null;
+    const btn = changed ? tileBtns.got : null;
     for (const b of Object.values(tileBtns)) if (b !== btn) $('#tile-btns').appendChild(b);
     if (btn) { t3.querySelector('.tile-i').replaceWith(btn); t3.classList.add('has-btn'); }
     const recs = Object.entries(s.byFile).map(([fid, b]) => `${SHEET[fid]} ${b.records} 筆`).join('、');
@@ -576,7 +576,7 @@
     const short = fs.map(f => f.name.replace(/\(.*?\)|（.*?）/g, ''));
     const names = fs.map((f, k) => short.indexOf(short[k]) !== short.lastIndexOf(short[k]) ? f.name : short[k]);
     const cut = t => t.length > 38 ? t.slice(0, 37) + '…' : t;
-    // 能一鍵修改：寫要改的欄位、這筆資料目前的值、改成的值；只是補 0 或空白時寫「調整格式」
+    // 有建議修正值：寫要改的欄位、這筆資料目前的值、改成的值；只是補 0 或空白時寫「調整格式」
     if (fixable) {
       const f = lay && lay.field(i.fix.field), rec = (state.res.data[i.file] || []).find(r => r._line === i.line);
       const now = niceVal(f, rec && f ? rec[f.key] : val), to = niceVal(f, i.fix.value);
@@ -619,7 +619,7 @@
     // 每類先列 5 項 (所有類別一眼看得到)，按「顯示其餘」才列出全部
     const SHOW = 500, FIRST = 5;
     state.fullGroups = state.fullGroups || new Set();
-    // 一項兩行：問題；位置・「欄位：值」(能一鍵修改時加上改成的值)。只有「建議確認」加標籤，其餘都是必須修改
+    // 一項兩行：問題；位置・「欄位：值」(有建議修正值時加上改成的值)。只有「建議確認」加標籤，其餘都是必須修改
     // 問題說明、工作表名稱、欄位的值都是外來的文字：用文字節點放入
     const T = DQ.safe.texts();
     const item = i => {
@@ -793,7 +793,6 @@
     $('#action-note').textContent = total ? `已修改 ${total} 個地方，問題從 ${before} 個減為 ${after} 個。可以下載改好的資料。` : '沒有工具可以自動修改的地方。';
     return { total, before, after };
   }
-  $('#btn-fix').onclick = () => applyFix(null);
   $('#btn-get-fixed').onclick = () => $('#btn-dl-fixed').click();
   // 使用者自己的檔名若含中文，去掉中文字，避免存成「download」
   const safeName = (name, fallback) => { const n = String(name || '').replace(/[^\x21-\x7e]/g, ''); return /^[^.]+\.\w+$/.test(n) ? n : fallback; };

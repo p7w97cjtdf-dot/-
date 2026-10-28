@@ -15,7 +15,7 @@ node tests/security/t03-packs.js     # 更新包信任：只接受正式版本�
 node tests/security/t05-prompt.js    # AI 提示注入：指令只出現在 <declaration_data> 區塊內、資料裡像指令的文字標示資料異常、不安全的 AI 回覆會加註提醒
 node tests/security/t06-html.js      # HTML 注入：畫面、報告、手機複核、規則預覽、CSV；漏掉跳脫時 DOMPurify 也會拿掉會執行的內容
 node tests/security/t07-stress.js    # 檔案壓力測試 (SIZES=1000,20000,100000 可調整張數)
-node tests/security/t08-output.js    # 輸出正確性：一鍵修改後下載的檔案重新檢查要和畫面一致
+node tests/security/t08-output.js    # 輸出正確性：套用全部建議值後下載的檔案重新檢查要和畫面一致
 node tests/security/t09-insights.js  # AI 洞見驗證：AI 說的原因與筆數要經工具用原始資料驗證
 node tests/security/t10-dify.js     # Dify：AI 改送到 Dify 時只在按按鈕後送出、內容已遮蔽、帶金鑰、只接受 https 與 CSP 允許的網址
 node tests/security/t11-upload.js   # 上傳對應：列出每份資料的來源與筆數、新的 Excel 取代舊資料、空白範本不會留著上一份的結果

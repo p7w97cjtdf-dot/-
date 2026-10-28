@@ -11,7 +11,7 @@ const XLSX_DIRTY = process.env.SAMPLE || path.join(ROOT, 'samples', 'excel', 'è©
     const { browser, page, log } = await open();
     const n0 = log.requests.length;
     await page.setInputFiles('#file-book', XLSX_DIRTY); await page.waitForTimeout(2500);
-    await page.click('#btn-fix'); await page.waitForTimeout(1200);
+    await page.evaluate(() => DQ.app.applyFix(null)); await page.waitForTimeout(1200);
     const ext = log.requests.filter(r => !r.url.startsWith('file:'));
     out.check = { pageLoad: log.requests.slice(0, n0).filter(r => !r.url.startsWith('file:')).map(r => `${r.method} ${r.url.split('?')[0]}`), afterData: log.requests.slice(n0).filter(r => !r.url.startsWith('file:')).map(r => `${r.method} ${r.url}`), posts: ext.filter(r => r.method !== 'GET').length };
     await browser.close();

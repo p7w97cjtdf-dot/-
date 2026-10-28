@@ -1,4 +1,4 @@
-// T08 輸出正確性：一鍵修改後下載的檔案重新檢查，結果要和畫面一致；畫面、報告、問題清單的數字一致
+// T08 輸出正確性：套用全部建議值 (測試直接呼叫，畫面只提供逐筆套用) 後下載的檔案重新檢查，結果要和畫面一致；畫面、報告、問題清單的數字一致
 const fs = require('fs');
 const path = require('path');
 const { open, ROOT } = require('./_browser.js');
@@ -32,7 +32,7 @@ const counts = page => page.evaluate(() => {
   await page.evaluate(() => DQ.app.showTab('report')); await page.waitForTimeout(300);
   const before = await counts(page);
   await page.evaluate(() => DQ.app.showTab('check'));
-  await page.click('#btn-fix'); await page.waitForTimeout(1500);
+  await page.evaluate(() => DQ.app.applyFix(null)); await page.waitForTimeout(1500);
   const note = await page.textContent('#action-note');
   await page.evaluate(() => DQ.app.showTab('report')); await page.waitForTimeout(300);
   const after = await counts(page);

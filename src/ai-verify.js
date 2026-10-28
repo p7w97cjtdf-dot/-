@@ -108,7 +108,7 @@
   }
 
   // ---------- 先改什麼：AI 的理由用數字檢查 ----------
-  const REASONS = ['影響最多', '可一鍵修改', '會連帶其他錯誤'];
+  const REASONS = ['影響最多', '有建議修正值', '會連帶其他錯誤'];
   function verifyPriorities(list, res) {
     const by = new Map();
     for (const i of res.issues) if (i.severity !== 'suspect') { if (!by.has(i.ruleId)) by.set(i.ruleId, []); by.get(i.ruleId).push(i); }
@@ -123,7 +123,7 @@
       const other = new Set(res.issues.filter(i => i.line && !ids.includes(i.ruleId) && i.severity !== 'suspect' && lines.has(i.file + ':' + i.line)).map(i => i.file + ':' + i.line));
       out.cooccur = lines.size ? other.size / lines.size : 0;
       if (out.reason.includes('影響最多')) { out.status = out.rank <= 3 ? 'verified' : 'refuted'; out.fact = `筆數排第 ${out.rank}（${out.count} 筆）`; }
-      else if (out.reason.includes('一鍵')) { out.status = fix / items.length >= 0.8 ? 'verified' : fix ? 'mismatch' : 'refuted'; out.fact = `${items.length} 筆中 ${fix} 筆可以一鍵修改`; }
+      else if (out.reason.includes('建議修正值') || out.reason.includes('一鍵')) { out.status = fix / items.length >= 0.8 ? 'verified' : fix ? 'mismatch' : 'refuted'; out.fact = `${items.length} 筆中 ${fix} 筆有建議修正值`; }
       else if (out.reason.includes('連帶')) { out.status = out.cooccur >= 0.5 ? 'verified' : out.cooccur ? 'mismatch' : 'refuted'; out.fact = `這些資料列有 ${Math.round(out.cooccur * 100)}% 同時有其他問題`; }
       else { out.status = 'invalid'; out.fact = `${items.length} 筆`; out.why = `理由「${out.reason || '（沒寫）'}」無法用資料檢查；可檢查的理由：${REASONS.join('、')}`; }
       return out;
@@ -203,7 +203,7 @@
 
   const SPEC_MORE = `JSON 裡另外加上：
 "risk": "高、中 或 低"（第 1 點說的退件可能性）,
-"priorities": [{"ruleIds":["檢核編號"],"reason":"影響最多 或 可一鍵修改 或 會連帶其他錯誤","note":"一句話"}]（第 3 點的修改順序，依先後排列）,
+"priorities": [{"ruleIds":["檢核編號"],"reason":"影響最多 或 有建議修正值 或 會連帶其他錯誤","note":"一句話"}]（第 3 點的修改順序，依先後排列）,
 "preventions": [{"title":"一句話","file":"資料代號","condition":條件,"ruleIds":["想預防的檢核編號"]}]（第 4 點的預防檢查：條件寫成「正確的資料應該符合」，工具會拿現在的資料試跑，看能抓到幾筆現有問題、會不會誤報）`;
   const SPEC_FIX = `最後附上 \`\`\`json 區塊：{"fix":{"field":"欄位代號","value":"你建議的正確值"},"systemic":true 或 false}
 fix 寫不出確定的值就省略；工具會把這個值試改進資料副本重新檢查，確認這筆是否通過。systemic 表示你是否認為這是系統性問題。`;
