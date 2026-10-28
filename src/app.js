@@ -1075,7 +1075,7 @@
 
   // ---------- 報告 / 規則 ----------
   // 報告整份 HTML 也經過 DOMPurify 過濾 (畫面上的預覽與下載的檔案相同)
-  function reportHTML() { return DQ.safe.doc(DQ.report.toHTML(rs, state.res, { versionStatus: versionStatus(), elapsed: state.elapsed, aiSummary: state.aiSummary, aiInsights: state.aiInsights, aiChecks: state.aiChecks, hidden: hiddenNote(), scope: state.scope, totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } })); }
+  function reportHTML() { return DQ.safe.doc(DQ.report.toHTML(rs, state.res, { sources: state.src, versionStatus: versionStatus(), elapsed: state.elapsed, aiSummary: state.aiSummary, aiInsights: state.aiInsights, aiChecks: state.aiChecks, hidden: hiddenNote(), scope: state.scope, totals: { error: state.all.filter(i => i.severity === 'error').length, warning: state.all.filter(i => i.severity === 'warning').length, suspect: state.all.filter(i => i.severity === 'suspect').length }, packs: state.packs.filter(x => x.on).map(x => x.pack), recon: { ctl: state.ctl, roll: state.roll, stmt: state.stmt, cust: state.cust, prod: state.prod } })); }
   function renderReport() { $('#report-frame').srcdoc = reportHTML(); }
   // 手冊頁碼 (rules/rules.js)：PDF 頁碼與頁面上印的頁碼
   const SRCDOC = { rules: '檢核規則手冊', manual: '填報手冊' };

@@ -10,7 +10,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 git archive HEAD | tar -x -C "$TMP"
 cd "$TMP"
-rm -rf samples tests tools design-system .github .claude README.md package.json .gitignore .vercelignore rules/updates/watch-state.json src/mock-ext.js docs/*.md docs/index.html rules/source rules/updates/sources.json rules/updates/example-2026-format-change.json
+rm -rf samples tests tools design-system .github .claude README.md package.json .gitignore .vercelignore rules/updates/watch-state.json src/mock-ext.js docs/*.md docs/index.html rules/source rules/updates/sources.json rules/updates/example-2026-format-change.json docs/evidence
 mkdir -p "$(dirname "$OUT")" && rm -f "$OUT"
 # 有安裝 zopfli (pip install zopfli) 時壓得更小；沒有就用 zip -9
 if python3 -c "import zopfli.zlib" 2>/dev/null; then python3 "$ROOT/tools/zip-zopfli.py" "$OUT" .; else zip -qr9 "$OUT" .; fi
