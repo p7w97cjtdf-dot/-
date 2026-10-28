@@ -108,20 +108,28 @@ const nodeKeys = files => C.validate(all, Object.fromEntries(Object.entries(file
     ok.C_errors = nonSw(log).length === 0;
     await browser.close();
   }
-  // ===== D. 自訂規則無法判定、格式不對：不算通過 =====
+  // ===== D. 自訂規則無法判定：不算通過；含不安全式樣的更新包整包不套用 =====
   {
     const onlyL = path.join(TMP, 'LFL01_2025.txt'); fs.copyFileSync(path.join(ROOT, 'samples/clean/LFL01_2025.txt'), onlyL);
-    // 主管核可的更新包裡有一條無法判定的規則、一條格式不對的規則
+    // 主管核可的更新包裡有一條無法判定的規則 (保單號碼不是數字)
     const pack = await approvedFile({ id: 'custom', name: '測試：自訂規則', rules: [
-      { id: 'U1', file: 'L', name: '保單號碼要是數字', scope: 'record', assert: { field: { fn: 'num', args: ['policyNo'] }, op: 'gt', value: 0 }, message: '測試' },
-      { id: 'U2', file: 'L', name: '不安全的式樣', scope: 'record', assert: { field: 'policyNo', op: 'matches', value: '(a+)+' }, message: '測試' }] }, 'custom.json');
+      { id: 'U1', file: 'L', name: '保單號碼要是數字', scope: 'record', assert: { field: { fn: 'num', args: ['policyNo'] }, op: 'gt', value: 0 }, message: '測試' }] }, 'custom.json');
+    // 另一包有不安全的式樣 (可能卡住瀏覽器)：即使已核可也整包不套用
+    const bad = await approvedFile({ id: 'custom-bad', name: '測試：不安全式樣', rules: [
+      { id: 'U3', file: 'L', name: '保單號碼不可空白', scope: 'record', assert: { field: 'policyNo', op: 'notBlank' }, message: '測試' },
+      { id: 'U2', file: 'L', name: '不安全的式樣', scope: 'record', assert: { field: 'policyNo', op: 'matches', value: '(a+)+' }, message: '測試' }] }, 'custom-bad.json');
     const { browser, page, log } = await open({ pin: BOSS.id });
-    await page.evaluate(() => DQ.app.showTab('updates')); await page.setInputFiles('#file-pack', pack); await page.waitForTimeout(800); await page.evaluate(() => DQ.app.showTab('check'));
+    await page.evaluate(() => DQ.app.showTab('updates')); await page.setInputFiles('#file-pack', pack); await page.waitForTimeout(800);
+    await page.setInputFiles('#file-pack', bad); await page.waitForTimeout(800);
+    const note = await page.textContent('#pack-note');
+    const badUsed = await page.evaluate(() => DQ.app.state.packs.some(x => x.pack.id === 'custom-bad' && DQ.app.usable(x)));
+    await page.evaluate(() => DQ.app.showTab('check'));
     await page.setInputFiles('#file-book', onlyL); await page.waitForTimeout(2500);
     const s = await screen(page);
     const rep = fs.readFileSync((await grab(page, '#btn-dl-report')).path, 'utf8');
-    ok.D1_unjudgedShown = /153 筆資料無法判定/.test(s.scope) && /1 條自訂規則格式不正確/.test(s.scope) && /無法確認/.test(s.tiles[0]) && /結果不完整/.test(s.status);
-    ok.D2_unjudgedReported = /無法判定/.test(rep) && /格式不正確/.test(rep) && /無法確認/.test(rep);
+    ok.D1_unjudgedShown = /153 筆資料無法判定/.test(s.scope) && /無法確認/.test(s.tiles[0]) && /結果不完整/.test(s.status);
+    ok.D2_unjudgedReported = /無法判定/.test(rep) && /無法確認/.test(rep);
+    ok.D3_unsafePackRejected = /格式不對，整包都不會套用/.test(note) && !badUsed && !/U3/.test(JSON.stringify(await page.evaluate(() => DQ.app.state.all.map(x => x.ruleId)))) ;
     ok.D_errors = nonSw(log).length === 0;
     await browser.close();
   }

@@ -128,7 +128,7 @@
       app.setPacks(app.state.packs.filter(x => x.pack.id !== pack.id).concat(entry));
       fillFields();
       note('#pack-note', `已匯入「${pack.name}」：${P.summary(pack)}。` + (v.errors.length || bad.length ? `有 ${v.errors.length + bad.length} 項格式不對，整包都不會套用（見下方說明），請修正後重新匯入。` : '') +
-        (approval ? `主管 ${approval.approver} 已核可（${approval.approvedAt.slice(0, 10)}），已套用到檢查結果。${approval.legacy ? '這是舊格式的已核可檔：只有更新包內容、核可人與核可時間經過簽章，申請人與影響摘要沒有經過簽章驗證。' : ''}` : '還沒有主管核可，不會套用：可以先「試跑」看影響，再「申請主管核可」。'));
+        (approval && (v.errors.length || bad.length) ? `雖然主管 ${approval.approver} 已核可，格式不對的更新包仍不會套用。` : approval ? `主管 ${approval.approver} 已核可（${approval.approvedAt.slice(0, 10)}），已套用到檢查結果。${approval.legacy ? '這是舊格式的已核可檔：只有更新包內容、核可人與核可時間經過簽章，申請人與影響摘要沒有經過簽章驗證。' : ''}` : '還沒有主管核可，不會套用：可以先「試跑」看影響，再「申請主管核可」。'));
     } catch (err) { note('#pack-note', `「${f.name}」不是規則更新包，或檔案內容有誤：${DQ.safeError(err)}`); }
   });
   const download = x => app.download(`rule-pack-${String(x.pack.id).replace(/[^\w.-]/g, '_')}.json`, JSON.stringify(x.pack, null, 2) + '\n', 'application/json');

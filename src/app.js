@@ -40,7 +40,19 @@
   // 法規更新要主管核可：自行匯入或本機建立的更新包，只有附主管簽章 (approvedFile) 且驗證通過 (verified) 才會套用；
   // 驗證在開啟時重新做 (存在這台電腦的「已核可」狀態不能被改來繞過)
   try { const saved = JSON.parse(localStorage.getItem('dq-rule-packs') || '[]'); if (Array.isArray(saved)) state.packs = saved.filter(x => x && x.pack).map(x => ({ pack: DQ.rulePacks.normalize(x.pack), on: x.on !== false, imported: !!x.imported, approvedFile: x.approvedFile || null, approval: null, verified: false, impact: x.impact || null })); } catch (e) { /* 無法讀取時忽略 */ }
-  const usable = x => x.official || (x.verified && x.approval);
+  // 可以套用：官方發布，或主管核可且驗證通過；而且格式要正確 (格式不對的整包不套用，見 rule-packs.js apply)
+  // (與 apply 相同：一併考慮其他更新包新增的欄位；更新包清單換了就重算)
+  let packOk = new WeakMap(), packList = null;
+  const wellFormed = x => {
+    if (packList !== state.packs) { packOk = new WeakMap(); packList = state.packs; }
+    if (!packOk.has(x.pack)) {
+      let ok = false;
+      try { ok = DQ.rulePacks.validate(x.pack, Object.assign({}, BASE, { catalog: BASE.catalog.concat(DQ.rulesets.finance.catalog, DQ.master.catalog, DQ.anomaly.catalog) }), state.packs.filter(y => y !== x).map(y => y.pack)).ok; } catch (e) { ok = false; }
+      packOk.set(x.pack, ok);
+    }
+    return packOk.get(x.pack);
+  };
+  const usable = x => !!(x.official || (x.verified && x.approval)) && wellFormed(x);
   // 官方發布的更新包 (rules/updates/index.json)：打開工具時自動下載並套用，不存進瀏覽器；使用者可在本機關閉
   const officialOff = () => { try { return new Set(JSON.parse(localStorage.getItem('dq-official-off') || '[]')); } catch (e) { return new Set(); } };
   const offKey = p => `${p.id}@${p.version || ''}`;
