@@ -1302,7 +1302,7 @@
       ki.value = ''; kb.hidden = true;
       $('#ai-preview-yes').onclick = $('#ai-preview-no').onclick = d.oncancel = null;
       if (d.open) d.close();
-      audit('送出給 AI', ok ? `${text.length.toLocaleString()} 字，使用者確認後送出到 ${dest}` : '使用者取消，沒有送出', null, ok ? { payload: text } : null);
+      audit('送出給 AI', ok ? `${text.length.toLocaleString()} 字，使用者確認送出到 ${dest}（結果另外記錄）` : '使用者取消，沒有送出', null, ok ? { payload: text } : null);
       resolve(ok);
     };
     $('#ai-preview-yes').onclick = () => done(true);
@@ -1310,10 +1310,12 @@
     d.oncancel = e => { e.preventDefault(); done(false); };
     if (d.showModal) d.showModal(); else resolve(window.confirm('要把遮蔽後的內容送給 AI 嗎？'));
   });
+  // 送出後的實際結果 (成功、失敗、逾時) 記在稽核軌跡，不把「已確認送出」當成「成功」
+  DQ.ai.onStatus = e => audit('AI 送出結果', `${e.kind}：${e.status}（${e.dest}）`);
   // AI 傳送紀錄：每一次送給 AI 的時間、目的地、字數、狀態與完整內容
   $('#btn-ai-log').onclick = () => {
     const list = DQ.ai.sent, p2 = n => String(n).padStart(2, '0');
-    DQ.safe($('#ai-log-list')).innerHTML = list.length ? list.slice().reverse().map(e => `<details class="ai-log-item"><summary><b>${p2(e.at.getHours())}:${p2(e.at.getMinutes())}:${p2(e.at.getSeconds())}</b>　${esc(e.kind)}・${esc(e.dest)}・${e.chars.toLocaleString()} 字・<span class="${e.status === '已送出' ? '' : 'muted'}">${esc(e.status)}</span></summary><pre>${esc(e.payload)}</pre></details>`).join('')
+    DQ.safe($('#ai-log-list')).innerHTML = list.length ? list.slice().reverse().map(e => `<details class="ai-log-item"><summary><b>${p2(e.at.getHours())}:${p2(e.at.getMinutes())}:${p2(e.at.getSeconds())}</b>　${esc(e.kind)}・${esc(e.dest)}・${e.chars.toLocaleString()} 字・<span class="${e.status === DQ.ai.STATUS.ok ? '' : 'muted'}">${esc(e.status)}</span></summary><pre>${esc(e.payload)}</pre></details>`).join('')
       : '<p class="hint">這次開啟後還沒有送任何內容給 AI。</p>';
     $('#ai-log').showModal();
   };

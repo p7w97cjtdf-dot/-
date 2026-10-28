@@ -613,3 +613,49 @@ test('核可簽章第 2 版：每一個受保護欄位被改都驗證失敗；�
   const sv = await A.verify(s6, ['7fb780c45230b133']);
   assert.ok(sv.ok && sv.legacy);
 });
+
+test('AI 送出預設拒絕：確認函式不存在、取消、出錯、不是明確同意、確認期間設定改變，模型呼叫都是 0 次', async () => {
+  const mem = () => { const m = new Map(); return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) }; };
+  const saved = { self: global.self, localStorage: global.localStorage, sessionStorage: global.sessionStorage, claude: global.claude };
+  let calls = 0;
+  Object.assign(global, { localStorage: mem(), sessionStorage: mem(), claude: { use: async k => k === 'sample' ? async () => { calls++; return { text: '好的' }; } : {} } });
+  global.self = global; self.DQ = { pii, promptGuard: require('../src/prompt-guard.js'), aiPayload: { takeCounts: () => ({}) } };
+  delete require.cache[require.resolve('../src/ai.js')]; require('../src/ai.js');
+  const ai = self.DQ.ai;
+  try {
+    assert.strictEqual(await ai.ready, true);
+    const data = '以下是檢核結果：出生日期不是合法日期';
+    // 1. 確認函式不存在
+    delete ai.confirmSend;
+    await assert.rejects(ai.ask(data), /沒有送出確認的畫面/);
+    // 2. 取消、3. 出錯、4. 回傳不是 true 的值 (例如 'yes'、1)
+    for (const fn of [async () => false, async () => { throw new Error('x'); }, async () => 'yes', async () => 1, async () => undefined]) {
+      ai.confirmSend = fn;
+      await assert.rejects(ai.ask(data));
+    }
+    assert.strictEqual(calls, 0, '沒有明確同意就不呼叫模型');
+    // 5. 等待確認期間 AI 服務設定改了 (完全離線)
+    ai.confirmSend = async () => { await ai.setOffline(true); return true; };
+    await assert.rejects(ai.ask(data), /設定已改變/);
+    assert.strictEqual(calls, 0);
+    await ai.setOffline(false); await ai.ready;
+    // 6. 明確同意：送出一次；確認時看到的就是實際送出的內容，紀錄狀態為成功
+    let shown = '';
+    ai.confirmSend = async (payload, counts, entry) => { shown = payload; assert.strictEqual(entry.status, '等待確認'); return true; };
+    assert.strictEqual(await ai.ask(data), '好的');
+    assert.strictEqual(calls, 1);
+    const last = ai.sent[ai.sent.length - 1];
+    assert.strictEqual(last.payload, shown); assert.strictEqual(last.status, '成功');
+    assert.ok(ai.sent.filter(e => e.status === '取消，沒有送出').length >= 5, '取消的也有紀錄');
+    // 7. 不能用 noPreview 等參數跳過確認
+    ai.confirmSend = async () => false;
+    await assert.rejects(ai.ask(data, { noPreview: true, fixed: true, raw: true }));
+    assert.strictEqual(calls, 1);
+    // 8. 連線測試只送固定的虛構內容 (不需確認)，自我測試也是固定內容
+    assert.strictEqual(await ai.ping(), '好的');
+    assert.strictEqual(calls, 2);
+    assert.match(ai.sent[ai.sent.length - 1].payload, /連線測試：請只回覆「OK」/);
+    // 9. 紀錄不含 API 金鑰
+    assert.ok(!JSON.stringify(ai.sent).includes('app-'));
+  } finally { Object.assign(global, saved); }
+});
