@@ -9,13 +9,15 @@ const { open, ROOT } = require('../tests/security/_browser.js');
 const DIR = path.join(ROOT, 'docs', 'evidence');
 const { summary: S, rows } = JSON.parse(fs.readFileSync(path.join(DIR, 'evidence.json'), 'utf8'));
 const stats = require(path.join(ROOT, 'src', 'rule-stats.js')).count();
-const IMG = fs.mkdtempSync(path.join(os.tmpdir(), 'dq-demo-'));
+// 截圖存在 docs/evidence/img/ (tools/evidence-pptx.js 也用)；暫存檔放系統暫存資料夾
+const IMG = path.join(DIR, 'img'), TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'dq-demo-'));
+fs.mkdirSync(IMG, { recursive: true });
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---------- 1) 展示流程截圖：放入一個 Excel → 找到問題 → 說明依據 → 套用建議值／人工判斷 → 報告 ----------
 async function shots() {
   const { browser, page, log } = await open({ viewport: { width: 1440, height: 900 } });
-  const xlsx = path.join(IMG, 'sample_2025.xlsx');
+  const xlsx = path.join(TMP, 'sample_2025.xlsx');
   fs.copyFileSync(path.join(ROOT, 'samples', 'excel', '試用資料_含錯誤.xlsx'), xlsx);
   const top = async sel => Math.max(0, Math.round(await page.locator(sel).evaluate(e => e.getBoundingClientRect().top + scrollY)) - 90);
   const shot = async (name, y) => { await page.evaluate(v => window.scrollTo(0, v), y); await page.waitForTimeout(300); await page.screenshot({ path: path.join(IMG, name + '.png'), clip: { x: 0, y: 0, width: 1440, height: 900 } }); };
@@ -36,6 +38,7 @@ async function shots() {
   const errs = log.errors.filter(e => !/serviceWorker|sandboxed|TUNNEL/.test(e));
   await browser.close();
   if (errs.length) throw new Error('截圖時頁面有錯誤：' + errs.join('；'));
+  fs.writeFileSync(path.join(IMG, 'facts.json'), JSON.stringify(facts, null, 1) + '\n');
   return facts;
 }
 
@@ -174,7 +177,7 @@ function pages(f) {
 
 (async () => {
   const f = await shots();
-  const html = path.join(IMG, 'deck.html'); fs.writeFileSync(html, pages(f));
+  const html = path.join(TMP, 'deck.html'); fs.writeFileSync(html, pages(f));
   const { chromium } = require('playwright');
   const b = await chromium.launch(); const p = await b.newPage();
   await p.goto('file://' + html); await p.waitForTimeout(500);
@@ -182,6 +185,6 @@ function pages(f) {
   await p.pdf({ path: out, width: '1280px', height: '720px', printBackground: true });
   const n = await p.evaluate(() => document.querySelectorAll('section.s').length);
   await b.close();
-  fs.rmSync(IMG, { recursive: true, force: true });
+  fs.rmSync(TMP, { recursive: true, force: true });
   console.log(`已輸出 ${out}（${n} 頁，${(fs.statSync(out).size / 1048576).toFixed(1)} MB）`);
 })().catch(e => { console.error(e); process.exit(1); });
