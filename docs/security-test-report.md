@@ -336,3 +336,26 @@ claude.ai 線上版是單一檔案，改為把這些元件直接打包進檔案 
 - 畫面不再提供整批套用所有建議值的按鈕；修改只能逐筆進行（看過問題說明與依據後按「套用建議值」，或用「逐筆確認」一次看一個），每筆修改都寫入稽核軌跡。
 - 第三張卡片改名為「有建議值」，只顯示數量；套用過修改後才出現「下載改好的資料」。
 - 上方 T08、`t14-e2e.js` 等紀錄中的「一鍵修改」是當時的介面；現在測試改為直接呼叫同一個修改函式 (`DQ.app.applyFix`) 套用全部建議值，驗證的修改與重新檢查流程不變。
+
+## 紅隊測試（Red Teaming，2026-10-28）
+
+針對外部提出的攻擊面——DOM XSS、提示注入與資料外洩、個資遮蔽繞過、惡意規則包匯入、Dify 金鑰竊取——在真正的頁面上實際執行每個 payload，不只看文件。測試：`tests/security/redteam.js`（17 項，已納入 CI 的 browser job）。
+
+**全數擋下（原本就有效，實跑確認）**
+
+| 攻擊 | payload | 結果 |
+|---|---|---|
+| DOM XSS（資料欄位） | `<img src=x onerror=…>`、`<svg onload=…>` | 以純文字顯示，無腳本執行、無 alert；DOM 內無可執行的 `img[onerror]`／`svg[onload]` |
+| DOM XSS（退件通知） | 同上 ＋ `[點我](javascript:alert(1))` | 無腳本執行；無 `a[href^="javascript:"]` |
+| 惡意規則包 | `msg` 內含 `<img onerror=fetch(…dify-key…)>`、假簽章 `fake_signature` | 整包不套用（`msg` 用的是 `message`，且無主管簽章）；無腳本執行、無對外請求 |
+| Dify 金鑰竊取 | `<img onerror="…document.getElementById('dify-key').value…">` | 不執行；即使執行，金鑰欄位 `type=password`、`autocomplete=off`，且金鑰只存閉包、用完清除 |
+| 真實客戶姓名外洩 | 送 AI 前的遮蔽 | 從客戶資料建立的姓名字典以精確比對遮蔽，不受空格、零寬字元、是否緊鄰角色詞影響 |
+
+XSS 全部擋下的根本原因：所有寫入畫面的 HTML 一律經過 `DQ.safe()`（DOMPurify），變數先 `esc()`，AI 回覆用 `textContent`；程式中沒有任何一處繞過 `DQ.safe` 直接寫 `innerHTML`／`insertAdjacentHTML`／`outerHTML`。
+
+**本次補強的兩個防禦縱深缺口**
+
+1. **姓名啟發式的空格繞過**（`src/pii.js`）：第二道防線 `NAME_ROLE`（資料字典以外的姓名備援）原本要求「角色詞＋姓名」緊鄰，`被保險人 李四`（中間有空格）不會遮。已改為容許中間夾一般空格／全形空格（零寬字元在 `half()` 已先移除），`NOT_NAME` 停用詞仍擋住非姓名詞組，不誤判。真實客戶姓名原本就由字典擋住，此為備援強化。
+2. **送出前警示的樣式**（`src/prompt-guard.js`）：`suspicious()` 原本偵測「忽略指示」類，現增加「叫使用者點擊連結重新登入／驗證」（釣魚）與「整批輸出客戶姓名／身分證」（外洩）兩類樣式；實測 5 句正常退件通知不誤報。注意：注入的實際防線是「資料包在 `<declaration_data>` 標籤＋安全規則」「送出前個資已遮蔽」「AI 回覆以純文字渲染」三層，`suspicious()` 只是額外的使用者警示。
+
+測試：`tests/pii.test.js` 加入角色詞＋空格的姓名案例；`tests/security.test.js` 的 `suspicious` 案例加入釣魚與外洩指示、並加入正常退件通知的不誤報案例。

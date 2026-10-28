@@ -68,7 +68,8 @@
   const ADDR_VILLAGE = new RegExp(`[${CJK}]{1,4}[村里][${D}]{1,3}鄰[^\\s，,、。；;)）]{0,20}`, 'g');
   // 有標示的姓名：「姓名：王小明」「要保人：王小明」(必須有分隔符號，避免把「被保險人身份」誤判)
   // 「被保險人王小明」：沒有冒號也遮；後面接的是一般字詞 (與、及、資料、身份、年齡、須…) 就不是姓名
-  const NAME_ROLE = new RegExp(`(要保人|被保險人|受益人)([${CJK}]{2,4})`, 'g');
+  // 角色詞與姓名之間可能夾一般空格或全形空格 (零寬字元在 half() 已先移除)：仍要遮，避免用空格繞過
+  const NAME_ROLE = new RegExp(`(要保人|被保險人|受益人)([ \\u3000]{0,3})([${CJK}]{2,4})`, 'g');
   const NOT_NAME = /^(?:與|及|和|或|的|之|為|是|須|需|應|不|未|已|有|在|於|若|如|等|同|兼|即|但|並|皆|都|也|則|所|可|仍|請|以|由|對|給|跟|把|被|將|會|要|身份|身分|資料|證號|證件|姓名|性別|生日|出生|年齡|年紀|職業|地址|電話|關係|代號|代碼|欄位|編號|類別|類型|人數|筆數|名單|名稱|簽名|簽章|本人|配偶|子女|父母|保險|投保|承保|理賠|給付|申請|變更|資格|條件|權益|義務|死亡|殘廢|失能|住院|一人|二人|相同|不同|欄|檔|別|數|身|年|人|性|國籍|戶籍|通訊|聯絡|帳戶|銀行|住所|住址|居所|郵遞|郵寄|比|較|大於|小於|晚於|早於|超過|滿|歲|年滿|未滿|或要保|及要保|與要保|和要保|欄|填|填寫|填報|不得|必須|必要|資訊|是否|為何|均|各|每|[一二兩三四五六七八九十多另該此其本換改變])/;
   const HONOR = /(?:先生|小姐|女士|太太|君|氏)$/;
   const NAME_LABEL = new RegExp(`((?:姓名|名字|全名)\\s*[:：=]?\\s*|(?:要保人|被保險人|受益人|聯絡人|負責人|申請人|客戶)\\s*[:：=]\\s*)([${CJK}](?:[·．.・*_\\-]?[${CJK}]){1,4})`, 'g');
@@ -194,7 +195,7 @@
     s = s.replace(MOBILE, m => { hit('phone'); return maskMobile(m); });
     s = s.replace(MOBILE_LOOSE, m => { if (!looseMobile(m)) return m; hit('phone'); return maskMobile(m); });
     s = s.replace(LANDLINE, m => { hit('phone'); return maskLandline(m); });
-    s = s.replace(NAME_ROLE, (m, role, nm) => { const n = roleName(nm); if (!n) return m; hit('name'); return role + maskName(n) + nm.slice(n.length); });
+    s = s.replace(NAME_ROLE, (m, role, sep, nm) => { const n = roleName(nm); if (!n) return m; hit('name'); return role + sep + maskName(n) + nm.slice(n.length); });
     s = s.replace(NAME_LABEL, (_, lab, nm) => { if (/○/.test(nm)) return lab + nm; hit('name'); return lab + maskName(nm.replace(/[^\u3400-\u9fff\uf900-\ufaff]/g, '')); });
     s = s.replace(ADDR_CITY, (m, p) => { if (m.endsWith('[已遮蔽地址]')) return m; hit('address'); return p + '[已遮蔽地址]'; });
     s = s.replace(ADDR_ROAD, () => { hit('address'); return '[已遮蔽地址]'; });
@@ -215,7 +216,7 @@
     each(BIRTH_PREFIX, 'birth'); each(BIRTH_SUFFIX, 'birth');
     each(PASSPORT, 'doc'); each(TAXID, 'doc');
     each(CARD_RUN, 'card', m => c.exempt.has(m[0]) || !luhn(m[0]));
-    each(NAME_ROLE, 'name', m => /○/.test(m[2]) || !roleName(m[2]));
+    each(NAME_ROLE, 'name', m => /○/.test(m[3]) || !roleName(m[3]));
     each(EMAIL, 'email'); each(EMAIL_LOOSE, 'email'); each(MOBILE, 'phone'); each(MOBILE_LOOSE, 'phone', m => !looseMobile(m[0])); each(LANDLINE, 'phone'); each(CARD, 'card');
     each(ACCOUNT, 'card', m => /\[已遮蔽帳號\]/.test(m[0]));
     each(NAME_LABEL, 'name', m => /○/.test(m[2]));
