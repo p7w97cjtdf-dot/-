@@ -147,13 +147,14 @@ function pages(f) {
       <line x1="470" y1="120" x2="518" y2="120" stroke="#6b7280" stroke-width="2" marker-end="url(#a)"/><text x="494" y="140" text-anchor="middle" font-size="11" fill="#6b7280">問題</text>
       <line x1="580" y1="194" x2="420" y2="298" stroke="#6b7280" stroke-width="2" marker-end="url(#a)"/><text x="420" y="236" font-size="11" fill="#6b7280" text-anchor="end">確認後的修改</text>
       <line x1="660" y1="194" x2="660" y2="298" stroke="#d97706" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#a)"/><text x="668" y="250" font-size="11" fill="#b45309">選用</text>
-      <rect x="800" y="44" width="368" height="190" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/><text x="984" y="72" text-anchor="middle" font-weight="700" font-size="16">AI：Claude（選用，說明與整理）</text>
-      <text x="816" y="98" font-size="12.5">・白話解釋單一問題、整理重點、看懂退件通知</text><text x="816" y="120" font-size="12.5">・把法規文件轉成規則草稿</text>
-      <text x="816" y="146" font-size="12.5" fill="#6d28d9">不判斷對錯、不修改資料</text><text x="816" y="168" font-size="12.5">・AI 說的筆數、建議值都由規則引擎重算驗證</text><text x="816" y="190" font-size="12.5">・AI 轉換的規則要主管核可才會套用</text><text x="816" y="212" font-size="12.5">・回覆以純文字顯示，不執行</text>
-      <rect x="800" y="270" width="368" height="160" rx="10" fill="#fff" stroke="#7c3aed" stroke-dasharray="6 4"/><text x="984" y="298" text-anchor="middle" font-weight="700" font-size="16">Dify（選用，公司自建 AI 平台）</text>
-      <text x="816" y="324" font-size="12.5">・取代線上 Claude，作為同一組 AI 功能的來源</text><text x="816" y="346" font-size="12.5">・適合要求資料留在公司內部的單位</text><text x="816" y="368" font-size="12.5">・同樣經過遮蔽、確認、允許清單</text><text x="816" y="390" font-size="12.5">・連線金鑰只放在記憶體，用完清除</text><text x="816" y="412" font-size="12.5">・未在正式環境實測（見限制）</text>
-      <line x1="740" y1="365" x2="798" y2="160" stroke="#d97706" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#a)"/>
-      <line x1="740" y1="380" x2="798" y2="350" stroke="#d97706" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#a)"/>
+      <rect x="800" y="44" width="368" height="386" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/><text x="984" y="78" text-anchor="middle" font-weight="700" font-size="16">AI：Claude（選用，說明與整理）</text>
+      <text x="984" y="100" text-anchor="middle" font-size="12.5" fill="#6b7280">claude.ai 線上版，用開啟者自己的帳號，不需金鑰</text>
+      <text x="816" y="140" font-size="12.5">・白話解釋單一問題、整理重點、看懂退件通知</text><text x="816" y="166" font-size="12.5">・把法規文件轉成規則草稿</text>
+      <text x="816" y="200" font-size="13" font-weight="700" fill="#6d28d9">不判斷對錯、不修改資料</text>
+      <text x="816" y="230" font-size="12.5">・AI 說的筆數、建議值都由規則引擎重算驗證</text><text x="816" y="256" font-size="12.5">・AI 轉換的規則要主管核可才會套用</text><text x="816" y="282" font-size="12.5">・回覆以純文字顯示，不執行</text>
+      <text x="816" y="316" font-size="12.5">・送出前遮蔽個資、顯示完整內容讓使用者確認</text><text x="816" y="342" font-size="12.5">・可切換「完全離線」，完全不連外部網站</text>
+      <line x1="816" y1="372" x2="1152" y2="372" stroke="#e5e7eb"/>
+      <text x="816" y="394" font-size="11.5" fill="#6b7280">部署者另可改接公司自建 AI 平台（Dify）作為來源，</text><text x="816" y="412" font-size="11.5" fill="#6b7280">屬部署設定、非使用者介面；未在正式環境實測。</text>
     </svg>`);
   // 三個層次
   add(`<h2>效益與驗證程度</h2><p class="sub">分三個層次標示，避免把估算或未驗證的說成已實測</p>
@@ -168,7 +169,7 @@ function pages(f) {
         <li>退件前先找出必須修改的問題，可望減少退件往返次數。</li></ul></div>
       <div class="box"><h3 style="color:#b91c1c">尚未驗證</h3><ul>
         <li>真實公司申報資料的準確率。</li>
-        <li>真實 Claude／Dify 模型的回應品質與提示注入防護。</li>
+        <li>真實 Claude 模型的回應品質與提示注入防護。</li>
         <li>正式部署環境（安全政策、代理伺服器、正式金鑰簽章）。</li>
         <li>法規條文版本的業務核實。</li></ul></div>
     </div>`);
