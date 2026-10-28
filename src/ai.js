@@ -207,6 +207,7 @@ ${GUARD}`;
     }
   }
 
+  const knownCtx = () => { try { return typeof root.DQ.ai.contextProvider === 'function' ? root.DQ.ai.contextProvider() : null; } catch (e) { return null; } };
   // 一般資料的 AI 呼叫：預設拒絕。送出前一定要經過 confirmSend 顯示完整內容與目的地，而且要「明確同意」(回傳 true)；
   // confirmSend 不存在、丟出錯誤或沒有明確同意，一律不呼叫模型。確認綁定目的地：等待確認期間服務設定改了，就不送、要重新確認
   async function ask(prompt, opts) {
@@ -214,8 +215,9 @@ ${GUARD}`;
     if (offline) throw new Error('目前是完全離線模式：不會連到任何外部網站，AI 功能已關閉。');
     if (!platform) throw new Error(OFFLINE);
     await originOk(opts.kind || 'AI 分析');
-    // 最後關卡：所有送出的文字再遮罩、再掃描一次；仍偵測到個資就不送 (錯誤訊息會說明是哪一類)
-    const safe = root.DQ.pii.guard(prompt, opts.ctx);
+    // 最後關卡：所有送出的文字再遮罩、再掃描一次；仍偵測到個資就不送 (錯誤訊息會說明是哪一類)。
+    // 已知個資：呼叫時傳入的，加上 App 從已放入的客戶資料建立的 (contextProvider)，每一次一般資料的呼叫都會用到
+    const safe = root.DQ.pii.guard(prompt, root.DQ.pii.mergeCtx(opts.ctx, knownCtx()));
     const counts = Object.assign({}, P().takeCounts());
     for (const [k, n] of Object.entries(safe.counts)) counts[k] = (counts[k] || 0) + n;
     lastRedaction = { counts, at: new Date() };

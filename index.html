@@ -398,6 +398,7 @@
         <p class="lib-note" id="lib-note" role="status" hidden></p>
         <label class="offline-mode"><input type="checkbox" id="offline-mode"> <b>完全離線</b>：不連任何外部網站（關閉 AI、不自動讀取線上法規更新），所有檢查照常在這台電腦進行</label>
         <p class="hint" id="offline-note" role="status"></p>
+        <label class="offline-mode"><input type="checkbox" id="pii-fullname"> <b>姓名完全遮蔽</b>：送給 AI 前把姓名換成 ○○○（不保留姓與最後一字）。工具只認得客戶資料裡有的姓名與「姓名：」「被保險人」等標示後的姓名，其他寫法的姓名可能認不出來，送出前請看過內容</label>
         <details class="ai-settings" id="ai-settings">
           <summary>AI 服務設定（使用自己公司的 Dify）</summary>
           <p class="hint">填入 Dify「聊天助手」應用的 API 網址後，AI 功能會改用你的 Dify。只接受 <code>app-</code> 開頭的應用金鑰（只能呼叫這一個應用）；<b>金鑰不會存在瀏覽器，每完成一次 AI 操作就清除</b>，使用 AI 時在確認視窗貼上即可。送出前仍會遮蔽個資並讓你確認內容。<a href="https://github.com/p7w97cjtdf-dot/-/blob/main/docs/dify-setup.md" target="_blank" rel="noopener">設定步驟與要貼進 Dify 的提示詞</a>。</p>

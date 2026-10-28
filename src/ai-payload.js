@@ -21,10 +21,14 @@
 
   // 從資料中收集要遮罩的姓名、證號，以及外觀像證號但不是個資的代碼 (保單號碼、賠案號碼、險種代號)
   const EXEMPT_FIELDS = ['policyNo', 'claimNo', 'companyPlanCode', 'companyPolicyCode', 'productCode', 'productClass'];
+  // 已知個資的上下文：客戶資料的姓名與證號、申報檔的證號；保單號碼等代碼不遮罩 (exempt)。
+  // 只取比對用的姓名與證號，不會把整份客戶資料送給 AI
   function context(res, recon) {
     const names = new Set(), ids = new Set(), exempt = new Set();
     const cust = recon && recon.cust;
     for (const r of (cust && cust.rows) || []) { if (r.name) names.add(r.name.trim()); if (r.id) ids.add(r.id.trim()); }
+    // 只放了客戶資料、還沒有比對結果時：直接從客戶資料檔讀「姓名」「證件編號」欄
+    if (recon && typeof recon.custText === 'string' && recon.custText) for (const r of fromCustomerText(recon.custText)) { if (r.name) names.add(r.name); if (r.id) ids.add(r.id); }
     for (const recs of Object.values((res && res.data) || {})) for (const r of recs || []) {
       for (const k of EXEMPT_FIELDS) if (r[k] && r[k].trim()) exempt.add(r[k].trim());
       if (r.idNo && r.idNo.trim() && !/^0+$/.test(r.idNo.trim())) ids.add(r.idNo.trim());
@@ -32,6 +36,16 @@
     for (const id of ids) exempt.delete(id);
     names.delete(''); ids.delete('');
     return { names: [...names].sort((a, b) => b.length - a.length), ids, exempt, policies: exempt };
+  }
+
+  function fromCustomerText(text) {
+    const parse = (typeof module === 'object' && module.exports) ? require('./core.js').parseCSV : (typeof self !== 'undefined' ? self : globalThis).DQ.parseCSV;
+    const rows = parse(String(text).slice(0, 20 * 1048576));
+    if (!rows.length) return [];
+    const h = rows[0].map(v => String(v || '').replace(/\s+/g, ''));
+    const ni = h.findIndex(v => /^(姓名|名字|客戶姓名|要保人姓名|被保險人姓名)$/.test(v)), ii = h.findIndex(v => /^(證件編號|身分證字號|身分證號|證號|ID)$/i.test(v));
+    if (ni < 0 && ii < 0) return [];
+    return rows.slice(1).map(r => ({ name: ni >= 0 ? String(r[ni] || '').trim() : '', id: ii >= 0 ? String(r[ii] || '').trim() : '' }));
   }
 
   // 每次組成送出內容時累計遮罩了哪些個資 (takeCounts 取出並歸零，畫面顯示用)

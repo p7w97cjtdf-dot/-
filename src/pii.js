@@ -99,11 +99,24 @@
 
   const STAR = '***';
   const maskTwId = () => STAR;
-  const maskName = s => { const c = [...s]; return c.length <= 2 ? c[0] + '○' : c[0] + '○'.repeat(c.length - 2) + c[c.length - 1]; };
+  // 姓名遮罩：預設保留姓與最後一字 (王○明)；opts.fullName 時完全遮蔽 (○○○)
+  const opts = { fullName: false };
+  const setOptions = o => { if (o && typeof o.fullName === 'boolean') opts.fullName = o.fullName; return Object.assign({}, opts); };
+  const maskName = s => { const c = [...s]; if (opts.fullName) return '○'.repeat(Math.max(2, c.length)); return c.length <= 2 ? c[0] + '○' : c[0] + '○'.repeat(c.length - 2) + c[c.length - 1]; };
+  // 合併多個上下文 (呼叫時傳入的、App 從已放入的客戶資料建立的)
+  const mergeCtx = (...list) => {
+    const out = { names: new Set(), ids: new Set(), exempt: new Set() };
+    for (const c of list) if (c) { for (const n of c.names || []) out.names.add(n); for (const i of c.ids || []) out.ids.add(i); for (const e of c.exempt || c.policies || []) out.exempt.add(e); }
+    for (const i of out.ids) out.exempt.delete(i);
+    return { names: [...out.names], ids: out.ids, exempt: out.exempt };
+  };
   // 角色後面接的 2–4 個字：去掉「先生」「小姐」等稱謂；是一般字詞就不當姓名
+  // 姓名後面常接的動詞或助詞的第一個字 (被保險人陳大文投保 → 陳大文)
+  const TRAIL = new Set([...'投申於在的已未為是有要與及來去說表填資身出性年住同等於並和或因於經對向將被由請領給辦']);
   function roleName(nm) {
     if (/○/.test(nm) || NOT_NAME.test(nm)) return '';
     nm = nm.replace(HONOR, '');
+    while ([...nm].length > 2 && TRAIL.has([...nm].pop())) nm = [...nm].slice(0, -1).join('');
     return [...nm].length >= 2 ? nm : '';
   }
   // 證號：去掉分隔符號後要是合法的證號樣式；分組要是常見寫法 (逐字分開、A 123 456 789、A123 456 789…)
@@ -225,5 +238,5 @@
 
   const describe = counts => Object.entries(counts || {}).filter(([, n]) => n).map(([t, n]) => `${TYPES[t]} ${n} 處`).join('、');
 
-  return { redact, scan, guard, describe, canon, twIdValid, luhn, maskTwId, maskName, TYPES };
+  return { redact, scan, guard, describe, canon, twIdValid, luhn, maskTwId, maskName, TYPES, setOptions, mergeCtx };
 });

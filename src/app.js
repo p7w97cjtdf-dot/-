@@ -1290,7 +1290,7 @@
   DQ.ai.confirmSend = (text, counts) => new Promise(resolve => {
     const d = $('#ai-preview'), desc = DQ.pii.describe(counts);
     const dest = DQ.ai.providerName() === 'Dify' ? `Dify（${DQ.ai.difyConfig().url}）` : DQ.ai.providerName() || 'AI';
-    $('#ai-preview-note').textContent = `將送到 ${dest}，共 ${text.length.toLocaleString()} 字，下面就是完整的送出內容。${desc ? `送出前已遮蔽：${desc}。` : '沒有偵測到需要遮蔽的個資。'}遮蔽無法保證百分之百完整，請確認沒有不該送出的資料。`;
+    $('#ai-preview-note').textContent = `將送到 ${dest}，共 ${text.length.toLocaleString()} 字，下面就是完整的送出內容。${desc ? `送出前已遮蔽：${desc}。` : '沒有偵測到需要遮蔽的個資。'}遮蔽無法保證百分之百完整：不在客戶資料裡、也沒有「姓名：」「被保險人」等標示的姓名可能認不出來，請確認沒有不該送出的資料。`;
     $('#ai-preview-text').textContent = text;
     // Dify 沒有金鑰時 (每次操作完就清除)，在這裡貼上；按送出後交給 AI 模組的閉包，輸入框立即清空
     const kb = $('#ai-preview-key-box'), ki = $('#ai-preview-key');
@@ -1310,6 +1310,12 @@
     d.oncancel = e => { e.preventDefault(); done(false); };
     if (d.showModal) d.showModal(); else resolve(window.confirm('要把遮蔽後的內容送給 AI 嗎？'));
   });
+  // 已知個資的上下文：每一次 AI 呼叫 (含規則轉換、退件說明) 都用已放入的客戶資料姓名與證號遮罩，不送出客戶資料本身
+  DQ.ai.contextProvider = () => DQ.aiPayload.context(state.res, Object.assign(reconCtx(), { custText: state.files.customers ? state.files.customers.text : '' }));
+  // 姓名完全遮蔽 (王○明 → ○○○)：記在這台電腦
+  try { DQ.pii.setOptions({ fullName: localStorage.getItem('dq-pii-fullname') === '1' }); } catch (e) { /* ignore */ }
+  $('#pii-fullname').checked = DQ.pii.setOptions({}).fullName;
+  $('#pii-fullname').onchange = e => { DQ.pii.setOptions({ fullName: e.target.checked }); try { localStorage.setItem('dq-pii-fullname', e.target.checked ? '1' : '0'); } catch (x) { /* ignore */ } audit('AI 服務設定', e.target.checked ? '姓名完全遮蔽' : '姓名保留姓與最後一字'); };
   // 送出後的實際結果 (成功、失敗、逾時) 記在稽核軌跡，不把「已確認送出」當成「成功」
   DQ.ai.onStatus = e => audit('AI 送出結果', `${e.kind}：${e.status}（${e.dest}）`);
   // AI 傳送紀錄：每一次送給 AI 的時間、目的地、字數、狀態與完整內容

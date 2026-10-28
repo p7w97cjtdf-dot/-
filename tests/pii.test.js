@@ -163,3 +163,34 @@ test('第二道檢查先正規化再掃描：用變形寫法躲過的個資會�
   // 遮罩無法處理的情況：停止送出，訊息寫出類別
   assert.throws(() => pii.guard('客戶 王○明', { names: ['王○明'] }), e => e.code === 'pii_blocked' && /姓名/.test(e.message));
 });
+
+test('姓名上下文：已知姓名 (含全形、分隔字元) 在送出前遮蔽；沒有上下文的無標籤姓名如實列為限制', () => {
+  const ctx = { names: ['王小明', '歐陽娜娜'] };
+  // 沒有上下文、也沒有標示：規則比對認不出來 (這是限制，不宣稱能辨識所有姓名)
+  assert.strictEqual(pii.redact('王小明希望了解檢核結果。').text, '王小明希望了解檢核結果。');
+  // 有上下文：遮蔽
+  assert.strictEqual(pii.redact('王小明希望了解檢核結果。', ctx).text, '王○明希望了解檢核結果。');
+  for (const t of ['王　小　明', '王 小 明', '王.小.明', '王​小明', '王*小*明']) assert.strictEqual(pii.redact(`${t}希望了解`, ctx).text, '王○明希望了解', t);
+  assert.strictEqual(pii.redact('歐陽娜娜來電', ctx).text, '歐○○娜來電');
+  assert.deepStrictEqual(pii.scan(pii.redact('王小明、歐陽娜娜', ctx).text, ctx), []);
+  // 完全遮蔽選項
+  pii.setOptions({ fullName: true });
+  try {
+    assert.strictEqual(pii.redact('王小明希望了解檢核結果。', ctx).text, '○○○希望了解檢核結果。');
+    assert.strictEqual(pii.redact('姓名：林美', {}).text, '姓名：○○');
+    assert.strictEqual(pii.redact('被保險人陳大文投保').text, '被保險人○○○投保');
+    assert.doesNotThrow(() => pii.guard('王小明希望了解', ctx));
+  } finally { pii.setOptions({ fullName: false }); }
+  // 合併上下文：呼叫時傳入的與 App 提供的
+  const m = pii.mergeCtx({ names: ['甲乙丙'], exempt: new Set(['A123456789']) }, { names: ['王小明'], ids: new Set(['A123456789']) });
+  assert.deepStrictEqual(m.names.sort(), ['王小明', '甲乙丙']);
+  assert.ok(!m.exempt.has('A123456789'), '既是證號又在不遮罩清單時，以證號為準');
+});
+
+test('客戶資料檔建立的上下文：只取姓名與證號；已知姓名與手機在送出前遮蔽', () => {
+  const P = require('../src/ai-payload.js');
+  const ctx = P.context(null, { custText: '保單編號,角色,證件編號,姓名,地址\nP250000001,1,A123456789,王小明,臺北市\n' });
+  assert.deepStrictEqual(ctx.names, ['王小明']); assert.ok(ctx.ids.has('A123456789'));
+  const out = pii.guard('王小明的手機 0912-345-678 想確認出生日期問題', ctx).text;
+  assert.strictEqual(out, '王○明的手機 *** 想確認出生日期問題');
+});
