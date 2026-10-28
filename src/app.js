@@ -1156,37 +1156,15 @@
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.view));
   const hash = (location.hash || '').slice(1);
 
-  // AI 服務：claude.ai 線上版 (開啟者自己的 Claude 帳號) 或「AI 服務設定」裡的 Dify；都沒有時隱藏 AI 按鈕
+  // AI 服務：claude.ai 線上版 (開啟者自己的 Claude 帳號)；沒有或完全離線時隱藏 AI 按鈕
   const INTRO0 = INTRO;
   const aiReady = ok => {
     document.body.classList.toggle('no-ai', !ok);
     const was = $('#ai-out').textContent === INTRO;
-    INTRO = !ok ? DQ.ai.OFFLINE : DQ.ai.providerName() === 'Dify' ? INTRO0 + '（使用「AI 服務設定」裡的 Dify。）' : INTRO0 + '（使用你自己的 Claude 帳號，第一次使用時會詢問是否允許。）';
+    INTRO = !ok ? DQ.ai.OFFLINE : INTRO0 + '（使用你自己的 Claude 帳號，第一次使用時會詢問是否允許。）';
     if (was && !$('#ai-box').hidden) $('#ai-out').textContent = INTRO;
-    const d = DQ.ai.difyConfig(), bad = DQ.ai.urlProblem();
-    $('#dify-note').textContent = DQ.ai.isOffline() ? '目前是完全離線模式，AI 功能已關閉。' : d ? `目前使用 Dify：${d.url}（${d.by === 'user' ? '你自行設定的網址' : '部署設定的網址'}，${DQ.ai.SOURCE[d.source]}）${d.proxy ? '，經公司轉發伺服器，不需要金鑰' : '；金鑰不存在瀏覽器：使用 AI 時在確認視窗貼上，完成後就清除'}` : bad ? `記住的網址不能使用：${bad}` : DQ.ai.providerName() === 'Claude' ? '目前使用 claude.ai 的 Claude；填入 Dify 後會改用 Dify。' : '尚未設定。';
-    const dep = DQ.ai.deployAllow();
-    $('#ai-policy').textContent = `部署者核准的網域：${dep.length ? dep.join('、') : '沒有設定'}${DQ.ai.production() ? '（正式部署模式：只能用這些網域）' : '；其他網址視為你自行設定的連線，仍須在網站安全設定 (CSP) 允許的範圍內'}。只接受 https。`;
   };
   DQ.ai.ready.then(aiReady);
-  { const d = DQ.ai.difyConfig(); $('#dify-url').value = d ? d.url : DQ.ai.savedUrl(); if (d) $('#ai-settings').open = false; $('#ai-allow').value = DQ.ai.userAllow().join('\n'); }
-  $('#btn-dify-save').onclick = async () => {
-    const key = $('#dify-key').value; $('#dify-key').value = '';   // 輸入框不留金鑰
-    try { await DQ.ai.setDify({ url: $('#dify-url').value, key, allow: $('#ai-allow').value }); $('#ai-allow').value = DQ.ai.userAllow().join('\n'); aiReady(true); const d = DQ.ai.difyConfig(); audit('AI 服務設定', `改用 Dify：${d.url}（你自行設定的網址，${DQ.ai.SOURCE[d.source]}）${DQ.ai.userAllow().length ? `；只允許 ${DQ.ai.userAllow().join('、')}` : ''}`); }
-    catch (e) { $('#dify-note').textContent = e.message; }
-  };
-  $('#btn-consent-clear').onclick = () => { DQ.ai.clearConsent(); $('#dify-note').textContent = '已清除。下次送資料到任何 AI 網址前都會再確認一次。'; audit('AI 服務設定', '清除已確認的 AI 網址'); };
-  // 第一次把資料送到某個 AI 網址：明確顯示目的地，勾選確認後才送
-  DQ.ai.confirmOrigin = (origin, source) => new Promise(resolve => {
-    const d = $('#ai-origin'), ck = $('#ai-origin-check'), yes = $('#ai-origin-yes');
-    $('#ai-origin-host').textContent = origin; $('#ai-origin-src').textContent = `這是${source}。確認後這台電腦會記住，之後送到同一個網址不再詢問這一步（每次送出前仍會顯示完整內容）。`;
-    ck.checked = false; yes.disabled = true; ck.onchange = () => { yes.disabled = !ck.checked; };
-    const done = ok => { yes.onclick = $('#ai-origin-no').onclick = d.oncancel = null; if (d.open) d.close(); audit('AI 網址確認', ok ? `同意把資料送到 ${origin}（${source}）` : `沒有同意送到 ${origin}`); resolve(ok); };
-    yes.onclick = () => done(ck.checked);
-    $('#ai-origin-no').onclick = () => done(false);
-    d.oncancel = e => { e.preventDefault(); done(false); };
-    if (d.showModal) d.showModal(); else resolve(false);
-  });
   // 完全離線：不連任何外部網站。打開時另外加一條 CSP (connect-src 'none')，由瀏覽器擋下所有連線；關閉後重新整理頁面才會恢復
   const lockNetwork = () => {
     if (document.querySelector('meta[data-offline]')) return;
@@ -1202,20 +1180,6 @@
     audit('完全離線', on ? '開啟：不連任何外部網站' : '關閉');
     aiReady(!!ok); offlineNote();
     if (!on && document.querySelector('meta[data-offline]')) $('#offline-note').textContent = '已關閉完全離線。請重新整理頁面，才會恢復 AI 與線上法規更新。';
-  };
-  $('#btn-dify-clear').onclick = async () => { const ok = await DQ.ai.setDify(null); $('#dify-url').value = ''; $('#dify-key').value = ''; aiReady(ok); audit('AI 服務設定', '清除 Dify 設定'); };
-  // 測試連線、AI 安全測試不跳確認視窗：金鑰從「AI 服務設定」的輸入框拿 (拿了就清空，用完由 AI 模組清除)
-  function keyFromSettings(noteSel) {
-    if (!DQ.ai.needsKey()) return true;
-    const k = $('#dify-key').value; $('#dify-key').value = '';
-    try { DQ.ai.useKey(k); return true; } catch (e) { $(noteSel).textContent = k.trim() ? e.message : '請先在「API 金鑰」貼上 Dify 應用的金鑰（只用在這一次，完成後就清除）。'; return false; }
-  }
-  // 測試連線：只送一句固定的話，不含任何資料
-  $('#btn-dify-test').onclick = async () => {
-    if (DQ.ai.providerName() !== 'Dify') { $('#dify-note').textContent = '請先按「儲存並使用」。'; return; }
-    if (!keyFromSettings('#dify-note')) return;
-    $('#dify-note').textContent = '連線中…';
-    try { const t = await DQ.ai.ping(); $('#dify-note').textContent = `連線成功，Dify 回覆：「${t.slice(0, 40)}」`; } catch (e) { $('#dify-note').textContent = e.message; }
   };
 
   // 本機自訂更新 (待主管核可)：AI 轉換的規則、AI 建議的預防檢查都放這裡，主管核可後才會套用
@@ -1300,17 +1264,10 @@
   // 送給 AI 之前：顯示實際送出的完整內容 (系統指示＋遮蔽後的資料)，使用者按「送出」才送。每次都要確認，不提供「不再詢問」
   DQ.ai.confirmSend = (text, counts) => new Promise(resolve => {
     const d = $('#ai-preview'), desc = DQ.pii.describe(counts);
-    const dest = DQ.ai.providerName() === 'Dify' ? `Dify（${DQ.ai.difyConfig().url}）` : DQ.ai.providerName() || 'AI';
+    const dest = DQ.ai.providerName() || 'AI';
     $('#ai-preview-note').textContent = `將送到 ${dest}，共 ${text.length.toLocaleString()} 字，下面就是完整的送出內容。${desc ? `送出前已遮蔽：${desc}。` : '沒有偵測到需要遮蔽的個資。'}遮蔽無法保證百分之百完整：不在客戶資料裡、也沒有「姓名：」「被保險人」等標示的姓名可能認不出來，請確認沒有不該送出的資料。`;
     $('#ai-preview-text').textContent = text;
-    // Dify 沒有金鑰時 (每次操作完就清除)，在這裡貼上；按送出後交給 AI 模組的閉包，輸入框立即清空
-    const kb = $('#ai-preview-key-box'), ki = $('#ai-preview-key');
-    kb.hidden = !DQ.ai.needsKey(); ki.value = '';
     const done = ok => {
-      if (ok && !kb.hidden) {
-        try { DQ.ai.useKey(ki.value); } catch (e) { ki.value = ''; $('#ai-preview-note').textContent = e.message; ki.focus(); return; }
-      }
-      ki.value = ''; kb.hidden = true;
       $('#ai-preview-yes').onclick = $('#ai-preview-no').onclick = d.oncancel = null;
       if (d.open) d.close();
       audit('送出給 AI', ok ? `${text.length.toLocaleString()} 字，使用者確認送出到 ${dest}（結果另外記錄）` : '使用者取消，沒有送出', null, ok ? { payload: text } : null);
@@ -1326,7 +1283,7 @@
   // 姓名完全遮蔽 (王○明 → ○○○)：記在這台電腦
   try { DQ.pii.setOptions({ fullName: localStorage.getItem('dq-pii-fullname') === '1' }); } catch (e) { /* ignore */ }
   $('#pii-fullname').checked = DQ.pii.setOptions({}).fullName;
-  $('#pii-fullname').onchange = e => { DQ.pii.setOptions({ fullName: e.target.checked }); try { localStorage.setItem('dq-pii-fullname', e.target.checked ? '1' : '0'); } catch (x) { /* ignore */ } audit('AI 服務設定', e.target.checked ? '姓名完全遮蔽' : '姓名保留姓與最後一字'); };
+  $('#pii-fullname').onchange = e => { DQ.pii.setOptions({ fullName: e.target.checked }); try { localStorage.setItem('dq-pii-fullname', e.target.checked ? '1' : '0'); } catch (x) { /* ignore */ } audit('AI 遮蔽設定', e.target.checked ? '姓名完全遮蔽' : '姓名保留姓與最後一字'); };
   // 送出後的實際結果 (成功、失敗、逾時) 記在稽核軌跡，不把「已確認送出」當成「成功」
   DQ.ai.onStatus = e => audit('AI 送出結果', `${e.kind}：${e.status}（${e.dest}）`);
   // AI 傳送紀錄：每一次送給 AI 的時間、目的地、字數、狀態與完整內容
@@ -1338,25 +1295,6 @@
   };
   $('#ai-log-close').onclick = () => $('#ai-log').close();
   // AI 安全自我測試 (真正的模型)：結果記在畫面與稽核軌跡
-  state.selfTests = [];
-  $('#btn-ai-selftest').onclick = async () => {
-    const out = $('#ai-selftest'), b = $('#btn-ai-selftest');
-    if (DQ.ai.isOffline()) { out.textContent = '尚未測試：目前是完全離線模式，不會連到 AI。'; return; }
-    if (!DQ.ai.available()) { out.textContent = `無可用服務，尚未測試。${DQ.ai.OFFLINE}`; return; }
-    if (!keyFromSettings('#ai-selftest')) return;
-    b.disabled = true; out.textContent = `AI 測試中（${DQ.ai.SELF_TESTS.length} 題，約 1 分鐘）…`;
-    try {
-      const r = await DQ.ai.selfTest();
-      state.selfTests.push(...r);
-      for (const x of r) audit('AI 安全測試', `${x.name}：${x.pass === true ? '通過' : x.pass === false ? '沒通過（' + x.why + '）' : (x.status || '尚未測試') + '（' + x.why + '）'}`);
-      // 只有真的有 AI 回覆、判斷完成的題目才算「通過」或「沒通過」；沒有服務或送出失敗是「尚未測試」，不算通過
-      const done = state.selfTests.filter(x => x.pass != null), fail = done.filter(x => !x.pass).length, pending = r.filter(x => x.pass == null).length;
-      const sum = !done.length ? '<b>尚未測試</b>：沒有任何一題取得 AI 的回覆，無法判斷' : fail ? `<b>${fail} 題沒通過</b>，AI 的說明請更謹慎看待（檢查結果不受影響）` : `已測的 ${done.length} 題都通過`;
-      DQ.safe(out).innerHTML = `<ul class="st-list">${r.map(x => `<li class="${x.pass === true ? 'ok' : x.pass === false ? 'bad' : ''}"><b>${x.pass === true ? '通過' : x.pass === false ? '沒通過' : esc(x.status || '尚未測試')}</b>　${esc(x.name)}${x.why ? `：${esc(x.why)}` : ''}${x.pass && x.noticed ? '（AI 有提醒資料中有指令，已忽略）' : ''}${x.reply ? `<details><summary>看 AI 的回答</summary><p>${esc(x.reply)}</p></details>` : ''}</li>`).join('')}</ul>
-        <p class="hint">這次開啟後累計完成 ${done.length} 題，${sum}${pending ? `；這次有 ${pending} 題尚未測試` : ''}。這些題目只檢查幾種常見的寫法，通過不代表 AI 對所有藏在資料裡的指令都有防護。</p>`;
-    } catch (e) { out.textContent = e.message; }
-    b.disabled = false;
-  };
   // 首頁的「開始檢核」：還沒放資料時打開選檔視窗；已放資料時重新檢查並捲到結果
   if ($('#btn-start')) $('#btn-start').onclick = () => { if (DETAIL.some(k => state.files[k])) { run(); $('#summary').scrollIntoView({ behavior: 'smooth' }); } else $('#file-book').click(); };
   $('#link-updates').onclick = e => { e.preventDefault(); showTab('updates'); };

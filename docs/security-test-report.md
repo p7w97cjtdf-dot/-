@@ -359,3 +359,10 @@ XSS 全部擋下的根本原因：所有寫入畫面的 HTML 一律經過 `DQ.sa
 2. **送出前警示的樣式**（`src/prompt-guard.js`）：`suspicious()` 原本偵測「忽略指示」類，現增加「叫使用者點擊連結重新登入／驗證」（釣魚）與「整批輸出客戶姓名／身分證」（外洩）兩類樣式；實測 5 句正常退件通知不誤報。注意：注入的實際防線是「資料包在 `<declaration_data>` 標籤＋安全規則」「送出前個資已遮蔽」「AI 回覆以純文字渲染」三層，`suspicious()` 只是額外的使用者警示。
 
 測試：`tests/pii.test.js` 加入角色詞＋空格的姓名案例；`tests/security.test.js` 的 `suspicious` 案例加入釣魚與外洩指示、並加入正常退件通知的不誤報案例。
+
+## 介面調整：移除使用者端 Dify 設定與 AI 自我測試按鈕 (2026-10-28)
+
+- 工具介面移除「AI 服務設定（使用自己公司的 Dify）」與「測試 AI 會不會被資料裡的指令影響」兩個區塊，以及只為自架 Dify 網址而存在的「第一次送到某網址」確認對話框、送出預覽裡的 Dify 金鑰欄位；CSP 的 `connect-src` 移除 `https://api.dify.ai`。
+- 線上 Claude 的 AI 功能（整理重點、單筆解釋、看懂退件、規則轉換）、送出前的遮蔽與完整內容確認、完全離線模式、姓名完全遮蔽都保留。
+- Dify 仍可作為**部署選項**：部署者在 `config.local.js` 設定 `DQ_AI_CONFIG = { provider:'dify', url, proxy:true }`，由公司轉發伺服器帶金鑰（前端不帶金鑰）。`src/ai.js` 的網址政策、回應強化、金鑰閉包等防護與其模組層單元測試（`security.test.js`）保留，上方各項 Dify 相關紀錄仍為當時的實測結果。
+- 刪除只驅動已移除 UI 的瀏覽器測試 `t10-dify.js`、`t17-ai-policy.js`；`t13-ai-transmit.js` 移除 Dify UI 段（金鑰記憶體管理改由 `security.test.js` 模組層涵蓋）；`t05-prompt.js` 移除自我測試段（判斷邏輯由 `security.test.js` 涵蓋）。`npm test` 139 通過、0 失敗、1 待辦；瀏覽器 redteam、t05、t06、t08、t12、t13、t14 等通過。

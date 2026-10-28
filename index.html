@@ -2,9 +2,9 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<!-- 內容安全政策 (CSP)：只執行同網站的程式檔，禁止內嵌程式與 eval；只連線到同網站、官方更新來源與 Dify。
-     自架 Dify 請把網址加進 connect-src；修改下方「找不到程式檔」那段提示時，要重新計算 sha256 (tests/security.test.js 會檢查) -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-/CViNwGeidYcyxi6MUcmx3kj81XRdjsEeCRjc+S/Jas='; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https://p7w97cjtdf-dot.github.io https://api.dify.ai; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<!-- 內容安全政策 (CSP)：只執行同網站的程式檔，禁止內嵌程式與 eval；只連線到同網站與官方更新來源。
+     修改下方「找不到程式檔」那段提示時，要重新計算 sha256 (tests/security.test.js 會檢查) -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-/CViNwGeidYcyxi6MUcmx3kj81XRdjsEeCRjc+S/Jas='; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https://p7w97cjtdf-dot.github.io; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>申報資料檢核助手</title>
 <link rel="stylesheet" href="src/app.css">
@@ -399,21 +399,6 @@
         <label class="offline-mode"><input type="checkbox" id="offline-mode"> <b>完全離線</b>：不連任何外部網站（關閉 AI、不自動讀取線上法規更新），所有檢查照常在這台電腦進行</label>
         <p class="hint" id="offline-note" role="status"></p>
         <label class="offline-mode"><input type="checkbox" id="pii-fullname"> <b>姓名完全遮蔽</b>：送給 AI 前把姓名換成 ○○○（不保留姓與最後一字）。工具只認得客戶資料裡有的姓名與「姓名：」「被保險人」等標示後的姓名，其他寫法的姓名可能認不出來，送出前請看過內容</label>
-        <details class="ai-settings" id="ai-settings">
-          <summary>AI 服務設定（使用自己公司的 Dify）</summary>
-          <p class="hint">填入 Dify「聊天助手」應用的 API 網址後，AI 功能會改用你的 Dify。只接受 <code>app-</code> 開頭的應用金鑰（只能呼叫這一個應用）；<b>金鑰不會存在瀏覽器，每完成一次 AI 操作就清除</b>，使用 AI 時在確認視窗貼上即可。送出前仍會遮蔽個資並讓你確認內容。<a href="https://github.com/p7w97cjtdf-dot/-/blob/main/docs/dify-setup.md" target="_blank" rel="noopener">設定步驟與要貼進 Dify 的提示詞</a>。</p>
-          <label>API 網址<input id="dify-url" type="url" placeholder="https://api.dify.ai/v1" autocomplete="off" spellcheck="false"></label>
-          <label>只允許這些網址（一行一個，例如 https://api.dify.ai；留空表示不另外限定）<textarea id="ai-allow" rows="2" autocomplete="off" spellcheck="false" placeholder="https://api.dify.ai"></textarea></label>
-          <p class="hint" id="ai-policy"></p>
-          <label>API 金鑰（只用在下一次操作，例如測試連線）<input id="dify-key" type="password" placeholder="app-…" autocomplete="off" spellcheck="false" autocapitalize="off"></label>
-          <div class="ai-settings-acts"><button class="btn-x sm primary" type="button" id="btn-dify-save">儲存並使用</button><button class="btn-x sm" type="button" id="btn-dify-test">測試連線</button><button class="btn-x sm" type="button" id="btn-dify-clear">清除</button><button class="btn-x sm" type="button" id="btn-consent-clear">清除已確認的網址</button></div>
-          <p class="hint" id="dify-note" role="status"></p>
-        </details>
-        <div class="selftest">
-          <button class="btn-x sm" type="button" id="btn-ai-selftest">測試 AI 會不會被資料裡的指令影響</button>
-          <span class="hint">用虛構資料送出 8 種藏在資料裡的指令（洩漏系統提示、外傳資料、忽略檢核結果、停用規則、刪除資料、竄改 JSON、捏造法規依據、改變輸出），自動檢查 AI 有沒有照做；沒有可用的 AI 服務時顯示「尚未測試」。建議每次更新後測 3 次。通過只代表這幾種寫法沒有被照做，不代表完全防護。</span>
-          <div id="ai-selftest" role="status"></div>
-        </div>
         <p class="legal-links"><a href="docs/guide.html">使用說明</a><span aria-hidden="true">·</span><a href="#updates" data-goto="updates">法規更新</a><span aria-hidden="true">·</span><a href="docs/limits.html">限制與風險說明</a></p></div>
     </div>
   </section>
@@ -425,18 +410,10 @@
   <div id="ai-log-list" class="ai-log-list"></div>
   <div class="ai-preview-acts"><button class="btn-x sm primary" type="button" id="ai-log-close">關閉</button></div>
 </dialog>
-<dialog id="ai-origin" aria-labelledby="ai-origin-title">
-  <h2 id="ai-origin-title">資料會送到外部網站</h2>
-  <p>這是第一次使用這個 AI 服務網址。按「同意並送出」後，<b>遮蔽個資後的檢查資料會送到 <span id="ai-origin-host" class="mono"></span> 網站</b>。</p>
-  <p class="hint" id="ai-origin-src"></p>
-  <label class="ai-origin-ok"><input type="checkbox" id="ai-origin-check"> 我確認資料會送到這個網站，而且這個網站符合公司的資料政策</label>
-  <div class="ai-preview-acts"><button class="btn-x sm" type="button" id="ai-origin-no">取消</button><button class="btn-x sm primary" type="button" id="ai-origin-yes" disabled>同意並送出</button></div>
-</dialog>
 <dialog id="ai-preview" aria-labelledby="ai-preview-title">
   <h2 id="ai-preview-title">確認要送給 AI 的內容</h2>
   <p class="hint" id="ai-preview-note"></p>
   <pre id="ai-preview-text"></pre>
-  <label class="ai-preview-key" id="ai-preview-key-box" hidden>Dify 應用的 API 金鑰（只用在這次操作，完成後就清除）<input id="ai-preview-key" type="password" placeholder="app-…" autocomplete="off" spellcheck="false" autocapitalize="off"></label>
   <div class="ai-preview-acts"><button class="btn-x sm" type="button" id="ai-preview-no">取消</button><button class="btn-x sm primary" type="button" id="ai-preview-yes">送出</button></div>
 </dialog>
 
