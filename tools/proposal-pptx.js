@@ -230,7 +230,58 @@ pres.addSection({ title: '04 預期效益與商業潛力' });
 
 // ========== 05 補充資料（不計入頁數） ==========
 pres.addSection({ title: '05 補充資料' });
-divider('05 補充資料', '05　補充資料／備註', '資料來源與假設、證據明細、測試方法、限制（本節不計入簡報頁數限制）');
+divider('05 補充資料', '05　補充資料／備註', '預期質疑與回應、資料來源與假設、證據明細、測試方法、限制（本節不計入簡報頁數限制）');
+// 05-0 預期質疑與回應（誠實標示成立程度）
+{
+  const qa = [
+    ['前端處理大數據的效能瓶頸', '部分成立・有因應', K.amber, [
+      '已做：硬性上限（文字／CSV 60MB、Excel 50MB／解開 100MB）、壓縮炸彈預檢、放入前依「約檔案 11 倍」估算記憶體並對照裝置 RAM 提醒、大檔建議拆檔。',
+      '實測：1000 張保單約 0.1 秒；56MB／約 14.7 萬筆可正常檢查（峰值約 600MB）；1 萬張保單 Excel 7.3MB／解開 98MB（峰值約 380MB）——一般批次申報量可負荷。',
+      '限制與路線圖：對「數十萬筆以上、單檔數百 MB」或穩定性 SLA 有上限；可用 Web Worker 分段解析避免凍結，或以同一套程式碼封裝桌面／地端處理超大量。']],
+    ['瀏覽器端處理的合規與資安盲區', '成立・需正確定位', K.amber, [
+      '「不上傳」= 不送到伺服器，移除「傳輸被攔截、伺服器被攻破」的風險；不宣稱瀏覽器是受信任的封閉環境。',
+      '已做：CSP、DOMPurify 防注入、送 AI 前遮蔽個資、可完全離線；但無法防禦「使用者裝置本身已被惡意外掛或惡意程式控制」。',
+      '定位與路線圖：本工具是純靜態檔案，同一套程式碼可封裝為 Electron 桌面版或部署到受管制內網，作為通過法遵／資安審查的路徑；目前網頁版定位是申報前自我檢查與展示。']],
+  ];
+  const s = content('05 補充資料', '預期質疑與回應（1／2）', '誠實標示每一點的成立程度，不迴避真實限制');
+  let y = 1.55;
+  qa.forEach(([q, tag, tc, resp]) => {
+    const h = 2.55;
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: M, y, w: W - 2 * M, h, rectRadius: 0.08, fill: { color: 'FAFAFA' }, line: { color: K.line } });
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: M + 0.15, y: y + 0.15, w: 3.2, h: 0.5, rectRadius: 0.06, fill: { color: 'FEE2E2' }, line: { color: 'FEE2E2' } });
+    T(s, '質疑', { x: M + 0.25, y: y + 0.15, w: 0.7, h: 0.5, fontSize: 12, bold: true, color: K.red, valign: 'middle' });
+    T(s, q, { x: M + 0.9, y: y + 0.15, w: 6.5, h: 0.5, fontSize: 14, bold: true, color: K.ink, valign: 'middle' });
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: W - M - 2.9, y: y + 0.15, w: 2.75, h: 0.5, rectRadius: 0.06, fill: { color: 'FEF3C7' }, line: { color: 'FEF3C7' } });
+    T(s, tag, { x: W - M - 2.9, y: y + 0.15, w: 2.75, h: 0.5, fontSize: 12.5, bold: true, color: tc, align: 'center', valign: 'middle', margin: 0 });
+    T(s, bullets(resp, 5), { x: M + 0.25, y: y + 0.78, w: W - 2 * M - 0.5, h: h - 0.9, fontSize: 12.5 });
+    y += h + 0.3;
+  });
+}
+{
+  const qa = [
+    ['AI 整合的架構矛盾（前端金鑰、員工自填金鑰、本地模型硬體）', '現有設計已解', K.teal, [
+      '前端不放任何 API Key：線上 AI 用 claude.ai（開啟者自己的帳號，無金鑰）；公司自建 AI（Dify）由部署者的轉發伺服器帶金鑰，前端不帶。',
+      '不要求員工自行輸入金鑰：先前的使用者端金鑰輸入介面已移除，統一由部署管控。',
+      '不在瀏覽器跑本地模型，因此不需高階硬體；核心檢核由規則引擎完成、完全不需要 AI，老舊設備也能跑，AI 只是選用的白話說明。']],
+    ['單一檔案的維護災難（只能 POC、無法交接／測試／擴充）', '對原始碼的誤解', K.teal, [
+      '原始碼不是單一 HTML：是模組化 Git 儲存庫——29 個 JS 模組、151 項單元測試、15 支瀏覽器測試、CI（test＋browser 兩個 job）、PR 流程。',
+      '單一 HTML 只是「建置產物」：由 tools/build-artifact.js 把模組內嵌打包，供離線雙擊與 claude.ai 展示；開發、交接、版本控制、單元測試都在模組化 repo 上進行。',
+      '因此可交接、可測試、可擴充（已含壽險、癌症、傷害三種險種規則集）；單檔是發佈便利，不是開發架構。']],
+  ];
+  const s = content('05 補充資料', '預期質疑與回應（2／2）', '這兩點在目前的設計／原始碼上已不成立，以下說明');
+  let y = 1.55;
+  qa.forEach(([q, tag, tc, resp]) => {
+    const h = 2.55;
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: M, y, w: W - 2 * M, h, rectRadius: 0.08, fill: { color: 'FAFAFA' }, line: { color: K.line } });
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: M + 0.15, y: y + 0.15, w: 8.2, h: 0.5, rectRadius: 0.06, fill: { color: 'FEE2E2' }, line: { color: 'FEE2E2' } });
+    T(s, '質疑', { x: M + 0.25, y: y + 0.15, w: 0.7, h: 0.5, fontSize: 12, bold: true, color: K.red, valign: 'middle' });
+    T(s, q, { x: M + 0.9, y: y + 0.15, w: 7.4, h: 0.5, fontSize: 13, bold: true, color: K.ink, valign: 'middle' });
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: W - M - 2.9, y: y + 0.15, w: 2.75, h: 0.5, rectRadius: 0.06, fill: { color: 'D1FAE5' }, line: { color: 'D1FAE5' } });
+    T(s, tag, { x: W - M - 2.9, y: y + 0.15, w: 2.75, h: 0.5, fontSize: 12.5, bold: true, color: tc, align: 'center', valign: 'middle', margin: 0 });
+    T(s, bullets(resp, 5), { x: M + 0.25, y: y + 0.78, w: W - 2 * M - 0.5, h: h - 0.9, fontSize: 12.5 });
+    y += h + 0.3;
+  });
+}
 // 05-1 資料來源與假設
 {
   const s = content('05 補充資料', '資料來源、假設與方法', '');
