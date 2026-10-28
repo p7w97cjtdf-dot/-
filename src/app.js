@@ -134,20 +134,21 @@
   }
   function renderMap() {
     const el = $('#data-map'), have = SLOTS.filter(k => state.files[k]);
-    el.hidden = !have.length && !state.notes.length;
+    el.hidden = !have.length && !state.notes.length && !state.answer;
     if (el.hidden) return;
     // 檔名、工作表名稱、沒有讀取的原因都是外來的文字：用文字節點放入 (DQ.safe.texts)
     const T = DQ.safe.texts();
     const row = (k, src, n, cls, fix) => `<li class="dm-row${cls ? ' ' + cls : ''}"><b class="dm-k">${T(k)}</b><span class="dm-src">${T(src)}</span><span class="dm-n">${T(n)}</span>${fix ? `<span class="dm-fix">已自動調整：${T(fix.join('；'))}</span>` : ''}</li>`;
-    DQ.safe(el).innerHTML = `<div class="dm-head"><b>${have.length ? `這次檢查的資料（${have.length} 份）` : '這次沒有可以檢查的資料'}</b>${have.length ? '<button class="linkish" type="button" id="btn-clear-files">清除，重新放入</button>' : ''}</div>
+    DQ.safe(el).innerHTML = `<div class="dm-head"><b>${have.length ? `這次檢查的資料（${have.length} 份）` : '這次沒有可以檢查的資料'}</b>${have.length || state.answer ? '<button class="linkish" type="button" id="btn-clear-files">清除，重新放入</button>' : ''}</div>
       <ul class="dm-list">${have.map(k => row(SLOT_NAME[k] || k, state.src[k] || state.files[k].name, `${recCount(k).toLocaleString()} 筆`, '', state.fixed[k])).join('')}
+      ${state.answer ? row('錯誤解答', state.answer.name, `${state.answer.key.length} 項${have.length ? '・用來對照' : '・放入資料後自動對照'}`, 'dm-ans') : ''}
       ${unused().map(([why, srcs]) => row('沒有使用', srcs.join('、'), why, 'dm-off')).join('')}</ul>
       ${have.length && !DETAIL.some(k => state.files[k]) ? '<p class="dm-foot">還需要保單資料或理賠資料（壽險、癌症險或傷害險）才能開始檢查。</p>' : ''}
-      ${!have.length ? '<p class="dm-foot">之前放入的資料與結果已清除。請放入有資料的檔案（第一列是欄位名稱，從第二列開始每列一筆）。</p>' : ''}
+      ${!have.length && !state.answer ? '<p class="dm-foot">之前放入的資料與結果已清除。請放入有資料的檔案（第一列是欄位名稱，從第二列開始每列一筆）。</p>' : ''}
       ${state.notes.some(n => /欄位對不上/.test(n.why)) ? '<p class="dm-foot dm-tpl">欄位名稱要和申報格式一樣。<button class="linkish" type="button" id="btn-template">下載正確格式的空白範本</button>（每張工作表的第一列就是要用的欄位名稱）</p>' : ''}`;
     T.fill(el);
     const t = $('#btn-template'); if (t) t.onclick = downloadTemplate;
-    const b = $('#btn-clear-files'); if (b) b.onclick = () => { clearFiles(); state.notes = []; $('#sample-note').textContent = ''; run(); };
+    const b = $('#btn-clear-files'); if (b) b.onclick = () => { clearFiles(); state.notes = []; state.answer = null; $('#sample-note').textContent = ''; run(); };
   }
   // 空白範本：每一種資料一張工作表，第一列是正確的欄位名稱
   function downloadTemplate() {
@@ -192,6 +193,31 @@
   }
   // Excel 活頁簿：依工作表名稱分配到各檔案 (src/workbook.js)
   const BOOK = /\.(xlsx|xlsm|xls|ods)$/i;
+  // 錯誤解答：不是申報資料，放入後只用來對照檢查結果 (不影響已放入的資料)
+  function setAnswer(name, key) {
+    state.answer = { name, key };
+    audit('放入錯誤解答', `${name}（${key.length} 項）`);
+    if (DETAIL.some(k => state.files[k]) && state.res) { renderMap(); renderAnswer(); }
+    else renderMap();
+    $('#sample-note').textContent = DETAIL.some(k => state.files[k]) ? `已放入錯誤解答「${name}」，對照結果列在檢查結果上方。` : `已放入錯誤解答「${name}」（${key.length} 項）。這不是申報資料，請再放入保單或理賠資料，工具會自動對照找到了哪些。`;
+  }
+  function renderAnswer() {
+    const el = $('#answer-check');
+    if (!state.answer || !state.res || !state.all) { el.hidden = true; return; }
+    const r = DQ.workbook.checkAnswers(state.answer.key, state.all), T = DQ.safe.texts();
+    // 解答裡的檢核編號不是這次有執行的檢查 (例如「新增檢查規則」的範例 U001)：另外列出，不算「沒找到」
+    const known = new Set(state.all.map(i => i.ruleId).concat((rs.catalog || []).map(c => c.id), DQ.rulesets.finance.catalog.map(c => c.id), DQ.master.catalog.map(c => c.id), DQ.anomaly.catalog.map(c => c.id)));
+    for (const x of r.rows) if (x.status === 'missing' && !known.has(x.ruleId)) x.status = 'inactive';
+    const miss = r.rows.filter(x => x.status === 'missing'), manual = r.rows.filter(x => x.status === 'manual'), inactive = r.rows.filter(x => x.status === 'inactive');
+    r.total -= inactive.length;
+    const li = x => `<li>${T([x.ruleId, x.policy].filter(Boolean).join('　') || x.category)}：${T(x.desc)}</li>`;
+    el.hidden = false; el.className = 'answer-check ' + (miss.length ? 'bad' : 'ok');
+    DQ.safe(el).innerHTML = `<summary>對照錯誤解答（${T(state.answer.name)}）：找到 <b>${r.found} / ${r.total}</b> 項${miss.length ? `，沒找到 ${miss.length} 項` : '，全部找到'}${inactive.length ? `；${inactive.length} 項是這次沒有執行的檢查` : ''}${manual.length ? `；另有 ${manual.length} 項沒有檢核編號，請人工對照` : ''}</summary>
+      ${miss.length ? `<p class="hint">沒找到的項目（可能是資料和解答不是同一份，或檢查被停用）：</p><ul>${miss.map(li).join('')}</ul>` : ''}
+      ${inactive.length ? `<p class="hint">這次沒有執行這些檢查（例如「新增檢查規則」的範例規則，要先在「法規更新」加入才會檢查），不列入對照：</p><ul>${inactive.map(li).join('')}</ul>` : ''}
+      ${manual.length ? `<p class="hint">沒有檢核編號、要人工對照的項目（例如系統總數的時間差）：</p><ul>${manual.map(li).join('')}</ul>` : ''}`;
+    T.fill(el);
+  }
   // 讀檔或解析的例外訊息可能夾帶檔案內容 (例如 JSON 解析錯誤會引用一段原文)：畫面只顯示固定的說明，不顯示原始內容
   const READ_FAIL = '讀取時發生錯誤（檔案可能已損毀或格式不正確）';
   // 檔案沒有讀取時 (太大、不是文字檔、標題不符、Excel 損毀或預檢不通過、讀取失敗)，處理方式都一樣：
@@ -230,7 +256,11 @@
     catch (e) { return fail('無法開啟：檔案可能已損毀或設有密碼。請在 Excel 打開後另存新檔（.xlsx，不設密碼）再試一次'); }
     const polluted = Object.getOwnPropertyNames(Object.prototype).filter(k => !protoBefore.has(k));
     if (polluted.length) { for (const k of polluted) delete Object.prototype[k]; return fail('含有會改寫程式內部物件的特製內容（可能是惡意檔案）'); }
-    const { got, from, blank, skipped, fixed } = DQ.workbook.slots(XLSX, wb);
+    const { got, from, blank, skipped: skipped0, fixed } = DQ.workbook.slots(XLSX, wb);
+    // 活頁簿裡的「錯誤解答」工作表：拿來對照，不列在「沒有使用」
+    const ansSheet = wb.SheetNames.find(n => DQ.workbook.isAnswerKey((XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, blankrows: false, defval: '' })[0]) || []));
+    const skipped = skipped0.filter(x => x.name !== ansSheet);
+    if (ansSheet) state.answer = { name: `${file.name}「${ansSheet}」`, key: DQ.workbook.answerKey(XLSX.utils.sheet_to_json(wb.Sheets[ansSheet], { header: 1, blankrows: false, raw: false, defval: '' })) };
     for (const name of blank) state.notes.push({ source: `${file.name}「${name}」`, why: '只有標題列，沒有資料' });
     for (const x of skipped) state.notes.push({ source: `${file.name}「${x.name}」`, why: x.why });
     if (!DETAIL.some(k => got[k]) && blank.length) return fail('的工作表只有標題列、還沒有資料，沒有可以檢查的內容。請從第二列開始填入保單資料或理賠資料，再放進來');
@@ -274,7 +304,9 @@
       if (tooBig(file)) return rejectFile(file.name, tooBigWhy(file), [fid]);
       const buf = await file.arrayBuffer();
       if (looksBinary(buf)) return rejectFile(file.name, NOT_TEXT, [fid]);
-      const fx = csvFix(fid, file.name, decodeText(buf));
+      const text = decodeText(buf);
+      if (/\.csv$/i.test(file.name) && DQ.workbook.isAnswerKey(DQ.parseCSV(text.slice(0, 4096))[0] || [])) return setAnswer(file.name, DQ.workbook.answerKey(DQ.parseCSV(text)));
+      const fx = csvFix(fid, file.name, text);
       if (fx.problem) return rejectFile(file.name, fx.problem, [fid]);
       setFile(fid, file.name, fx.text); keepFix(fid, file.name, fx.notes);
       run();
@@ -316,6 +348,9 @@
     state.notes = [];
     sizeNote([...files].filter(f => f.size <= MAX_FILE));
     const unknown = [];
+    // 同時放入兩個年度的保單資料 (LFL01_2024、LFL01_2025)：先讀年度新的，舊年度的才會判斷成「去年保單資料」
+    const year = f => { const m = /^LFL\w*?_(\d{4})/i.exec(f.name); return m ? +m[1] : 0; };
+    files = [...files].sort((a, b) => year(b) - year(a));
     for (const f of files) {
       try { await readOne(f, unknown); }
       catch (e) { rejectFile(f.name, READ_FAIL, BOOK.test(f.name) ? SLOTS : [guessSlot(f.name, null)].filter(Boolean)); }
@@ -338,6 +373,8 @@
         const buf = await f.arrayBuffer();
         if (looksBinary(buf)) return rejectFile(f.name, NOT_TEXT, [slot].filter(Boolean));
         const text = decodeText(buf);
+        // 錯誤解答 (試用資料附的解答表)：不是申報資料，用來對照檢查結果
+        if (/\.csv$/i.test(f.name)) { const head = DQ.parseCSV(text.slice(0, 4096))[0] || []; if (DQ.workbook.isAnswerKey(head)) return setAnswer(f.name, DQ.workbook.answerKey(DQ.parseCSV(text))); }
         const byContent = /\.csv$/i.test(f.name) ? DQ.csvLayout(text, DETAIL_LAYOUTS) : BY_LENGTH[text.split(/\r?\n/)[0].length] || null;
         if (byContent) slot = byContent === 'L' && slot === 'prior' ? 'prior' : byContent;
         // 標題不是標準名稱時，看欄位最多對得上哪一種申報明細檔
@@ -420,7 +457,7 @@
     // 寬螢幕：右側直接顯示第一個問題的說明 (不留空白的說明欄)
     state.openGroups = null; state.fullGroups = null;
     if (window.matchMedia('(min-width: 1101px)').matches) { const g = grouped(filtered())[0]; if (g) state.sel = g[2][0].id; }
-    renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(true); renderReport(); renderRules(); renderDecodeExamples();
+    renderSummary(); renderCats(); renderTable(); renderDetail(); renderRecon(true); renderReport(); renderRules(); renderDecodeExamples(); renderAnswer();
     { const c = sev => state.all.filter(i => i.severity === sev).length, h = Object.values(state.disabledCount || {}).reduce((t, n) => t + n, 0);
       audit('檢查', `必須修改 ${c('error')}、建議確認 ${c('warning')}、請人工判斷 ${c('suspect')}${h ? `；停用的檢查隱藏 ${h} 個` : ''}${state.scope.complete ? '' : `；檢查範圍：${DQ.coverage.summary(state.scope)}`}`); }
     // 手機上資料一放進來就捲到結果區 (上傳區在畫面上方會佔掉整個螢幕)
