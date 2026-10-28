@@ -25,11 +25,12 @@
     const base = state.customRules.length ? DQ.dsl.extend(BASE, state.customRules) : BASE;
 
     const live = state.packs.filter(x => x.on && usable(x)).map(x => x.pack);
-    const out = DQ.rulePacks.apply(base, live);
+    const out = DQ.rulePacks.apply(base, live, { catalog: DQ.rulesets.finance.catalog.concat(DQ.master.catalog, DQ.anomaly.catalog) });
     state.disabled = out.disabled;
     // 自訂規則與更新包規則：無法判定的筆數、格式不對沒有執行的規則一起算進「檢查範圍」
     const ps = out.ruleset.dslStats || { unjudged: {}, invalid: [] };
-    const skipped = live.flatMap(pk => pk.rules.filter(r => DQ.dsl.validateRule(DQ.rulePacks.withEffective(r), out.ruleset.layouts).length).map(r => r.id || '（沒有編號）'));
+    // 格式不對的更新包整包不套用 (不會只套用一部分)，列在「檢查範圍」
+    const skipped = (out.rejected || []).map(p => `更新包「${p.name}」（格式不對，整包沒有套用）`);
     // (統計物件在檢查時才會累計筆數，所以存參照，檢查完再合併)
     state.dslSources = [base.dslStats, ps].filter(Boolean); state.dslSkipped = skipped;
     return (rs = out.ruleset);
@@ -1219,10 +1220,13 @@
   // 更新包內容有改動：原本的核可失效，要重新申請
   function revoke(x) { if (x.approvedFile || x.approval) audit('核可失效', `「${x.pack.name}」內容有改動，原本的主管核可失效，需要重新申請`); x.approvedFile = null; x.approval = null; x.verified = false; }
   // 驗證存在這台電腦的「已核可」更新包 (開啟時)；驗證不過的不套用
+  const sortKeys = v => Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sortKeys(v[k])])) : v;
+  const canonPack = p => JSON.stringify(sortKeys(DQ.rulePacks.normalize(p)));
   async function verifyApproved() {
     for (const x of state.packs.filter(y => !y.official && y.approvedFile)) {
       const v = await DQ.approval.verify(x.approvedFile, PACK_KEY_PINS);
-      x.verified = v.ok && JSON.stringify(v.pack) === JSON.stringify(x.pack); x.approval = x.verified ? v.approval : null;
+      // 簽章涵蓋的內容要和這台電腦存的內容相同 (都先整理成標準格式、依鍵名排序後比對，鍵的順序不影響)
+      x.verified = v.ok && canonPack(v.pack) === canonPack(x.pack); x.approval = x.verified ? v.approval : null;
     }
   }
   // 舊版存在這台電腦的自訂規則 (直接套用)：改放進本機自訂更新，等主管核可

@@ -127,7 +127,7 @@
       const entry = { pack, on: true, imported: true, approvedFile, approval, verified: !!approval };
       app.setPacks(app.state.packs.filter(x => x.pack.id !== pack.id).concat(entry));
       fillFields();
-      note('#pack-note', `已匯入「${pack.name}」：${P.summary(pack)}。` + (v.errors.length || bad.length ? `有 ${v.errors.length + bad.length} 項無法使用，已略過（見下方說明）。` : '') +
+      note('#pack-note', `已匯入「${pack.name}」：${P.summary(pack)}。` + (v.errors.length || bad.length ? `有 ${v.errors.length + bad.length} 項格式不對，整包都不會套用（見下方說明），請修正後重新匯入。` : '') +
         (approval ? `主管 ${approval.approver} 已核可（${approval.approvedAt.slice(0, 10)}），已套用到檢查結果。` : '還沒有主管核可，不會套用：可以先「試跑」看影響，再「申請主管核可」。'));
     } catch (err) { note('#pack-note', `「${f.name}」不是規則更新包，或檔案內容有誤：${DQ.safeError(err)}`); }
   });
@@ -139,7 +139,7 @@
     const st = app.state, files = Object.fromEntries(['L', 'D', 'CL', 'CD', 'AL', 'AD'].filter(k => st.files[k]).map(k => [k, st.files[k]]));
     if (!Object.keys(files).length) return '還沒有放入資料。先放入要檢查的資料，再試跑。';
     const live = st.packs.filter(y => y !== x && y.on && ready(y)).map(y => y.pack);
-    const out = P.apply(app.base, live.concat(x.pack));
+    const out = P.apply(app.base, live.concat(x.pack), { catalog: allCatalog().slice(app.base.catalog.length) });
     const ids = new Set(x.pack.rules.map(r => r.id).concat(x.pack.fields.map(f => `${x.pack.id}:${f.key}`)));
     const found = DQ.validate(out.ruleset, files).issues.filter(i => ids.has(i.ruleId)).length;
     const hid = (st.all || []).filter(i => x.pack.disable.includes(i.ruleId)).length;

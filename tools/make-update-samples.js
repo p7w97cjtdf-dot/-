@@ -19,7 +19,7 @@ const disable = { id: 'test-disable', name: '【測試】停用兩項檢查', ve
 const field = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'rules', 'updates', 'example-2026-format-change.json'), 'utf8'));
 field.note = '測試用 (虛構情境)：保留欄位第 1 碼改為「數位投保註記」、2025/07/01 起的新契約必填；並停用 L6101。用「試用資料_含錯誤.xlsx」會找到 6 筆新契約沒有填。';
 const broken = { id: 'test-broken', name: '【測試】有錯的更新包', version: '1', issuedAt: '20261025', basis: '測試用',
-  note: '測試用：一條規則用了不存在的欄位、停用不存在的檢查編號。匯入後會列出「無法使用、已略過」。',
+  note: '測試用：一條規則用了不存在的欄位、停用不存在的檢查編號。匯入後會列出格式不對的項目，整包都不會套用。',
   rules: [{ id: 'T-BAD-01', name: '不存在的欄位', file: 'L', scope: 'record', assert: { field: 'noSuchField', op: 'notBlank' }, message: '測試' }], disable: ['NO_SUCH_RULE'] };
 write('1_新增檢查_待核可.json', add);
 write('2_停用檢查_待核可.json', disable);

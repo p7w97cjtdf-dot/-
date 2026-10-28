@@ -110,3 +110,72 @@ test('無法判定的筆數反映在統計 (不算通過)，舊範例規則的�
   const sc = COV.scope(['L'], { unjudged: rs.dslStats.unjudged });
   assert.ok(!sc.safe && sc.warn.some(w => w.kind === 'unjudged'), '檢查範圍要標示無法判定');
 });
+
+test('規則格式驗證：null、陣列、錯誤型態回傳驗證錯誤，不丟例外', () => {
+  for (const bad of [null, undefined, [], 'rule', 42, true, () => 1, new Date(), Object.create({ id: 'x' })]) {
+    let errs; assert.doesNotThrow(() => { errs = dsl.validateRule(bad, life.layouts); }, String(bad));
+    assert.ok(Array.isArray(errs) && errs.length, String(bad));
+  }
+  assert.deepStrictEqual(dsl.validateRule({ id: 'A', file: 'L', assert: { field: 'policyNo', op: 'notBlank' } }, null), ['缺少資料格式定義，無法驗證規則']);
+  // 條件節點是 null 或陣列
+  for (const c of [null, [], [{ field: 'policyNo', op: 'notBlank' }], 'x'])
+    assert.ok(dsl.validateRule({ id: 'A', file: 'L', assert: c }, life.layouts).length, JSON.stringify(c));
+});
+
+test('規則格式驗證：all／any／not／單一條件只能擇一，混合的節點被拒絕', () => {
+  const leaf = { field: 'policyNo', op: 'notBlank' };
+  const v = c => dsl.validateRule({ id: 'A', file: 'L', assert: c }, life.layouts);
+  assert.deepStrictEqual(v(leaf), []);
+  assert.deepStrictEqual(v({ all: [leaf, leaf] }), []);
+  for (const c of [{ all: [leaf], field: 'policyNo', op: 'notBlank' }, { all: [leaf], any: [leaf] }, { not: leaf, op: 'notBlank', field: 'policyNo' }, { all: [leaf], extra: 1 }, { not: leaf, x: 1 }, { field: 'policyNo', op: 'notBlank', bogus: 1 }, {}])
+    assert.ok(v(c).length, JSON.stringify(c));
+  assert.match(v({ all: [leaf], any: [leaf] }).join(), /只能擇一/);
+});
+
+test('規則格式驗證：過深、過寬、太長、危險鍵名、繼承屬性、不支援的函式都被拒絕', () => {
+  const leaf = { field: 'policyNo', op: 'notBlank' };
+  const v = (c, extra) => dsl.validateRule(Object.assign({ id: 'A', file: 'L', assert: c }, extra), life.layouts);
+  let deep = leaf; for (let i = 0; i < 12; i++) deep = { not: deep };
+  assert.match(v(deep).join(), /巢狀超過/);
+  assert.match(v({ any: Array(300).fill(leaf) }).join(), /超過 200 個/);
+  assert.match(v({ field: 'policyNo', op: 'in', values: Array(201).fill('A') }).join(), /values 超過/);
+  assert.match(v({ field: 'policyNo', op: 'eq', value: 'x'.repeat(501) }).join(), /500 字以內/);
+  assert.match(v(leaf, { message: 'x'.repeat(600) }).join(), /message/);
+  assert.match(v({ field: 'policyNo', op: 'eq', value: Infinity }).join(), /有限的數字/);
+  assert.match(v({ field: 'policyNo', op: 'eq', value: { a: 1 } }).join(), /value 只能是/);
+  assert.match(v({ field: 'constructor', op: 'notBlank' }).join(), /格式不正確/);
+  assert.match(v({ field: 'policyNo', op: 'toString', value: '1' }).join(), /不支援的運算/);
+  assert.match(v({ field: { fn: 'constructor', args: ['policyNo'] }, op: 'eq', value: 1 }).join(), /不支援的函式/);
+  assert.match(v({ field: { fn: 'num', args: ['policyNo'], extra: 1 }, op: 'eq', value: 1 }).join(), /只能有 fn 與 args/);
+  let fn = 'birthDate'; for (let i = 0; i < 5; i++) fn = { fn: 'num', args: [fn] };
+  assert.match(v({ field: fn, op: 'eq', value: 1 }).join(), /函式巢狀/);
+  assert.match(dsl.validateRule(JSON.parse('{"id":"A","file":"L","assert":{"field":"policyNo","op":"notBlank"},"__proto__":{"x":1}}'), life.layouts).join(), /不允許的鍵名/);
+  assert.match(v(JSON.parse('{"field":"policyNo","op":"notBlank","__proto__":{"all":[]}}')).join(), /不允許的鍵名/);
+  assert.match(v(leaf, { unknownKey: 1 }).join(), /不認得的規則屬性/);
+  assert.match(dsl.validateRule({ id: 'A', file: 'constructor', assert: leaf }, life.layouts).join(), /file 應為/);
+  // 一整批：有一條不對就整批不通過
+  const ok = { id: 'A', file: 'L', assert: leaf }, bad = { id: 'B', file: 'L', assert: { all: [leaf], op: 'x' } };
+  assert.strictEqual(dsl.validateAll([ok], life.layouts).ok, true);
+  assert.strictEqual(dsl.validateAll([ok, bad], life.layouts).ok, false);
+  assert.strictEqual(dsl.validateAll([ok, ok], life.layouts).ok, false, '編號重複');
+  assert.strictEqual(dsl.validateAll(Array(501).fill(ok), life.layouts).ok, false);
+  assert.strictEqual(dsl.validateAll(null, life.layouts).ok, false);
+});
+
+test('更新包：整包驗證後才套用，有一項不對整包都不套用', () => {
+  const P = require('../src/rule-packs.js');
+  const leaf = { field: 'policyNo', op: 'notBlank' };
+  const good = { id: 'g', name: '好的包', rules: [{ id: 'U-G1', file: 'L', name: 'x', assert: leaf }], disable: ['10400_L0201'] };
+  const mixed = { id: 'm', name: '有錯的包', rules: [{ id: 'U-M1', file: 'L', name: 'x', assert: leaf }, { id: 'U-M2', file: 'L', name: 'y', assert: { all: [leaf], op: 'eq' } }], disable: ['10400_L0501'] };
+  const out = P.apply(life, [good, mixed]);
+  assert.ok(out.ruleset.catalog.some(c => c.id === 'U-G1'));
+  assert.ok(!out.ruleset.catalog.some(c => c.id === 'U-M1'), '有錯的包裡正確的規則也不套用');
+  assert.ok(out.disabled.has('10400_L0201') && !out.disabled.has('10400_L0501'), '有錯的包的停用清單也不套用');
+  assert.deepStrictEqual(out.rejected.map(r => r.id), ['m']);
+  // 不是物件、危險鍵名、太多規則
+  for (const bad of [null, 'x', 5, JSON.parse('{"id":"p","__proto__":{"rules":[]}}'), { id: 'p', rules: Array(501).fill({ id: 'x', file: 'L', assert: leaf }) }])
+    assert.strictEqual(P.validate(bad, life, []).ok, false, JSON.stringify(bad && bad.id));
+  // 原型不會被改
+  const n = P.normalize(JSON.parse('{"id":"p","__proto__":{"polluted":1}}'));
+  assert.strictEqual(n.polluted, undefined); assert.strictEqual({}.polluted, undefined);
+});

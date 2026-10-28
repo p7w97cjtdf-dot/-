@@ -46,46 +46,102 @@
     if (ranges > 1) return null;
     try { return new RegExp(s); } catch (e) { return null; }
   }
+  // 規則格式驗證：規則來自自訂、更新包或 AI 轉換，都是不可信的輸入。任何格式問題都回傳可讀的錯誤 (不丟例外、不執行任何程式)
+  const LIMITS = Object.freeze({ nodes: 200, depth: 8, fnDepth: 3, values: 200, str: 500, id: 64, rulesPerPack: 500 });
+  const BAD_KEYS = new Set(['__proto__', 'constructor', 'prototype', '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__']);
+  const RULE_KEYS = new Set(['id', 'name', 'file', 'scope', 'severity', 'when', 'assert', 'message', 'suggestion', 'source', 'ref', 'effective', 'category', 'level', 'pack', 'src']);
+  const LEAF_KEYS = new Set(['field', 'op', 'value', 'values', 'ref', 'pos']);
+  const FIELD_RE = /^(prev\.)?[A-Za-z][A-Za-z0-9_]{0,40}$/;
+  const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  // 普通的資料物件 (JSON 物件)：不是 null、陣列、函式或特殊類別
+  const plain = o => o !== null && typeof o === 'object' && !Array.isArray(o) && [Object.prototype, null].includes(Object.getPrototypeOf(o));
+  const okScalar = v => (typeof v === 'string' && v.length <= LIMITS.str) || (typeof v === 'number' && Number.isFinite(v));
   function validateRule(rule, layouts) {
+    try { return validateRule0(rule, layouts); } catch (e) { return ['規則格式錯誤，無法驗證']; }
+  }
+  function validateRule0(rule, layouts) {
     const errs = [];
-    const lay = layouts[rule.file];
+    if (!plain(rule)) return ['規則必須是物件（不能是空值、陣列或其他型態）'];
+    if (!plain(layouts)) return ['缺少資料格式定義，無法驗證規則'];
+    for (const k of Object.keys(rule)) {
+      if (BAD_KEYS.has(k)) errs.push(`不允許的鍵名「${k}」`);
+      else if (!RULE_KEYS.has(k)) errs.push(`不認得的規則屬性「${k.slice(0, 40)}」`);
+    }
+    const lay = typeof rule.file === 'string' && has(layouts, rule.file) ? layouts[rule.file] : null;
     if (!lay) errs.push(`file 應為 ${Object.keys(layouts).join('/')}`);
-    if (!rule.id || typeof rule.id !== 'string') errs.push('缺少 id');
-    if (rule.scope && !['record', 'policy'].includes(rule.scope)) errs.push('scope 應為 record 或 policy');
+    if (typeof rule.id !== 'string' || !rule.id || rule.id.length > LIMITS.id) errs.push(`缺少 id，或 id 超過 ${LIMITS.id} 字`);
+    else if (BAD_KEYS.has(rule.id)) errs.push(`不允許的 id「${rule.id}」`);
+    for (const k of ['name', 'message', 'suggestion', 'source', 'ref', 'category', 'level', 'pack', 'src']) if (has(rule, k) && rule[k] != null && (typeof rule[k] !== 'string' || rule[k].length > (k === 'source' ? 4000 : LIMITS.str))) errs.push(`${k} 必須是 ${k === 'source' ? 4000 : LIMITS.str} 字以內的文字`);
+    if (has(rule, 'scope') && rule.scope != null && !['record', 'policy'].includes(rule.scope)) errs.push('scope 應為 record 或 policy');
     if (rule.scope === 'policy' && !['L', 'CL', 'AL'].includes(rule.file)) errs.push('policy 範圍只適用保單資料 (承保檔)');
-    if (rule.severity && !['error', 'warning'].includes(rule.severity)) errs.push('severity 應為 error 或 warning');
-    if (!rule.assert) errs.push('缺少 assert');
-    const fieldOk = f => {
+    if (has(rule, 'severity') && rule.severity != null && !['error', 'warning'].includes(rule.severity)) errs.push('severity 應為 error 或 warning');
+    if (!has(rule, 'assert')) errs.push('缺少 assert');
+    let nodes = 0;
+    const fieldOk = (f, fd) => {
       if (typeof f === 'string') {
+        if (!FIELD_RE.test(f) || BAD_KEYS.has(f.replace(/^prev\./, ''))) return errs.push(`欄位代號「${f.slice(0, 40)}」格式不正確`);
         const prev = f.startsWith('prev.');
         if (prev && rule.scope !== 'policy') errs.push(`「${f}」只能用在 policy 範圍`);
         const k = prev ? f.slice(5) : f;
-        if (lay && !lay.field(k)) errs.push(`欄位「${k}」不存在於${lay.title}`);
+        if (lay && !(lay.field && lay.field(k))) errs.push(`欄位「${k}」不存在於${lay.title}`);
         return;
       }
-      if (f && typeof f === 'object' && FNS[f.fn] != null) {
-        if (!Array.isArray(f.args) || f.args.length !== FNS[f.fn]) errs.push(`函式 ${f.fn} 需要 ${FNS[f.fn]} 個參數`);
-        else f.args.forEach(a => typeof a === 'number' ? null : fieldOk(a));
+      if (plain(f)) {
+        if (fd > LIMITS.fnDepth) return errs.push(`函式巢狀超過 ${LIMITS.fnDepth} 層`);
+        for (const k of Object.keys(f)) if (k !== 'fn' && k !== 'args') return errs.push(`函式只能有 fn 與 args（多了「${String(k).slice(0, 40)}」）`);
+        if (typeof f.fn !== 'string' || !has(FNS, f.fn)) return errs.push(`不支援的函式「${String(f.fn).slice(0, 40)}」`);
+        if (!Array.isArray(f.args) || f.args.length !== FNS[f.fn]) return errs.push(`函式 ${f.fn} 需要 ${FNS[f.fn]} 個參數`);
+        f.args.forEach(a => { if (typeof a === 'number') { if (!Number.isFinite(a)) errs.push(`函式 ${f.fn} 的參數必須是有限的數字`); } else fieldOk(a, fd + 1); });
         return;
       }
-      errs.push(`無法辨識的欄位或函式：${JSON.stringify(f)}`);
+      errs.push('無法辨識的欄位或函式');
     };
     const walk = (c, d) => {
-      if (d > 8) return errs.push('條件巢狀過深');
-      if (!c || typeof c !== 'object') return errs.push('條件格式錯誤');
-      if (c.all || c.any) { const a = c.all || c.any; if (!Array.isArray(a) || !a.length) errs.push('all/any 需為非空陣列'); else a.forEach(x => walk(x, d + 1)); return; }
-      if (c.not) return walk(c.not, d + 1);
-      if (!OPS[c.op]) return errs.push(`不支援的運算「${c.op}」`);
-      fieldOk(c.field);
-      if (c.ref != null) fieldOk(c.ref);
-      if (c.pos && !(Array.isArray(c.pos) && c.pos.length === 2 && c.pos.every(Number.isInteger) && c.pos[0] >= 1 && c.pos[1] >= c.pos[0])) errs.push('pos 應為 [起, 迄]');
-      if (['in', 'notIn'].includes(c.op) && !Array.isArray(c.values)) errs.push(`${c.op} 需要 values 陣列`);
+      if (++nodes > LIMITS.nodes) { if (nodes === LIMITS.nodes + 1) errs.push(`條件節點超過 ${LIMITS.nodes} 個`); return; }
+      if (d > LIMITS.depth) return errs.push(`條件巢狀超過 ${LIMITS.depth} 層`);
+      if (!plain(c)) return errs.push('條件必須是物件（不能是空值、陣列或其他型態）');
+      const keys = Object.keys(c);
+      for (const k of keys) if (BAD_KEYS.has(k)) return errs.push(`不允許的鍵名「${k}」`);
+      // all、any、not、單一條件 (op) 只能擇一
+      const kinds = ['all', 'any', 'not', 'op'].filter(k => has(c, k));
+      if (kinds.length !== 1) return errs.push(kinds.length ? `同一個條件同時有 ${kinds.join('、')}，只能擇一` : '條件缺少 all、any、not 或 op');
+      if (kinds[0] === 'all' || kinds[0] === 'any') {
+        if (keys.length !== 1) return errs.push(`${kinds[0]} 條件不能有其他屬性`);
+        const a = c[kinds[0]];
+        if (!Array.isArray(a) || !a.length) return errs.push('all/any 需為非空陣列');
+        if (a.length > LIMITS.nodes) return errs.push(`all/any 的條件超過 ${LIMITS.nodes} 個`);
+        return a.forEach(x => walk(x, d + 1));
+      }
+      if (kinds[0] === 'not') { if (keys.length !== 1) return errs.push('not 條件不能有其他屬性'); return walk(c.not, d + 1); }
+      for (const k of keys) if (!LEAF_KEYS.has(k)) return errs.push(`條件不認得的屬性「${String(k).slice(0, 40)}」`);
+      if (typeof c.op !== 'string' || !has(OPS, c.op)) return errs.push(`不支援的運算「${String(c.op).slice(0, 40)}」`);
+      if (!has(c, 'field')) return errs.push('條件缺少 field');
+      fieldOk(c.field, 0);
+      if (has(c, 'ref') && c.ref != null) fieldOk(c.ref, 0);
+      if (has(c, 'pos') && c.pos != null && !(Array.isArray(c.pos) && c.pos.length === 2 && c.pos.every(Number.isInteger) && c.pos[0] >= 1 && c.pos[1] >= c.pos[0] && c.pos[1] <= 1000)) errs.push('pos 應為 [起, 迄]');
+      if (['in', 'notIn'].includes(c.op)) {
+        if (!Array.isArray(c.values) || !c.values.length) errs.push(`${c.op} 需要非空的 values 陣列`);
+        else if (c.values.length > LIMITS.values) errs.push(`values 超過 ${LIMITS.values} 個`);
+        else if (!c.values.every(okScalar)) errs.push(`values 只能是 ${LIMITS.str} 字以內的文字或有限的數字`);
+      } else if (has(c, 'values')) errs.push(`${c.op} 不使用 values`);
+      if (has(c, 'value') && c.value != null && !okScalar(c.value)) errs.push(`value 只能是 ${LIMITS.str} 字以內的文字或有限的數字`);
+      if (NO_VALUE.includes(c.op) && (c.value != null || c.ref != null)) errs.push(`${c.op} 不需要 value 或 ref`);
       if (!NO_VALUE.includes(c.op) && !['in', 'notIn'].includes(c.op) && c.value == null && c.ref == null) errs.push(`${c.op} 需要 value 或 ref`);
+      if (c.value != null && c.ref != null) errs.push('value 與 ref 只能擇一');
       if (c.op === 'matches' && !safeRegex(c.value)) errs.push('matches 的格式不安全或不支援：只能用簡單格式 (例如 ^[A-Z]\\d{9}$)，不能用括號、|、*、+、? 與反向參照，重複次數上限 500');
     };
-    if (rule.when) walk(rule.when, 0);
-    if (rule.assert) walk(rule.assert, 0);
+    if (has(rule, 'when') && rule.when != null) walk(rule.when, 0);
+    if (has(rule, 'assert')) walk(rule.assert, 0);
     return errs;
+  }
+  // 一整批規則 (更新包、AI 轉換的結果、備份檔)：先全部驗證，回傳 { ok, errors: [{ id, errors }] }；呼叫端要 ok 才套用 (不部分生效)
+  function validateAll(rules, layouts) {
+    if (!Array.isArray(rules)) return { ok: false, errors: [{ id: '', errors: ['規則清單必須是陣列'] }] };
+    if (rules.length > LIMITS.rulesPerPack) return { ok: false, errors: [{ id: '', errors: [`規則超過 ${LIMITS.rulesPerPack} 條`] }] };
+    const errors = rules.map((r, i) => ({ id: plain(r) && typeof r.id === 'string' ? r.id : `第 ${i + 1} 條`, errors: validateRule(r, layouts) })).filter(x => x.errors.length);
+    const ids = rules.filter(plain).map(r => r.id), dup = ids.filter((x, i) => ids.indexOf(x) !== i);
+    if (dup.length) errors.push({ id: dup[0], errors: [`規則編號重複：${[...new Set(dup)].join('、')}`] });
+    return { ok: !errors.length, errors };
   }
 
   // ---------- 執行 ----------
@@ -117,7 +173,7 @@
       if (f.startsWith('prev.')) return ctx.prev ? own(ctx.prev, f.slice(5)) : MISSING;
       return own(ctx.rec, f);
     }
-    if (!f || typeof f !== 'object' || !Array.isArray(f.args)) return MISSING;
+    if (!f || typeof f !== 'object' || !Array.isArray(f.args) || typeof f.fn !== 'string' || !Object.prototype.hasOwnProperty.call(FNS, f.fn)) return MISSING;
     const a = f.args.map(x => getField(x, ctx));
     if (a.some(x => x === MISSING || x === NULLV)) return MISSING;
     const date = v => typeof v === 'string' && C.isValidDate(v);
@@ -142,7 +198,7 @@
   //   dec   數字欄位 (9)、日期、函式算出的數字或金額：精確的十進位比較 ('001' = '1'；長整數不失真)
   //   auto  沒有欄位定義時 (例如試算或測試)：兩邊都是數字才用數字比較，否則用文字比較
   function kindOf(f, lay) {
-    if (f && typeof f === 'object') return f.fn === 'addYearsMinusDay' ? 'dec' : FNS[f.fn] != null ? 'dec' : null;
+    if (f && typeof f === 'object') return typeof f.fn === 'string' && Object.prototype.hasOwnProperty.call(FNS, f.fn) ? 'dec' : null;
     if (typeof f !== 'string' || !lay || !lay.field) return null;
     const d = lay.field(f.replace(/^prev\./, ''));
     if (!d) return null;
@@ -286,5 +342,5 @@
     return { when: rule.when ? text(rule.when) : '', assert: text(rule.assert) };
   }
 
-  return { OPS, FNS, safeRegex, validateRule, evalCond, extend, runRules, describe, fieldsOf, toDec, decCmp };
+  return { OPS, FNS, LIMITS, safeRegex, validateRule, validateAll, evalCond, extend, runRules, describe, fieldsOf, toDec, decCmp };
 });

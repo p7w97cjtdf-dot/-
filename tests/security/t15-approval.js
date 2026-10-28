@@ -74,7 +74,7 @@ const keyFile = (k, n) => { const p = path.join(TMP, n); fs.writeFileSync(p, k.p
   ok.localDraftNotApplied = s.n === base && s.packs.some(p => p.id === 'local' && !p.usable);
   // 10. 有錯的更新包：列出無法使用的項目
   await page.setInputFiles('#file-pack', U(4)); await page.waitForTimeout(800);
-  ok.brokenExplained = /無法使用，已略過/.test((await st()).note);
+  ok.brokenExplained = /格式不對，整包都不會套用/.test((await st()).note);
   ok.errors = log.errors.filter(e => !/serviceWorker|sandboxed and lacks/.test(e)).length === 0;
   await browser.close();
   // 11. 正式版本 (固定的是正式主管金鑰)：測試金鑰簽的已核可檔不會被接受
