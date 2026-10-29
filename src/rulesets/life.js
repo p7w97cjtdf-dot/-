@@ -222,6 +222,7 @@
   R('24902_L0613', '保險期間別=Y 時保險期間=999 或 ≥095', '單筆', '承保欄 8/9');
   R('24903_L0613', '保險期間別=B 時保險期間=001', '單筆', '承保欄 8/9');
   R('24904_L0613', '保險期間別=W/G 時保險期間合理', '單筆', '承保欄 8/9');
+  R('24906_L0643', '繳費期間不得大於保險期間', '單筆', '承保欄 9/43');
   R('23900_L0802', '出生日期為合法日期', '單筆', '承保欄 10');
   R('25001_L1233', '次標準體原因=0 時體檢類別=1 或 3', '單筆', '承保欄 13/14');
   R('25002_L1233', '次標準體原因≠0 時體檢類別=2', '單筆', '承保欄 13/14');
@@ -373,6 +374,10 @@
     if (r.termType === 'B' && t !== 1) p({ ruleId: '24903_L0613', category: '單筆邏輯', fields: f, value: v, message: '一年期(B)保險期間應為 001', suggestion: '改為 001', fix: { field: 'term', value: '001' } });
     if (r.termType === 'G' && !(t > 1 && t < 94)) p({ ruleId: '24904_L0613', category: '單筆邏輯', fields: f, value: v, message: '一年期保證續保(G)保險期間應為續保最終年齡 (002~093)', suggestion: '填入保證續保最終年齡，如 065' });
     if (r.termType === 'W' && !(t > 1 && t <= 150)) p({ ruleId: '24904_L0613', category: '單筆邏輯', fields: f, value: v, message: '歲滿期(W)保險期間應為滿期歲數', suggestion: '填入滿期歲數，如 060、065' });
+    // 繳費期間不得大於保險期間 (皆為年期數字、保險期間非 999 終身時)：常見於繳費年期誤填
+    const pt = num(r.payTerm);
+    if (t !== 999 && t > 0 && !isNaN(pt) && pt > 0 && pt > t)
+      p({ ruleId: '24906_L0643', category: '單筆邏輯', fields: ['term', 'payTerm'], value: `保險期間 ${r.term} / 繳費期間 ${r.payTerm}`, message: `繳費期間 ${pt} 年不得大於保險期間 ${t} 年`, suggestion: '繳費期間應小於或等於保險期間；請確認是否誤填' });
   });
   // 出生日期
   rl((r, p) => { if (!dateOk(r.birthDate)) p({ ruleId: '23900_L0802', category: '格式', fields: ['birthDate'], value: r.birthDate, message: '出生日期不是合法日期 (YYYYMMDD，需考慮大小月與閏年)', suggestion: '請確認是否誤填民國年或月日顛倒' + (/^0\d{7}$/.test(r.birthDate) || +r.birthDate.slice(0, 4) < 200 ? `；疑似民國年，西元應為 ${+r.birthDate.slice(0, 4) + 1911}${r.birthDate.slice(4)}` : '') }); });

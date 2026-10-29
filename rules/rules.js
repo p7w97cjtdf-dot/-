@@ -4129,6 +4129,21 @@
    }
   },
   {
+   "id": "24906_L0643",
+   "name": "繳費期間不得大於保險期間",
+   "category": "單筆邏輯",
+   "level": "單筆",
+   "severity": "error",
+   "file": "L",
+   "ref": "承保欄 9/43",
+   "source": {
+    "doc": "rules",
+    "page": 47,
+    "label": "伍-15",
+    "program": 81
+   }
+  },
+  {
    "id": "24903_L0613",
    "name": "保險期間別=B 時保險期間=001",
    "category": "單筆邏輯",
