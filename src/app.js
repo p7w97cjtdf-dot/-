@@ -502,7 +502,7 @@
     DQ.safe($('#summary')).innerHTML =
       tile(nBad0 ? 'warn' : 'ok', '資料正確比例', nRec0 ? `${okPct(nRec0, nBad0)}%` : '—', `已檢查 ${nRec0.toLocaleString()} 筆資料`) +
       tile(n('error') ? 'err' : 'ok', '待修正問題', `${pending} 項`, `必須修改 ${n('error')}・建議確認 ${n('warning')}${n('suspect') ? `・請人工判斷 ${n('suspect')}` : ''}`) +
-      tile('fix', '有建議值', `${fixable} 項`, '工具能確定正確值；請點問題逐筆確認後套用');
+      tile('fix', '有建議值', `${fixable} 項`, '點這張卡只看有建議值的問題；工具能確定正確值，請逐筆確認後套用');
     // 有改過資料時，第三張卡片放「下載改好的資料」
     // (重畫卡片會清掉裡面的按鈕，所以記住按鈕本身，每次移進卡片或收回備用區)
     tileBtns = tileBtns || { got: $('#btn-get-fixed') };
@@ -510,6 +510,23 @@
     const btn = changed ? tileBtns.got : null;
     for (const b of Object.values(tileBtns)) if (b !== btn) $('#tile-btns').appendChild(b);
     if (btn) { t3.querySelector('.tile-i').replaceWith(btn); t3.classList.add('has-btn'); }
+    // 點「有建議值」卡：只看有建議值的問題 (再點一次取消)
+    if (t3 && fixable) {
+      t3.classList.add('clickable');
+      t3.classList.toggle('on', $('#f-sev').value === 'fixable');
+      t3.setAttribute('role', 'button');
+      t3.setAttribute('tabindex', '0');
+      const toggleFix = e => {
+        if (e.target.closest('button')) return;
+        const sel = $('#f-sev');
+        sel.value = sel.value === 'fixable' ? '' : 'fixable';
+        t3.classList.toggle('on', sel.value === 'fixable');
+        state.openGroups = null; renderTable();
+        $('#issue-list').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+      t3.onclick = toggleFix;
+      t3.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFix(e); } };
+    }
     const recs = Object.entries(s.byFile).map(([fid, b]) => `${SHEET[fid]} ${b.records} 筆`).join('、');
     const allMst = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
     const found = state.key ? `　範例刻意放的錯誤找到：保單與理賠 ${hitCount(state.key)}/${state.key.length}、客戶與商品 ${state.masterKey.filter(k => allMst.some(i => i.ruleId === k.ruleId && i.policy === k.policy)).length}/${state.masterKey.length}。` : '';
@@ -553,7 +570,7 @@
     const sev = $('#f-sev').value, sheet = $('#f-file').value, cat = $('#f-cat').value, q = $('#f-q').value.trim().toLowerCase();
     const fo = state.focus;
     return state.all.filter(i => (!fo || (i.file === fo.file && fo.lines.has(i.line) && (!fo.rules.size || fo.rules.has(i.ruleId)))) &&
-      (!sev || i.severity === sev) && (!sheet || i.sheet === sheet) && (!cat || i.category === cat) &&
+      (!sev || (sev === 'fixable' ? (i.fix && state.res.issues.includes(i)) : i.severity === sev)) && (!sheet || i.sheet === sheet) && (!cat || i.category === cat) &&
       (!q || [i.policy, i.ruleId, i.ruleName, i.message, DQ.report.fieldLabel(rs, i), i.value].join(' ').toLowerCase().includes(q)));
   }
   // 表格的「欄位」只列前兩個，其餘在右側說明中看
