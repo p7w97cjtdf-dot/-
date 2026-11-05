@@ -501,8 +501,8 @@
     // 三張卡：資料正確的比例、待修正的問題、有建議修正值的問題 (要逐筆看過說明再套用，不提供整批修改)
     DQ.safe($('#summary')).innerHTML =
       tile(nBad0 ? 'warn' : 'ok', '資料正確比例', nRec0 ? `${okPct(nRec0, nBad0)}%` : '—', `已檢查 ${nRec0.toLocaleString()} 筆資料`) +
-      tile(n('error') ? 'err' : 'ok', '待修正問題', `${pending} 項`, `必須修改 ${n('error')}・建議確認 ${n('warning')}${n('suspect') ? `・請人工判斷 ${n('suspect')}` : ''}`) +
-      tile('fix', '有建議值', `${fixable} 項`, '工具能確定正確值；請點問題逐筆確認後套用');
+      tile(n('error') ? 'err' : 'ok', '待修正問題', `${pending} 項`, `必須修改 ${n('error')}・建議確認 ${n('warning')}（合計 ${pending}）${n('suspect') ? `；另有 ${n('suspect')} 項需人工判斷，不計入待修正` : ''}`) +
+      tile('fix', '有建議值', `${fixable} 項`, '點這張卡只看有建議值的問題；工具能確定正確值，請逐筆確認後套用');
     // 有改過資料時，第三張卡片放「下載改好的資料」
     // (重畫卡片會清掉裡面的按鈕，所以記住按鈕本身，每次移進卡片或收回備用區)
     tileBtns = tileBtns || { got: $('#btn-get-fixed') };
@@ -510,6 +510,23 @@
     const btn = changed ? tileBtns.got : null;
     for (const b of Object.values(tileBtns)) if (b !== btn) $('#tile-btns').appendChild(b);
     if (btn) { t3.querySelector('.tile-i').replaceWith(btn); t3.classList.add('has-btn'); }
+    // 點「有建議值」卡：只看有建議值的問題 (再點一次取消)
+    if (t3 && fixable) {
+      t3.classList.add('clickable');
+      t3.classList.toggle('on', $('#f-sev').value === 'fixable');
+      t3.setAttribute('role', 'button');
+      t3.setAttribute('tabindex', '0');
+      const toggleFix = e => {
+        if (e.target.closest('button')) return;
+        const sel = $('#f-sev');
+        sel.value = sel.value === 'fixable' ? '' : 'fixable';
+        t3.classList.toggle('on', sel.value === 'fixable');
+        state.openGroups = null; renderTable();
+        $('#issue-list').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+      t3.onclick = toggleFix;
+      t3.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFix(e); } };
+    }
     const recs = Object.entries(s.byFile).map(([fid, b]) => `${SHEET[fid]} ${b.records} 筆`).join('、');
     const allMst = [].concat(state.cust ? state.cust.issues : [], state.prod ? state.prod.issues : []);
     const found = state.key ? `　範例刻意放的錯誤找到：保單與理賠 ${hitCount(state.key)}/${state.key.length}、客戶與商品 ${state.masterKey.filter(k => allMst.some(i => i.ruleId === k.ruleId && i.policy === k.policy)).length}/${state.masterKey.length}。` : '';
@@ -520,7 +537,8 @@
     const cut = Object.values(s.byFile).some(b => b.truncated);
     if (cut) { $('#run-status').className = 'run-status bad'; DQ.safe($('#run-status')).innerHTML = `<i></i><span>問題超過 ${DQ.MAX_ISSUES.toLocaleString()} 項，只列出前 ${DQ.MAX_ISSUES.toLocaleString()} 項；檔案可能整個格式不對，請先改最常見的問題再檢查</span>`; }
     else DQ.safe($('#run-status')).innerHTML = nRec ? `<i></i><span>已檢查 ${nRec.toLocaleString()} 筆資料・${okPct(nRec, nBad)}% 沒有必須修改的問題</span>` : '<i></i><span>沒有讀到任何資料，請確認檔案內容</span>';
-    $('#summary-note').textContent = `已檢查 ${recs}，共 ${Object.values(state.files).filter(Boolean).length} 份資料，花了 ${(state.elapsed / 1000).toFixed(2)} 秒。${found}`;
+    const suspectNote = n('suspect') ? `　另有 ${n('suspect')} 項需人工判斷（疑似異常，不計入待修正）。` : '';
+    $('#summary-note').textContent = `已檢查 ${recs}，共 ${Object.values(state.files).filter(Boolean).length} 份資料，花了 ${(state.elapsed / 1000).toFixed(2)} 秒。${suspectNote}${found}`;
     const hn = hiddenNote(); $('#hidden-note').hidden = !hn; $('#hidden-note').textContent = hn;
     // 結果不完整 (停用、無法判定、格式不對、沒檢查完) 時：卡片不顯示成正常、頂端狀態註明；沒放入的資料列在下面一行
     const sc = state.scope, warns = sc.warn.filter(w => w.kind !== 'disabled');
@@ -553,7 +571,7 @@
     const sev = $('#f-sev').value, sheet = $('#f-file').value, cat = $('#f-cat').value, q = $('#f-q').value.trim().toLowerCase();
     const fo = state.focus;
     return state.all.filter(i => (!fo || (i.file === fo.file && fo.lines.has(i.line) && (!fo.rules.size || fo.rules.has(i.ruleId)))) &&
-      (!sev || i.severity === sev) && (!sheet || i.sheet === sheet) && (!cat || i.category === cat) &&
+      (!sev || (sev === 'fixable' ? (i.fix && state.res.issues.includes(i)) : i.severity === sev)) && (!sheet || i.sheet === sheet) && (!cat || i.category === cat) &&
       (!q || [i.policy, i.ruleId, i.ruleName, i.message, DQ.report.fieldLabel(rs, i), i.value].join(' ').toLowerCase().includes(q)));
   }
   // 表格的「欄位」只列前兩個，其餘在右側說明中看
