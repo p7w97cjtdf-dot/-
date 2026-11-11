@@ -255,6 +255,9 @@ td.mono { white-space: nowrap; }
 
 /* 疑似異常（需人工判斷）：不是錯誤，用虛線色條與青色區分 */
 .tile.suspect .v { color: var(--suspect); }
+.tile.fix.clickable { cursor: pointer; }
+.tile.fix.clickable:hover { border-color: var(--accent); }
+.tile.fix.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
 td.sev i.suspect { background: repeating-linear-gradient(var(--suspect) 0 4px, transparent 4px 7px); }
 .badge.suspect { background: var(--suspect-soft); color: var(--suspect); }
 

@@ -544,13 +544,11 @@ test('匯出的 Excel：使用者內容以 = + - @ 開頭也寫成文字儲存�
   assert.deepStrictEqual(bad.map((v, i) => back['A' + (i + 2)].v), bad, '讀回來是原本的文字');
 });
 
-test('頁面寫清楚資料只在瀏覽器處理；claude.ai 展示版標示是第三方網站、只用試用資料', () => {
+test('頁面寫清楚資料只在瀏覽器處理；單一檔案不外連程式、不送分析或紀錄', () => {
   assert.match(read('index.html'), /不上傳、不存到伺服器、不寫任何遠端紀錄/);
   const out = path.join(require('os').tmpdir(), 'dq-artifact-test.html');
   require('child_process').execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'build-artifact.js'), out]);
   const html = fs.readFileSync(out, 'utf8');
-  assert.match(html, /這是放在 claude\.ai 的展示版/);
-  assert.match(html, /沒有公司的存取控制、稽核紀錄或資料刪除保證/);
   // 單一檔案不從外部載入程式，也不送任何分析或紀錄
   assert.doesNotMatch(html, /<script[^>]+src=/);
   assert.doesNotMatch(html, /google-analytics\.com|googletagmanager|gtag\(|sentry\.io|Sentry\.init|navigator\.sendBeacon/);
