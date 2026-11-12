@@ -2,7 +2,7 @@
  "insurance-act": {
   "name": "保險法（全國法規資料庫）",
   "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0390002",
-  "checkedAt": "2026-11-11T01:17:37.509Z",
+  "checkedAt": "2026-11-12T01:25:40.073Z",
   "changedAt": "2026-10-15T05:39:28.188Z",
   "failures": 0,
   "followed": {},
@@ -527,7 +527,7 @@
  "ib-news": {
   "name": "金融監督管理委員會保險局 首頁公告",
   "url": "https://www.ib.gov.tw/",
-  "checkedAt": "2026-11-11T01:17:37.509Z",
+  "checkedAt": "2026-11-12T01:25:40.073Z",
   "changedAt": "2026-11-10T01:14:13.381Z",
   "failures": 0,
   "followed": {
@@ -991,8 +991,8 @@
  "tii-home": {
   "name": "財團法人保險事業發展中心 首頁公告",
   "url": "https://www.tii.org.tw/",
-  "checkedAt": "2026-11-11T01:17:37.509Z",
-  "changedAt": "2026-11-11T01:17:37.509Z",
+  "checkedAt": "2026-11-12T01:25:40.073Z",
+  "changedAt": "2026-11-12T01:25:40.073Z",
   "failures": 0,
   "followed": {
    "中心公告": "https://www.tii.org.tw/tii/bulletin/",
@@ -1164,7 +1164,6 @@
    "[中心公告] 壽險財業務統計-公司專區",
    "[中心公告] 保險統計資料庫加值服務",
    "[中心公告] 精算評價與IFRS17接軌專區",
-   "[中心公告] 保險業申報缺失處理要點",
    "[中心公告] 精算服務",
    "[中心公告] 統計資訊服務",
    "[中心公告] 專業研究",
