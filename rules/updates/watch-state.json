@@ -2,7 +2,7 @@
  "insurance-act": {
   "name": "保險法（全國法規資料庫）",
   "url": "https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=G0390002",
-  "checkedAt": "2026-11-26T08:19:40.985Z",
+  "checkedAt": "2026-11-27T08:35:45.871Z",
   "changedAt": "2026-10-15T05:39:28.188Z",
   "failures": 0,
   "followed": {},
@@ -527,8 +527,8 @@
  "ib-news": {
   "name": "金融監督管理委員會保險局 首頁公告",
   "url": "https://www.ib.gov.tw/",
-  "checkedAt": "2026-11-26T08:19:40.985Z",
-  "changedAt": "2026-11-26T08:19:40.985Z",
+  "checkedAt": "2026-11-27T08:35:45.871Z",
+  "changedAt": "2026-11-27T08:35:45.871Z",
   "failures": 0,
   "followed": {
    "最新法令函釋": "https://www.ib.gov.tw/ch/home.jsp?id=37&parentpath=0,3",
@@ -657,7 +657,6 @@
    "壽險公司115年截至第3季具外溢效果保險商品及實物給付保險商......",
    "金管會鼓勵企業投保資安保險，強化資安防護韌性",
    "金管會督導安定基金將於11月16日舉辦2026年保險業風險管......",
-   "壽險業115年截至8月底外幣保險商品銷售情形",
    "至重要公告",
    "保險業辦理自我風險及清償能力評估機制指引",
    "114年度人身保險業精算簽證作業補充說明",
@@ -989,7 +988,7 @@
  "tii-home": {
   "name": "財團法人保險事業發展中心 首頁公告",
   "url": "https://www.tii.org.tw/",
-  "checkedAt": "2026-11-26T08:19:40.985Z",
+  "checkedAt": "2026-11-27T08:35:45.871Z",
   "changedAt": "2026-11-12T01:25:40.073Z",
   "failures": 0,
   "followed": {
